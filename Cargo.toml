@@ -1,0 +1,9 @@
+[package]
+name = "tsky"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bsky-sdk = "0.1.9"
+dotenvy = "0.15.7"
+tokio = { version = "1.40.0", features = ["full"] }
