@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+atrium-api = "0.24.4"
 bsky-sdk = "0.1.9"
+chrono = "0.4.38"
+crossterm = "0.28.1"
 dotenvy = "0.15.7"
+ipld-core = "0.4.1"
+ratatui = "0.28.1"
 tokio = { version = "1.40.0", features = ["full"] }
