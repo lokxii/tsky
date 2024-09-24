@@ -1,6 +1,6 @@
 use atrium_api;
-use atrium_api::app::bsky::feed::defs::FeedViewPostData;
-use atrium_api::types::Object;
+use atrium_api::app::bsky::feed::defs::{FeedViewPostData, FeedViewPostReasonRefs};
+use atrium_api::types::{Object, Union};
 use bsky_sdk::BskyAgent;
 use chrono::Local;
 use chrono::{DateTime, FixedOffset};
@@ -17,18 +17,15 @@ use ratatui::widgets::List;
 use ratatui::widgets::ListState;
 use std::collections::VecDeque;
 use std::env;
-use std::io;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = ratatui::init();
 
-    terminal.draw(|f| f.render_widget(Text::from("Logging in"), f.area()))?;
+    terminal.draw(|f| f.render_widget("Logging in", f.area()))?;
     let agent = login().await?;
 
-    terminal.draw(|f| {
-        f.render_widget(Text::from("Fetching posts"), f.area());
-    })?;
+    terminal.draw(|f| f.render_widget("Fetching posts", f.area()))?;
     let mut posts = get_posts(&agent)
         .await?
         .into_iter()
@@ -45,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             f.render_stateful_widget(list.clone(), f.area(), &mut state);
         })?;
 
-        if handle_events(&mut state)? {
+        if handle_events(&mut state, &mut posts).await? {
             break;
         }
     }
@@ -59,6 +56,7 @@ struct Post {
     author: String,
     handle: String,
     created_at: DateTime<FixedOffset>,
+    indexed_at_utc: DateTime<FixedOffset>,
     text: String,
     // embeds: (),
 }
@@ -68,16 +66,26 @@ impl Post {
         let author = &view.post.author;
         let content = &view.post.record;
 
-        let atrium_api::types::Unknown::Object(data) = content else {
+        let atrium_api::types::Unknown::Object(record) = content else {
             panic!("Invalid content type");
         };
 
-        let ipld_core::ipld::Ipld::String(created_at) = &*data["createdAt"]
+        let ipld_core::ipld::Ipld::String(created_at) = &*record["createdAt"]
         else {
-            panic!("Unknown datatype")
+            panic!("createdAt is not a string")
         };
-        let ipld_core::ipld::Ipld::String(text) = &*data["text"] else {
-            panic!("Unknown datatype")
+
+        let indexed_at_utc: DateTime<FixedOffset>;
+        if let Some(reason) = &view.reason {
+            let Union::Refs(reason) = reason else { panic!("Unknown reason type"); };
+            let FeedViewPostReasonRefs::ReasonRepost(reason) = reason;
+            indexed_at_utc = *reason.indexed_at.as_ref();
+        } else {
+            indexed_at_utc = *view.post.indexed_at.as_ref();
+        }
+
+        let ipld_core::ipld::Ipld::String(text) = &*record["text"] else {
+            panic!("text is not a string")
         };
 
         let dt = Local::now();
@@ -92,6 +100,7 @@ impl Post {
             author: author.display_name.clone().unwrap_or("(None)".to_string()),
             handle: author.handle.to_string(),
             created_at,
+            indexed_at_utc,
             text: text.clone(),
         };
     }
@@ -160,7 +169,10 @@ async fn get_posts(
     return Ok(out);
 }
 
-fn handle_events(list_state: &mut ListState) -> io::Result<bool> {
+async fn handle_events(
+    list_state: &mut ListState,
+    posts: &mut VecDeque<Post>,
+) -> Result<bool, Box<dyn std::error::Error>> {
     let Event::Key(key) = event::read()? else {
         return Ok(false);
     };
