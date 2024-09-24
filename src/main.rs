@@ -15,6 +15,7 @@ use ratatui::text::Text;
 use ratatui::widgets::Block;
 use ratatui::widgets::List;
 use ratatui::widgets::ListState;
+use std::collections::VecDeque;
 use std::env;
 use std::io;
 
@@ -22,25 +23,24 @@ use std::io;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = ratatui::init();
 
-    terminal.draw(|f| {
-        f.render_widget(Text::from("Logging in"), f.area());
-    })?;
+    terminal.draw(|f| f.render_widget(Text::from("Logging in"), f.area()))?;
     let agent = login().await?;
-    terminal.clear()?;
 
     terminal.draw(|f| {
         f.render_widget(Text::from("Fetching posts"), f.area());
     })?;
-    let posts = get_posts(&agent).await?;
-    terminal.clear()?;
+    let mut posts = get_posts(&agent)
+        .await?
+        .into_iter()
+        .collect::<VecDeque<_>>();
 
-    let items = posts.iter().collect::<Vec<_>>();
-    let list = List::new(items)
-        .block(Block::bordered().title("TL"))
-        .highlight_style(Style::default().bg(Color::Rgb(45, 50, 55)));
     let mut state = ListState::default();
-
+    state.select(Some(0));
     loop {
+        let list = List::new(posts.iter())
+            .block(Block::bordered().title("TL"))
+            .highlight_style(Style::default().bg(Color::Rgb(45, 50, 55)));
+
         terminal.draw(|f| {
             f.render_stateful_widget(list.clone(), f.area(), &mut state);
         })?;
@@ -55,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 struct Post {
+    uri: String,
     author: String,
     handle: String,
     created_at: DateTime<FixedOffset>,
@@ -63,9 +64,9 @@ struct Post {
 }
 
 impl Post {
-    fn from(view_post: &Object<FeedViewPostData>) -> Post {
-        let author = &view_post.post.author;
-        let content = &view_post.post.record;
+    fn from(view: &Object<FeedViewPostData>) -> Post {
+        let author = &view.post.author;
+        let content = &view.post.record;
 
         let atrium_api::types::Unknown::Object(data) = content else {
             panic!("Invalid content type");
@@ -87,6 +88,7 @@ impl Post {
             DateTime::from_naive_utc_and_offset(created_at_utc, *dt.offset());
 
         return Post {
+            uri: view.post.uri.clone(),
             author: author.display_name.clone().unwrap_or("(None)".to_string()),
             handle: author.handle.to_string(),
             created_at,
