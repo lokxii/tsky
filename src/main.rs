@@ -11,7 +11,7 @@ use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
     style::{Color, Style},
-    text::{Line, Span, Text},
+    text::{Line, Span},
     widgets::{Block, Paragraph, Widget},
 };
 use std::{collections::VecDeque, env, sync::Arc};
@@ -170,7 +170,7 @@ impl Column {
         match overlap_idx {
             Some(idx) => {
                 new_posts.take(idx).for_each(|p| self.posts.push_front(p));
-                if let Some(i) = self.state.selected() {
+                if let Some(i) = self.state.selected {
                     self.state.select(Some(i + idx));
                 }
             }
