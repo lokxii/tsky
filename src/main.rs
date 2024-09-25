@@ -1,6 +1,9 @@
 use atrium_api::{
     self,
-    app::bsky::feed::defs::{FeedViewPostData, FeedViewPostReasonRefs},
+    app::bsky::feed::{
+        defs::{FeedViewPostData, FeedViewPostReasonRefs},
+        get_timeline::ParametersData,
+    },
     types::{Object, Union},
 };
 use bsky_sdk::BskyAgent;
@@ -23,22 +26,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = App::new();
 
-    terminal.draw(|f| f.render_widget("Fetching posts", f.area()))?;
-    {
-        let c = Arc::clone(&app.column);
-        let mut c = c.lock().await;
-        c.get_new_posts(&agent).await?;
-    }
+    terminal.draw(|f| f.render_widget("Starting worker", f.area()))?;
+    app.spawn_column_autoupdate(agent.clone());
 
     loop {
-        let list = List::new(app.column.lock().await.posts.iter())
-            .block(Block::bordered().title("TL"))
-            .highlight_style(Style::default().bg(Color::Rgb(45, 50, 55)));
-
         {
             let column = Arc::clone(&app.column);
             let mut column = column.lock().await;
             terminal.draw(|f| {
+                let list = List::new(column.posts.iter())
+                    .block(Block::bordered().title("TL"))
+                    .highlight_style(
+                        Style::default().bg(Color::Rgb(45, 50, 55)),
+                    );
                 f.render_stateful_widget(
                     list.clone(),
                     f.area(),
@@ -93,6 +93,44 @@ impl App {
             }
         };
     }
+
+    fn spawn_column_autoupdate(&self, agent: BskyAgent) {
+        let column = Arc::clone(&self.column);
+        tokio::spawn(async move {
+            loop {
+                let new_posts = agent
+                    .api
+                    .app
+                    .bsky
+                    .feed
+                    .get_timeline(
+                        ParametersData {
+                            algorithm: None,
+                            cursor: None,
+                            limit: None,
+                        }
+                        .into(),
+                    )
+                    .await;
+                let Result::Ok(new_posts) = new_posts else {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1))
+                        .await;
+                    continue;
+                };
+                let new_posts = new_posts.feed.iter().map(Post::from);
+
+                {
+                    let mut column = column.lock().await;
+                    if let Result::Err(_) =
+                        column.append_new_posts(new_posts).await
+                    {
+                        // TODO: log error
+                    }
+                }
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            }
+        });
+    }
 }
 
 struct Column {
@@ -108,26 +146,13 @@ impl Column {
         }
     }
 
-    async fn get_new_posts(
+    async fn append_new_posts<T>(
         &mut self,
-        agent: &BskyAgent,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let new_posts = agent
-            .api
-            .app
-            .bsky
-            .feed
-            .get_timeline(
-                atrium_api::app::bsky::feed::get_timeline::ParametersData {
-                    algorithm: None,
-                    cursor: None,
-                    limit: None,
-                }
-                .into(),
-            )
-            .await?;
-        let new_posts = new_posts.feed.iter().map(Post::from);
-
+        new_posts: T,
+    ) -> Result<(), Box<dyn std::error::Error>>
+    where
+        T: Iterator<Item = Post> + Clone,
+    {
         if self.posts.len() == 0 {
             self.posts = new_posts.collect();
             self.state.select(Some(0));
@@ -138,7 +163,10 @@ impl Column {
         let overlap_idx = new_posts.clone().position(|p| &p == last_newest);
         match overlap_idx {
             Some(idx) => {
-                new_posts.take(idx).for_each(|p| self.posts.push_front(p))
+                new_posts.take(idx).for_each(|p| self.posts.push_front(p));
+                if let Some(i) = self.state.selected() {
+                    self.state.select(Some(i + idx));
+                }
             }
             None => self.posts = new_posts.collect(),
         }
