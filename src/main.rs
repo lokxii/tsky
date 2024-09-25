@@ -1,25 +1,17 @@
-use atrium_api;
-use atrium_api::app::bsky::feed::defs::{
-    FeedViewPostData, FeedViewPostReasonRefs,
+use atrium_api::{
+    self,
+    app::bsky::feed::defs::{FeedViewPostData, FeedViewPostReasonRefs},
+    types::{Object, Union},
 };
-use atrium_api::types::{Object, Union};
 use bsky_sdk::BskyAgent;
-use chrono::Local;
-use chrono::{DateTime, FixedOffset};
-use crossterm::event;
-use crossterm::event::Event;
-use crossterm::event::KeyCode;
-use ratatui::style::Color;
-use ratatui::style::Style;
-use ratatui::text::Line;
-use ratatui::text::Span;
-use ratatui::text::Text;
-use ratatui::widgets::Block;
-use ratatui::widgets::List;
-use ratatui::widgets::ListState;
-use std::collections::VecDeque;
-use std::env;
-use std::sync::Arc;
+use chrono::{DateTime, FixedOffset, Local};
+use crossterm::event::{self, Event, KeyCode};
+use ratatui::{
+    style::{Color, Style},
+    text::{Line, Span, Text},
+    widgets::{Block, List, ListState},
+};
+use std::{collections::VecDeque, env, sync::Arc};
 use tokio::sync::Mutex;
 
 #[tokio::main]
