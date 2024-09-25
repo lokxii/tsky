@@ -1,5 +1,7 @@
 use atrium_api;
-use atrium_api::app::bsky::feed::defs::{FeedViewPostData, FeedViewPostReasonRefs};
+use atrium_api::app::bsky::feed::defs::{
+    FeedViewPostData, FeedViewPostReasonRefs,
+};
 use atrium_api::types::{Object, Union};
 use bsky_sdk::BskyAgent;
 use chrono::Local;
@@ -23,11 +25,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = ratatui::init();
 
     terminal.draw(|f| f.render_widget("Logging in", f.area()))?;
-    let agent = login().await?;
+    let agent = login().await.unwrap();
 
     terminal.draw(|f| f.render_widget("Fetching posts", f.area()))?;
-    let mut posts = get_posts(&agent)
-        .await?
+    let posts = get_posts(&agent)
+        .await
+        .unwrap()
         .into_iter()
         .collect::<VecDeque<_>>();
 
@@ -42,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             f.render_stateful_widget(list.clone(), f.area(), &mut state);
         })?;
 
-        if handle_events(&mut state, &mut posts).await? {
+        if handle_events(&mut state).await? {
             break;
         }
     }
@@ -51,6 +54,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     return Ok(());
 }
 
+#[derive(PartialEq, Eq)]
+struct RepostBy {
+    author: String,
+    handle: String,
+}
+
+#[derive(PartialEq, Eq)]
 struct Post {
     uri: String,
     author: String,
@@ -58,6 +68,7 @@ struct Post {
     created_at: DateTime<FixedOffset>,
     indexed_at_utc: DateTime<FixedOffset>,
     text: String,
+    reason: Option<RepostBy>,
     // embeds: (),
 }
 
@@ -77,7 +88,9 @@ impl Post {
 
         let indexed_at_utc: DateTime<FixedOffset>;
         if let Some(reason) = &view.reason {
-            let Union::Refs(reason) = reason else { panic!("Unknown reason type"); };
+            let Union::Refs(reason) = reason else {
+                panic!("Unknown reason type");
+            };
             let FeedViewPostReasonRefs::ReasonRepost(reason) = reason;
             indexed_at_utc = *reason.indexed_at.as_ref();
         } else {
@@ -102,6 +115,16 @@ impl Post {
             created_at,
             indexed_at_utc,
             text: text.clone(),
+            reason: view.reason.as_ref().map(|r| {
+                let Union::Refs(r) = r else {
+                    panic!("Unknown reason type");
+                };
+                let FeedViewPostReasonRefs::ReasonRepost(r) = r;
+                RepostBy {
+                    author: r.by.display_name.clone().unwrap_or(String::new()),
+                    handle: r.by.handle.to_string(),
+                }
+            }),
         };
     }
 }
@@ -171,7 +194,6 @@ async fn get_posts(
 
 async fn handle_events(
     list_state: &mut ListState,
-    posts: &mut VecDeque<Post>,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let Event::Key(key) = event::read()? else {
         return Ok(false);
