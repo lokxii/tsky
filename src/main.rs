@@ -12,10 +12,11 @@ use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span, Text},
-    widgets::{Block, List, ListState},
+    widgets::{Block, Paragraph, Widget},
 };
 use std::{collections::VecDeque, env, sync::Arc};
 use tokio::sync::Mutex;
+use tui_widget_list::{ListBuilder, ListState, ListView};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -33,17 +34,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
             let column = Arc::clone(&app.column);
             let mut column = column.lock().await;
-            terminal.draw(|f| {
-                let list = List::new(column.posts.iter())
-                    .block(Block::bordered().title("TL"))
-                    .highlight_style(
-                        Style::default().bg(Color::Rgb(45, 50, 55)),
-                    );
-                f.render_stateful_widget(
-                    list.clone(),
-                    f.area(),
-                    &mut column.state,
-                );
+            terminal.draw(move |f| {
+                let width = f.area().width;
+                let posts = column.posts.clone();
+                let builder = ListBuilder::new(move |context| {
+                    let mut item =
+                        Into::<Paragraph>::into(&posts[context.index]);
+                    if context.is_selected {
+                        item = item.style(Style::default().bg(Color::Rgb(45, 50, 55)));
+                    }
+                    let height = item.line_count(width - 2) as u16;
+                    return (item, height);
+                });
+                let list = ListView::new(builder, column.posts.len())
+                    .block(Block::default())
+                    .infinite_scrolling(false);
+                f.render_stateful_widget(list, f.area(), &mut column.state);
             })?;
         }
 
@@ -78,11 +84,11 @@ impl App {
         }
         match key.code {
             KeyCode::Char('j') => {
-                column.state.select_next();
+                column.state.next();
                 return Ok(false);
             }
             KeyCode::Char('k') => {
-                column.state.select_previous();
+                column.state.previous();
                 return Ok(false);
             }
             KeyCode::Char('q') => {
@@ -174,13 +180,13 @@ impl Column {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 struct RepostBy {
     author: String,
     handle: String,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 struct Post {
     uri: String,
     author: String,
@@ -249,16 +255,32 @@ impl Post {
     }
 }
 
-impl Into<Text<'_>> for &Post {
-    fn into(self) -> Text<'static> {
-        let mut t = Text::from(self.author.clone()).style(Color::Cyan);
-        t.push_span(Span::styled(
-            String::from("  @") + &self.handle,
-            Color::Gray,
-        ));
-        t += Line::from(self.created_at.to_string()).style(Color::DarkGray);
-        t += Line::from(self.text.to_string()).style(Color::White);
-        return t;
+impl Into<Paragraph<'_>> for &Post {
+    fn into(self) -> Paragraph<'static> {
+        return Paragraph::new(vec![
+            Line::from(
+                Span::styled(self.author.clone(), Color::Cyan)
+                    + Span::styled(
+                        String::from("  @") + &self.handle,
+                        Color::Gray,
+                    ),
+            ),
+            Line::from(self.created_at.to_string()).style(Color::DarkGray),
+            Line::from(self.text.to_string()).style(Color::White),
+        ])
+        .wrap(ratatui::widgets::Wrap { trim: true });
+    }
+}
+
+impl Widget for Post {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+        Into::<Paragraph>::into(&self).render(area, buf);
     }
 }
 
