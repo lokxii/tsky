@@ -19,6 +19,8 @@ use ratatui::widgets::List;
 use ratatui::widgets::ListState;
 use std::collections::VecDeque;
 use std::env;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,31 +29,129 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     terminal.draw(|f| f.render_widget("Logging in", f.area()))?;
     let agent = login().await.unwrap();
 
-    terminal.draw(|f| f.render_widget("Fetching posts", f.area()))?;
-    let posts = get_posts(&agent)
-        .await
-        .unwrap()
-        .into_iter()
-        .collect::<VecDeque<_>>();
+    let app = App::new();
 
-    let mut state = ListState::default();
-    state.select(Some(0));
+    terminal.draw(|f| f.render_widget("Fetching posts", f.area()))?;
+    {
+        let c = Arc::clone(&app.column);
+        let mut c = c.lock().await;
+        c.get_new_posts(&agent).await?;
+    }
+
     loop {
-        let list = List::new(posts.iter())
+        let list = List::new(app.column.lock().await.posts.iter())
             .block(Block::bordered().title("TL"))
             .highlight_style(Style::default().bg(Color::Rgb(45, 50, 55)));
 
-        terminal.draw(|f| {
-            f.render_stateful_widget(list.clone(), f.area(), &mut state);
-        })?;
+        {
+            let column = Arc::clone(&app.column);
+            let mut column = column.lock().await;
+            terminal.draw(|f| {
+                f.render_stateful_widget(
+                    list.clone(),
+                    f.area(),
+                    &mut column.state,
+                );
+            })?;
+        }
 
-        if handle_events(&mut state).await? {
+        if app.handle_events().await? {
             break;
         }
     }
 
     ratatui::restore();
     return Ok(());
+}
+
+struct App {
+    column: Arc<Mutex<Column>>,
+}
+
+impl App {
+    fn new() -> App {
+        App {
+            column: Arc::new(Mutex::new(Column::new())),
+        }
+    }
+
+    async fn handle_events(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        let Event::Key(key) = event::read()? else {
+            return Ok(false);
+        };
+        let column = Arc::clone(&self.column);
+        let mut column = column.lock().await;
+        if key.kind != event::KeyEventKind::Press {
+            return Ok(false);
+        }
+        match key.code {
+            KeyCode::Char('j') => {
+                column.state.select_next();
+                return Ok(false);
+            }
+            KeyCode::Char('k') => {
+                column.state.select_previous();
+                return Ok(false);
+            }
+            KeyCode::Char('q') => {
+                return Ok(true);
+            }
+            _ => {
+                return Ok(false);
+            }
+        };
+    }
+}
+
+struct Column {
+    posts: VecDeque<Post>,
+    state: ListState,
+}
+
+impl Column {
+    fn new() -> Column {
+        Column {
+            posts: VecDeque::new(),
+            state: ListState::default(),
+        }
+    }
+
+    async fn get_new_posts(
+        &mut self,
+        agent: &BskyAgent,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let new_posts = agent
+            .api
+            .app
+            .bsky
+            .feed
+            .get_timeline(
+                atrium_api::app::bsky::feed::get_timeline::ParametersData {
+                    algorithm: None,
+                    cursor: None,
+                    limit: None,
+                }
+                .into(),
+            )
+            .await?;
+        let new_posts = new_posts.feed.iter().map(Post::from);
+
+        if self.posts.len() == 0 {
+            self.posts = new_posts.collect();
+            self.state.select(Some(0));
+            return Ok(());
+        }
+
+        let last_newest = &self.posts[0];
+        let overlap_idx = new_posts.clone().position(|p| &p == last_newest);
+        match overlap_idx {
+            Some(idx) => {
+                new_posts.take(idx).for_each(|p| self.posts.push_front(p))
+            }
+            None => self.posts = new_posts.collect(),
+        }
+        return Ok(());
+    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -165,56 +265,4 @@ async fn login() -> Result<BskyAgent, Box<dyn std::error::Error>> {
     agent.login(handle, password).await?;
 
     return Ok(agent);
-}
-
-async fn get_posts(
-    agent: &BskyAgent,
-) -> Result<Vec<Post>, Box<dyn std::error::Error>> {
-    let out = agent
-        .api
-        .app
-        .bsky
-        .feed
-        .get_timeline(
-            atrium_api::app::bsky::feed::get_timeline::ParametersData {
-                algorithm: None,
-                cursor: None,
-                limit: None,
-            }
-            .into(),
-        )
-        .await?
-        .feed
-        .iter()
-        .map(Post::from)
-        .collect();
-
-    return Ok(out);
-}
-
-async fn handle_events(
-    list_state: &mut ListState,
-) -> Result<bool, Box<dyn std::error::Error>> {
-    let Event::Key(key) = event::read()? else {
-        return Ok(false);
-    };
-    if key.kind != event::KeyEventKind::Press {
-        return Ok(false);
-    }
-    match key.code {
-        KeyCode::Char('j') => {
-            list_state.select_next();
-            return Ok(false);
-        }
-        KeyCode::Char('k') => {
-            list_state.select_previous();
-            return Ok(false);
-        }
-        KeyCode::Char('q') => {
-            return Ok(true);
-        }
-        _ => {
-            return Ok(false);
-        }
-    };
 }
