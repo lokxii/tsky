@@ -2,7 +2,7 @@ use atrium_api::{
     self,
     app::bsky::feed::{
         defs::{FeedViewPostData, FeedViewPostReasonRefs},
-        get_timeline::ParametersData,
+        get_timeline::{self, ParametersData},
     },
     types::{Object, Union},
 };
@@ -41,7 +41,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut item =
                         Into::<Paragraph>::into(&posts[context.index]);
                     if context.is_selected {
-                        item = item.style(Style::default().bg(Color::Rgb(45, 50, 55)));
+                        item = item
+                            .style(Style::default().bg(Color::Rgb(45, 50, 55)));
                     }
                     let height = item.line_count(width - 2) as u16;
                     return (item, height);
@@ -104,35 +105,19 @@ impl App {
         let column = Arc::clone(&self.column);
         tokio::spawn(async move {
             loop {
-                let new_posts = agent
-                    .api
-                    .app
-                    .bsky
-                    .feed
-                    .get_timeline(
-                        ParametersData {
-                            algorithm: None,
-                            cursor: None,
-                            limit: None,
+                match fetch_posts(agent.clone(), None).await {
+                    Result::Ok((new_posts, cursor)) => {
+                        let mut column = column.lock().await;
+                        if let Result::Err(_) =
+                            column.append_new_posts(new_posts, cursor).await
+                        {
+                            // TODO: log error
                         }
-                        .into(),
-                    )
-                    .await;
-                let Result::Ok(new_posts) = new_posts else {
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1))
-                        .await;
-                    continue;
-                };
-                let new_posts = new_posts.feed.iter().map(Post::from);
-
-                {
-                    let mut column = column.lock().await;
-                    if let Result::Err(_) =
-                        column.append_new_posts(new_posts).await
-                    {
+                    }
+                    Result::Err(_) => {
                         // TODO: log error
                     }
-                }
+                };
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             }
         });
@@ -142,6 +127,7 @@ impl App {
 struct Column {
     posts: VecDeque<Post>,
     state: ListState,
+    cursor: Arc<Mutex<Option<String>>>,
 }
 
 impl Column {
@@ -149,15 +135,17 @@ impl Column {
         Column {
             posts: VecDeque::new(),
             state: ListState::default(),
+            cursor: Arc::new(Mutex::new(None)),
         }
     }
 
     async fn append_new_posts<T>(
         &mut self,
-        new_posts: T,
+        mut new_posts: T,
+        cursor: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
-        T: Iterator<Item = Post> + Clone,
+        T: Iterator<Item = Post>,
     {
         if self.posts.len() == 0 {
             self.posts = new_posts.collect();
@@ -166,7 +154,7 @@ impl Column {
         }
 
         let last_newest = &self.posts[0];
-        let overlap_idx = new_posts.clone().position(|p| &p == last_newest);
+        let overlap_idx = new_posts.position(|p| &p == last_newest);
         match overlap_idx {
             Some(idx) => {
                 new_posts.take(idx).for_each(|p| self.posts.push_front(p));
@@ -174,9 +162,54 @@ impl Column {
                     self.state.select(Some(i + idx));
                 }
             }
-            None => self.posts = new_posts.collect(),
+            None => {
+                self.posts = new_posts.collect();
+                let c = Arc::clone(&self.cursor);
+                let mut c = c.lock().await;
+                *c = cursor;
+            }
         }
         return Ok(());
+    }
+}
+
+#[derive(Debug, Clone)]
+enum FetchPostError {
+    Failed
+}
+
+unsafe impl Send for FetchPostError {}
+
+async fn fetch_posts(
+    agent: BskyAgent,
+    cursor: Option<String>,
+) -> Result<
+    (impl Iterator<Item = Post>, Option<String>),
+    FetchPostError,
+> {
+    let new_posts = agent
+        .api
+        .app
+        .bsky
+        .feed
+        .get_timeline(
+            ParametersData {
+                algorithm: None,
+                cursor,
+                limit: None,
+            }
+            .into(),
+        )
+        .await;
+    match new_posts {
+        Result::Ok(new_posts) => {
+            let get_timeline::OutputData { cursor, feed } = new_posts.data;
+            let posts = feed.into_iter().map(Post::from);
+            return Ok((posts, cursor));
+        }
+        Result::Err(_) => {
+            return Result::Err(FetchPostError::Failed);
+        }
     }
 }
 
@@ -199,7 +232,7 @@ struct Post {
 }
 
 impl Post {
-    fn from(view: &Object<FeedViewPostData>) -> Post {
+    fn from(view: Object<FeedViewPostData>) -> Post {
         let author = &view.post.author;
         let content = &view.post.record;
 
