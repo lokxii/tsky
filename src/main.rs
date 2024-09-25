@@ -41,7 +41,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut item =
                         Into::<Paragraph>::into(&posts[context.index]);
                     if context.is_selected {
-                        item = item.style(Style::default().bg(Color::Rgb(45, 50, 55)));
+                        item = item
+                            .style(Style::default().bg(Color::Rgb(45, 50, 55)));
                     }
                     let height = item.line_count(width - 2) as u16;
                     return (item, height);
@@ -257,7 +258,14 @@ impl Post {
 
 impl Into<Paragraph<'_>> for &Post {
     fn into(self) -> Paragraph<'static> {
-        return Paragraph::new(vec![
+        let mut lines = Vec::new();
+        if let Some(repost) = &self.reason {
+            lines.push(Line::from(Span::styled(
+                    String::from("Reposted by ") + &repost.author,
+                Color::Green)
+            ));
+        }
+        let mut other_lines = vec![
             Line::from(
                 Span::styled(self.author.clone(), Color::Cyan)
                     + Span::styled(
@@ -267,7 +275,9 @@ impl Into<Paragraph<'_>> for &Post {
             ),
             Line::from(self.created_at.to_string()).style(Color::DarkGray),
             Line::from(self.text.to_string()).style(Color::White),
-        ])
+        ];
+        lines.append(&mut other_lines);
+        return Paragraph::new(lines)
         .wrap(ratatui::widgets::Wrap { trim: true });
     }
 }
