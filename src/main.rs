@@ -2,7 +2,7 @@ use atrium_api::{
     self,
     app::bsky::feed::{
         defs::{FeedViewPostData, FeedViewPostReasonRefs},
-        get_timeline::ParametersData,
+        get_timeline::{self, ParametersData},
     },
     types::{Object, Union},
 };
@@ -123,12 +123,13 @@ impl App {
                         .await;
                     continue;
                 };
-                let new_posts = new_posts.feed.iter().map(Post::from);
+                let get_timeline::OutputData { feed, cursor } = new_posts.data;
+                let new_posts = feed.iter().map(Post::from);
 
                 {
                     let mut column = column.lock().await;
                     if let Result::Err(_) =
-                        column.append_new_posts(new_posts).await
+                        column.append_new_posts(new_posts, cursor).await
                     {
                         // TODO: log error
                     }
@@ -142,6 +143,7 @@ impl App {
 struct Column {
     posts: VecDeque<Post>,
     state: ListState,
+    cursor: Arc<Mutex<Option<String>>>,
 }
 
 impl Column {
@@ -149,12 +151,14 @@ impl Column {
         Column {
             posts: VecDeque::new(),
             state: ListState::default(),
+            cursor: Arc::new(Mutex::new(None)),
         }
     }
 
     async fn append_new_posts<T>(
         &mut self,
         new_posts: T,
+        cursor: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
         T: Iterator<Item = Post> + Clone,
@@ -174,7 +178,12 @@ impl Column {
                     self.state.select(Some(i + idx));
                 }
             }
-            None => self.posts = new_posts.collect(),
+            None => {
+                self.posts = new_posts.collect();
+                let c = Arc::clone(&self.cursor);
+                let mut c = c.lock().await;
+                *c = cursor;
+            }
         }
         return Ok(());
     }
