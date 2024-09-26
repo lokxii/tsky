@@ -14,7 +14,14 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Paragraph, Widget},
 };
-use std::{collections::VecDeque, env, sync::Arc};
+use std::{
+    collections::VecDeque,
+    env,
+    sync::{
+        mpsc::{self, Receiver},
+        Arc,
+    },
+};
 use tokio::sync::Mutex;
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
@@ -27,29 +34,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = App::new();
 
-    terminal.draw(|f| f.render_widget("Starting worker", f.area()))?;
-    app.spawn_column_autoupdate(agent.clone());
+    terminal.draw(|f| f.render_widget("Starting workers", f.area()))?;
+    app.column.spawn_feed_autoupdate(agent.clone());
+    let (tx, rx) = mpsc::channel::<()>();
+    app.column.spawn_get_old_posts_worker(agent.clone(), rx);
 
     loop {
         {
-            let column = Arc::clone(&app.column);
-            let mut column = column.lock().await;
+            let feed = Arc::clone(&app.column.feed);
+            let mut feed = feed.lock().await;
+
             terminal.draw(move |f| {
                 let width = f.area().width;
-                let posts = column.posts.clone();
+                let posts = feed.posts.clone();
+
                 let builder = ListBuilder::new(move |context| {
                     let mut item =
                         Into::<Paragraph>::into(&posts[context.index]);
                     if context.is_selected {
-                        item = item.style(Style::default().bg(Color::Rgb(45, 50, 55)));
+                        item = item
+                            .style(Style::default().bg(Color::Rgb(45, 50, 55)));
                     }
                     let height = item.line_count(width - 2) as u16;
                     return (item, height);
                 });
-                let list = ListView::new(builder, column.posts.len())
+
+                let list = ListView::new(builder, feed.posts.len())
                     .block(Block::default())
                     .infinite_scrolling(false);
-                f.render_stateful_widget(list, f.area(), &mut column.state);
+
+                f.render_stateful_widget(list, f.area(), &mut feed.state);
             })?;
         }
 
@@ -63,13 +77,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 struct App {
-    column: Arc<Mutex<Column>>,
+    column: Column,
 }
 
 impl App {
     fn new() -> App {
         App {
-            column: Arc::new(Mutex::new(Column::new())),
+            column: Column::new(),
         }
     }
 
@@ -77,8 +91,8 @@ impl App {
         let Event::Key(key) = event::read()? else {
             return Ok(false);
         };
-        let column = Arc::clone(&self.column);
-        let mut column = column.lock().await;
+        let feed = Arc::clone(&self.column.feed);
+        let mut column = feed.lock().await;
         if key.kind != event::KeyEventKind::Press {
             return Ok(false);
         }
@@ -88,6 +102,13 @@ impl App {
                 return Ok(false);
             }
             KeyCode::Char('k') => {
+                // if column.state.selected == Some(column.posts.len() - 1) {
+                //     let cursor = Arc::clone(&column.cursor);
+                //     if let Result::Err(_) = cursor.try_lock() {
+                //         column.state.previous();
+                //         return Ok(false);
+                //     };
+                // }
                 column.state.previous();
                 return Ok(false);
             }
@@ -99,9 +120,27 @@ impl App {
             }
         };
     }
+}
 
-    fn spawn_column_autoupdate(&self, agent: BskyAgent) {
-        let column = Arc::clone(&self.column);
+struct Column {
+    feed: Arc<Mutex<ColumnFeed>>,
+    cursor: Arc<Mutex<Option<String>>>,
+}
+
+impl Column {
+    fn new() -> Column {
+        Column {
+            feed: Arc::new(Mutex::new(ColumnFeed {
+                posts: VecDeque::new(),
+                state: ListState::default(),
+            })),
+            cursor: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn spawn_feed_autoupdate(&self, agent: BskyAgent) {
+        let feed = Arc::clone(&self.feed);
+        let cursor = Arc::clone(&self.cursor);
         tokio::spawn(async move {
             loop {
                 let new_posts = agent
@@ -123,50 +162,77 @@ impl App {
                         .await;
                     continue;
                 };
-                let get_timeline::OutputData { feed, cursor } = new_posts.data;
-                let new_posts = feed.iter().map(Post::from);
+                let get_timeline::OutputData {
+                    feed: posts,
+                    cursor: new_cursor,
+                } = new_posts.data;
+                let new_posts = posts.iter().map(Post::from);
 
                 {
-                    let mut column = column.lock().await;
-                    if let Result::Err(_) =
-                        column.append_new_posts(new_posts, cursor).await
-                    {
-                        // TODO: log error
+                    let mut feed = feed.lock().await;
+                    if feed.insert_new_posts(new_posts).await {
+                        let mut cursor = cursor.lock().await;
+                        *cursor = new_cursor;
                     }
                 }
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             }
         });
     }
+
+    fn spawn_get_old_posts_worker(&self, agent: BskyAgent, rx: Receiver<()>) {
+        let feed = Arc::clone(&self.feed);
+        let cursor = Arc::clone(&self.cursor);
+        tokio::spawn(async move {
+            loop {
+                let _ = rx.recv();
+                let mut cursor = cursor.lock().await;
+
+                let new_posts = agent
+                    .api
+                    .app
+                    .bsky
+                    .feed
+                    .get_timeline(
+                        ParametersData {
+                            algorithm: None,
+                            cursor: cursor.clone(),
+                            limit: None,
+                        }
+                        .into(),
+                    )
+                    .await;
+
+                let Result::Ok(new_posts) = new_posts else {
+                    continue;
+                };
+                let get_timeline::OutputData {
+                    feed: posts,
+                    cursor: new_cursor,
+                } = new_posts.data;
+                *cursor = new_cursor;
+
+                let mut feed = feed.lock().await;
+                feed.append_old_posts(posts.iter().map(Post::from));
+            }
+        });
+    }
 }
 
-struct Column {
+struct ColumnFeed {
     posts: VecDeque<Post>,
     state: ListState,
-    cursor: Arc<Mutex<Option<String>>>,
 }
 
-impl Column {
-    fn new() -> Column {
-        Column {
-            posts: VecDeque::new(),
-            state: ListState::default(),
-            cursor: Arc::new(Mutex::new(None)),
-        }
-    }
-
-    async fn append_new_posts<T>(
-        &mut self,
-        new_posts: T,
-        cursor: Option<String>,
-    ) -> Result<(), Box<dyn std::error::Error>>
+impl ColumnFeed {
+    async fn insert_new_posts<T>(&mut self, new_posts: T) -> bool
     where
         T: Iterator<Item = Post> + Clone,
     {
         if self.posts.len() == 0 {
             self.posts = new_posts.collect();
             self.state.select(Some(0));
-            return Ok(());
+            return false;
         }
 
         let last_newest = &self.posts[0];
@@ -180,12 +246,22 @@ impl Column {
             }
             None => {
                 self.posts = new_posts.collect();
-                let c = Arc::clone(&self.cursor);
-                let mut c = c.lock().await;
-                *c = cursor;
+                return true;
             }
         }
-        return Ok(());
+        return false;
+    }
+
+    fn append_old_posts<T>(&mut self, new_posts: T)
+    where
+        T: Iterator<Item = Post> + Clone,
+    {
+        if self.posts.len() == 0 {
+            return;
+        }
+
+        let mut new_posts = new_posts.collect();
+        self.posts.append(&mut new_posts);
     }
 }
 
@@ -269,9 +345,9 @@ impl Into<Paragraph<'_>> for &Post {
         let mut lines = Vec::new();
         if let Some(repost) = &self.reason {
             lines.push(Line::from(Span::styled(
-                    String::from("Reposted by ") + &repost.author,
-                Color::Green)
-            ));
+                String::from("Reposted by ") + &repost.author,
+                Color::Green,
+            )));
         }
         let mut other_lines = vec![
             Line::from(
@@ -286,7 +362,7 @@ impl Into<Paragraph<'_>> for &Post {
         ];
         lines.append(&mut other_lines);
         return Paragraph::new(lines)
-        .wrap(ratatui::widgets::Wrap { trim: true });
+            .wrap(ratatui::widgets::Wrap { trim: true });
     }
 }
 
