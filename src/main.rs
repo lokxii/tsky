@@ -18,7 +18,7 @@ use std::{
     collections::VecDeque,
     env,
     sync::{
-        mpsc::{self, Receiver},
+        mpsc::{self, Receiver, Sender},
         Arc,
     },
 };
@@ -32,12 +32,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     terminal.draw(|f| f.render_widget("Logging in", f.area()))?;
     let agent = login().await.unwrap();
 
-    let app = App::new();
-
-    terminal.draw(|f| f.render_widget("Starting workers", f.area()))?;
-    app.column.spawn_feed_autoupdate(agent.clone());
+    terminal.draw(|f| {
+        f.render_widget("Creating column (starting workers)", f.area())
+    })?;
     let (tx, rx) = mpsc::channel::<()>();
-    app.column.spawn_get_old_posts_worker(agent.clone(), rx);
+    let column = Column::new(tx);
+    column.spawn_feed_autoupdate(agent.clone());
+    column.spawn_get_old_posts_worker(agent.clone(), rx);
+
+    let app = App::new(column);
 
     loop {
         {
@@ -81,10 +84,8 @@ struct App {
 }
 
 impl App {
-    fn new() -> App {
-        App {
-            column: Column::new(),
-        }
+    fn new(column: Column) -> App {
+        App { column }
     }
 
     async fn handle_events(&self) -> Result<bool, Box<dyn std::error::Error>> {
@@ -92,24 +93,26 @@ impl App {
             return Ok(false);
         };
         let feed = Arc::clone(&self.column.feed);
-        let mut column = feed.lock().await;
+        let mut feed = feed.lock().await;
         if key.kind != event::KeyEventKind::Press {
             return Ok(false);
         }
         match key.code {
             KeyCode::Char('j') => {
-                column.state.next();
+                feed.state.next();
                 return Ok(false);
             }
             KeyCode::Char('k') => {
-                // if column.state.selected == Some(column.posts.len() - 1) {
-                //     let cursor = Arc::clone(&column.cursor);
-                //     if let Result::Err(_) = cursor.try_lock() {
-                //         column.state.previous();
-                //         return Ok(false);
-                //     };
-                // }
-                column.state.previous();
+                if feed.state.selected == Some(feed.posts.len() - 1) {
+                    let cursor = Arc::clone(&self.column.cursor);
+                    if let Result::Err(_) = cursor.try_lock() {
+                        feed.state.previous();
+                        return Ok(false);
+                    };
+                    self.column.old_post_worker_tx.send(())?;
+                } else {
+                    feed.state.previous();
+                }
                 return Ok(false);
             }
             KeyCode::Char('q') => {
@@ -125,16 +128,18 @@ impl App {
 struct Column {
     feed: Arc<Mutex<ColumnFeed>>,
     cursor: Arc<Mutex<Option<String>>>,
+    old_post_worker_tx: Sender<()>,
 }
 
 impl Column {
-    fn new() -> Column {
+    fn new(tx: Sender<()>) -> Column {
         Column {
             feed: Arc::new(Mutex::new(ColumnFeed {
                 posts: VecDeque::new(),
                 state: ListState::default(),
             })),
             cursor: Arc::new(Mutex::new(None)),
+            old_post_worker_tx: tx,
         }
     }
 
