@@ -441,17 +441,12 @@ impl Widget for PostWidget {
 
         borders.render(area, buf);
 
-        let [repost_area, author_area, datetime_area, text_area, stats_area];
-
-        if let Some(repost) = &post.reason {
-            [
-                repost_area,
-                author_area,
-                datetime_area,
-                text_area,
-                stats_area,
-            ] = Layout::vertical([
-                Constraint::Length(1),
+        let [top_area, author_area, datetime_area, text_area, stats_area] =
+            Layout::vertical([
+                Constraint::Length(
+                    self.post.reason.is_some() as u16
+                        + self.post.reply_to.is_some() as u16,
+                ),
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Min(0),
@@ -459,25 +454,35 @@ impl Widget for PostWidget {
             ])
             .areas(inner_area);
 
+        let [repost_area, reply_area] = Layout::vertical([
+            Constraint::Length(self.post.reason.is_some() as u16),
+            Constraint::Length(self.post.reply_to.is_some() as u16),
+        ]).areas(top_area);
+
+        if let Some(repost) = &self.post.reason {
             Line::from(Span::styled(
-                String::from("Reposted by ") + &repost.author,
+                format!("⭮ Reposted by {}", repost.author),
                 Color::Green,
             ))
             .render(repost_area, buf);
-        } else {
-            [author_area, datetime_area, text_area, stats_area] =
-                Layout::vertical([
-                    Constraint::Length(1),
-                    Constraint::Length(1),
-                    Constraint::Min(0),
-                    Constraint::Length(1),
-                ])
-                .areas(inner_area);
+        }
+
+        if let Some(reply_to) = &self.post.reply_to {
+            let reply_to = match reply_to {
+                Reply::Author(a) => &a.author,
+                Reply::DeletedPost => "[deleted post]",
+                Reply::BlockedUser => "[blocked user]",
+            };
+            Line::from(Span::styled(
+                format!("⮡ Reply to {}", reply_to),
+                Color::Rgb(180, 180, 180)
+            ))
+            .render(reply_area, buf);
         }
 
         Line::from(
             Span::styled(post.author.clone(), Color::Cyan)
-                + Span::styled(String::from("  @") + &post.handle, Color::Gray),
+                + Span::styled(format!(" @{}", post.handle), Color::Gray),
         )
         .render(author_area, buf);
 
