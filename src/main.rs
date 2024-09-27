@@ -1,7 +1,7 @@
 use atrium_api::{
     self,
     app::bsky::feed::{
-        defs::{FeedViewPostData, FeedViewPostReasonRefs},
+        defs::{FeedViewPostData, FeedViewPostReasonRefs, ReplyRefParentRefs},
         get_timeline::{self, ParametersData},
     },
     types::{Object, Union},
@@ -279,6 +279,19 @@ struct RepostBy {
 }
 
 #[derive(PartialEq, Eq, Clone)]
+struct ReplyToAuthor {
+    author: String,
+    handle: String,
+}
+
+#[derive(PartialEq, Eq, Clone)]
+enum Reply {
+    Author(ReplyToAuthor),
+    DeletedPost,
+    BlockedUser,
+}
+
+#[derive(PartialEq, Eq, Clone)]
 struct Post {
     uri: String,
     author: String,
@@ -287,6 +300,11 @@ struct Post {
     indexed_at_utc: DateTime<FixedOffset>,
     text: String,
     reason: Option<RepostBy>,
+    reply_to: Option<Reply>,
+    like: u32,
+    repost: u32,
+    quote: u32,
+    reply: u32,
     // embeds: (),
 }
 
@@ -343,6 +361,30 @@ impl Post {
                     handle: r.by.handle.to_string(),
                 }
             }),
+            reply_to: view.reply.as_ref().map(|r| {
+                let Union::Refs(parent) = &r.data.parent else {
+                    panic!("Unknown parent type");
+                };
+                match parent {
+                    ReplyRefParentRefs::PostView(view) => {
+                        Reply::Author(ReplyToAuthor {
+                            author: view
+                                .data
+                                .author
+                                .display_name
+                                .clone()
+                                .unwrap_or("".to_string()),
+                            handle: view.data.author.handle.to_string(),
+                        })
+                    }
+                    ReplyRefParentRefs::NotFoundPost(_) => Reply::DeletedPost,
+                    ReplyRefParentRefs::BlockedPost(_) => Reply::BlockedUser,
+                }
+            }),
+            like: view.post.like_count.unwrap_or(0) as u32,
+            quote: view.post.quote_count.unwrap_or(0) as u32,
+            repost: view.post.repost_count.unwrap_or(0) as u32,
+            reply: view.post.reply_count.unwrap_or(0) as u32,
         };
     }
 }
