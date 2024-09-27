@@ -10,6 +10,7 @@ use bsky_sdk::BskyAgent;
 use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
+    layout::{Alignment, Constraint, Layout},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Paragraph, Widget},
@@ -53,12 +54,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let builder = ListBuilder::new(move |context| {
                     let mut item =
-                        Into::<Paragraph>::into(&posts[context.index]);
+                        PostWidget::new(posts[context.index].clone());
                     if context.is_selected {
                         item = item
                             .style(Style::default().bg(Color::Rgb(45, 50, 55)));
                     }
-                    let height = item.line_count(width - 2) as u16;
+                    let height = item.calculate_height(width - 2) as u16;
                     return (item, height);
                 });
 
@@ -389,38 +390,44 @@ impl Post {
     }
 }
 
-impl Into<Paragraph<'_>> for &Post {
-    fn into(self) -> Paragraph<'static> {
-        let mut lines = Vec::new();
-        if let Some(repost) = &self.reason {
-            lines.push(Line::from(Span::styled(
-                String::from("Reposted by ") + &repost.author,
-                Color::Green,
-            )));
+struct PostWidget {
+    post: Post,
+    style: Style,
+}
+
+impl PostWidget {
+    fn new(post: Post) -> PostWidget {
+        PostWidget {
+            post,
+            style: Style::default(),
         }
-        let mut author_and_date = vec![
-            Line::from(
-                Span::styled(self.author.clone(), Color::Cyan)
-                    + Span::styled(
-                        String::from("  @") + &self.handle,
-                        Color::Gray,
-                    ),
-            ),
-            Line::from(self.created_at.to_string()).style(Color::DarkGray),
-        ];
-        let mut text = self
-            .text
-            .split('\n')
-            .map(|line| Line::from(line.to_string()).style(Color::White))
-            .collect();
-        lines.append(&mut author_and_date);
-        lines.append(&mut text);
-        return Paragraph::new(lines)
-            .wrap(ratatui::widgets::Wrap { trim: true });
+    }
+
+    fn style(self, style: Style) -> PostWidget {
+        PostWidget { style, ..self }
+    }
+
+    fn calculate_height(&self, width: u16) -> u16 {
+        self.post.reason.is_some() as u16
+            + 2 // author and date
+            + self.body_paragraph().line_count(width) as u16
+            + 1 // stats
+            + 2 // borders
+    }
+
+    fn body_paragraph(&self) -> Paragraph {
+        Paragraph::new(
+            self.post
+                .text
+                .split('\n')
+                .map(|line| Line::from(line).style(Color::White))
+                .collect::<Vec<Line>>(),
+        )
+        .wrap(ratatui::widgets::Wrap { trim: true })
     }
 }
 
-impl Widget for Post {
+impl Widget for PostWidget {
     fn render(
         self,
         area: ratatui::prelude::Rect,
@@ -428,7 +435,108 @@ impl Widget for Post {
     ) where
         Self: Sized,
     {
-        Into::<Paragraph>::into(&self).render(area, buf);
+        let borders = Block::bordered().style(self.style);
+        let inner_area = borders.inner(area);
+        let post = &self.post;
+
+        borders.render(area, buf);
+
+        let [repost_area, author_area, datetime_area, text_area, stats_area];
+
+        if let Some(repost) = &post.reason {
+            [
+                repost_area,
+                author_area,
+                datetime_area,
+                text_area,
+                stats_area,
+            ] = Layout::vertical([
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
+            .areas(inner_area);
+
+            Line::from(Span::styled(
+                String::from("Reposted by ") + &repost.author,
+                Color::Green,
+            ))
+            .render(repost_area, buf);
+        } else {
+            [author_area, datetime_area, text_area, stats_area] =
+                Layout::vertical([
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Min(0),
+                    Constraint::Length(1),
+                ])
+                .areas(inner_area);
+        }
+
+        Line::from(
+            Span::styled(post.author.clone(), Color::Cyan)
+                + Span::styled(String::from("  @") + &post.handle, Color::Gray),
+        )
+        .render(author_area, buf);
+
+        Line::from(post.created_at.to_string())
+            .style(Color::DarkGray)
+            .render(datetime_area, buf);
+
+        self.body_paragraph().render(text_area, buf);
+
+        let [reply_area, quote_area, repost_area, like_area] =
+            Layout::horizontal([
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+            ])
+            .areas(stats_area);
+
+        let stat_color = Color::Rgb(100, 100, 100);
+
+        Line::from(format!(
+            "{} {}",
+            post.reply,
+            if post.reply == 1 { "reply" } else { "replies" }
+        ))
+        .style(stat_color)
+        .alignment(Alignment::Left)
+        .render(reply_area, buf);
+
+        Line::from(format!(
+            "{} {}",
+            post.quote,
+            if post.quote == 1 { "quote" } else { "quotes" }
+        ))
+        .style(stat_color)
+        .alignment(Alignment::Left)
+        .render(quote_area, buf);
+
+        Line::from(format!(
+            "{} {}",
+            post.repost,
+            if post.repost == 1 {
+                "repost"
+            } else {
+                "reposts"
+            }
+        ))
+        .style(stat_color)
+        .alignment(Alignment::Left)
+        .render(repost_area, buf);
+
+        Line::from(format!(
+            "{} {}",
+            post.like,
+            if post.like == 1 { "like" } else { "likes" }
+        ))
+        .style(stat_color)
+        .alignment(Alignment::Left)
+        .render(like_area, buf);
     }
 }
 
