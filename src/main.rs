@@ -99,7 +99,9 @@ impl App {
         }
         match key.code {
             KeyCode::Char('j') => {
-                if feed.posts.len() > 0 && feed.state.selected == Some(feed.posts.len() - 1) {
+                if feed.posts.len() > 0
+                    && feed.state.selected == Some(feed.posts.len() - 1)
+                {
                     let cursor = Arc::clone(&self.column.cursor);
                     if let Result::Err(_) = cursor.try_lock() {
                         feed.state.next();
@@ -354,7 +356,7 @@ impl Into<Paragraph<'_>> for &Post {
                 Color::Green,
             )));
         }
-        let mut other_lines = vec![
+        let mut author_and_date = vec![
             Line::from(
                 Span::styled(self.author.clone(), Color::Cyan)
                     + Span::styled(
@@ -363,9 +365,14 @@ impl Into<Paragraph<'_>> for &Post {
                     ),
             ),
             Line::from(self.created_at.to_string()).style(Color::DarkGray),
-            Line::from(self.text.to_string()).style(Color::White),
         ];
-        lines.append(&mut other_lines);
+        let mut text = self
+            .text
+            .split('\n')
+            .map(|line| Line::from(line.to_string()).style(Color::White))
+            .collect();
+        lines.append(&mut author_and_date);
+        lines.append(&mut text);
         return Paragraph::new(lines)
             .wrap(ratatui::widgets::Wrap { trim: true });
     }
