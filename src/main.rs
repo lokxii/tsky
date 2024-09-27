@@ -293,6 +293,25 @@ enum Reply {
 }
 
 #[derive(PartialEq, Eq, Clone)]
+struct Viewer {
+    count: u32,
+    did: Option<String>,
+}
+
+impl Viewer {
+    fn new(count: Option<i64>, did: Option<String>) -> Viewer {
+        Viewer {
+            count: count.unwrap_or(0) as u32 - did.is_some() as u32,
+            did,
+        }
+    }
+
+    fn count(&self) -> u32 {
+        self.count + self.did.is_some() as u32
+    }
+}
+
+#[derive(PartialEq, Eq, Clone)]
 struct Post {
     uri: String,
     author: String,
@@ -302,8 +321,8 @@ struct Post {
     text: String,
     reason: Option<RepostBy>,
     reply_to: Option<Reply>,
-    like: u32,
-    repost: u32,
+    like: Viewer,
+    repost: Viewer,
     quote: u32,
     reply: u32,
     // embeds: (),
@@ -345,6 +364,20 @@ impl Post {
         let created_at =
             DateTime::from_naive_utc_and_offset(created_at_utc, *dt.offset());
 
+        let like = match &view.post.viewer {
+            Some(viewer) => {
+                Viewer::new(view.post.like_count, viewer.like.clone())
+            }
+            None => Viewer::new(None, None),
+        };
+
+        let repost = match &view.post.viewer {
+            Some(viewer) => {
+                Viewer::new(view.post.repost_count, viewer.repost.clone())
+            }
+            None => Viewer::new(None, None),
+        };
+
         return Post {
             uri: view.post.uri.clone(),
             author: author.display_name.clone().unwrap_or("(None)".to_string()),
@@ -382,9 +415,9 @@ impl Post {
                     ReplyRefParentRefs::BlockedPost(_) => Reply::BlockedUser,
                 }
             }),
-            like: view.post.like_count.unwrap_or(0) as u32,
+            like,
             quote: view.post.quote_count.unwrap_or(0) as u32,
-            repost: view.post.repost_count.unwrap_or(0) as u32,
+            repost,
             reply: view.post.reply_count.unwrap_or(0) as u32,
         };
     }
@@ -457,7 +490,8 @@ impl Widget for PostWidget {
         let [repost_area, reply_area] = Layout::vertical([
             Constraint::Length(self.post.reason.is_some() as u16),
             Constraint::Length(self.post.reply_to.is_some() as u16),
-        ]).areas(top_area);
+        ])
+        .areas(top_area);
 
         if let Some(repost) = &self.post.reason {
             Line::from(Span::styled(
@@ -475,7 +509,7 @@ impl Widget for PostWidget {
             };
             Line::from(Span::styled(
                 format!("⮡ Reply to {}", reply_to),
-                Color::Rgb(180, 180, 180)
+                Color::Rgb(180, 180, 180),
             ))
             .render(reply_area, buf);
         }
@@ -523,23 +557,35 @@ impl Widget for PostWidget {
 
         Line::from(format!(
             "{} {}",
-            post.repost,
-            if post.repost == 1 {
+            post.repost.count(),
+            if post.repost.count() == 1 {
                 "repost"
             } else {
                 "reposts"
             }
         ))
-        .style(stat_color)
+        .style(if post.repost.did.is_some() {
+            Color::Green
+        } else {
+            stat_color
+        })
         .alignment(Alignment::Left)
         .render(repost_area, buf);
 
         Line::from(format!(
             "{} {}",
-            post.like,
-            if post.like == 1 { "like" } else { "likes" }
+            post.like.count(),
+            if post.like.count() == 1 {
+                "like"
+            } else {
+                "likes"
+            }
         ))
-        .style(stat_color)
+        .style(if post.like.did.is_some() {
+            Color::Green
+        } else {
+            stat_color
+        })
         .alignment(Alignment::Left)
         .render(like_area, buf);
     }
