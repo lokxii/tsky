@@ -496,7 +496,7 @@ impl Widget for PostWidget {
             ])
             .areas(stats_area);
 
-        let stat_color = Color::Rgb(100, 100, 100);
+        let stat_color = Color::Rgb(130, 130, 130);
 
         Line::from(format!(
             "{} {}",
