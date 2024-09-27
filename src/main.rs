@@ -99,20 +99,20 @@ impl App {
         }
         match key.code {
             KeyCode::Char('j') => {
-                feed.state.next();
-                return Ok(false);
-            }
-            KeyCode::Char('k') => {
-                if feed.state.selected == Some(feed.posts.len() - 1) {
+                if feed.posts.len() > 0 && feed.state.selected == Some(feed.posts.len() - 1) {
                     let cursor = Arc::clone(&self.column.cursor);
                     if let Result::Err(_) = cursor.try_lock() {
-                        feed.state.previous();
+                        feed.state.next();
                         return Ok(false);
                     };
                     self.column.old_post_worker_tx.send(())?;
                 } else {
-                    feed.state.previous();
+                    feed.state.next();
                 }
+                return Ok(false);
+            }
+            KeyCode::Char('k') => {
+                feed.state.previous();
                 return Ok(false);
             }
             KeyCode::Char('q') => {
