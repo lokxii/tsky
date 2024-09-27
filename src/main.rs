@@ -237,7 +237,7 @@ impl ColumnFeed {
         if self.posts.len() == 0 {
             self.posts = new_posts.collect();
             self.state.select(Some(0));
-            return false;
+            return true;
         }
 
         let last_newest = &self.posts[0];
