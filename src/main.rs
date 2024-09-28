@@ -23,7 +23,7 @@ use std::{
         Arc,
     },
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
 #[tokio::main]
@@ -204,38 +204,56 @@ impl Column {
         let cursor = Arc::clone(&self.cursor);
         tokio::spawn(async move {
             loop {
-                let _ = rx.recv();
-                let mut cursor = cursor.lock().await;
-
-                let new_posts = agent
-                    .api
-                    .app
-                    .bsky
-                    .feed
-                    .get_timeline(
-                        ParametersData {
-                            algorithm: None,
-                            cursor: cursor.clone(),
-                            limit: None,
-                        }
-                        .into(),
-                    )
-                    .await;
-
-                let Result::Ok(new_posts) = new_posts else {
+                let Ok(msg) = rx.recv() else {
                     continue;
                 };
-                let get_timeline::OutputData {
-                    feed: posts,
-                    cursor: new_cursor,
-                } = new_posts.data;
-                *cursor = new_cursor;
-
-                let mut feed = feed.lock().await;
-                feed.append_old_posts(posts.iter().map(Post::from));
+                match msg {
+                    RequestMsg::OldPost => {
+                        get_old_posts(
+                            &agent,
+                            Arc::clone(&feed),
+                            cursor.lock().await,
+                        )
+                        .await;
+                    }
+                    _ => {}
+                }
             }
         });
     }
+}
+
+async fn get_old_posts(
+    agent: &BskyAgent,
+    feed: Arc<Mutex<ColumnFeed>>,
+    mut cursor: MutexGuard<'_, Option<String>>,
+) {
+    let new_posts = agent
+        .api
+        .app
+        .bsky
+        .feed
+        .get_timeline(
+            ParametersData {
+                algorithm: None,
+                cursor: cursor.clone(),
+                limit: None,
+            }
+            .into(),
+        )
+        .await;
+
+    let Result::Ok(new_posts) = new_posts else {
+        return;
+    };
+    let get_timeline::OutputData {
+        feed: posts,
+        cursor: new_cursor,
+    } = new_posts.data;
+    *cursor = new_cursor;
+
+    let mut feed = feed.lock().await;
+    feed.append_old_posts(posts.iter().map(Post::from));
 }
 
 struct ColumnFeed {
