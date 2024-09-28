@@ -2,9 +2,9 @@ use atrium_api::{
     self,
     app::bsky::feed::{
         defs::{FeedViewPostData, FeedViewPostReasonRefs, ReplyRefParentRefs},
-        get_timeline::{self, ParametersData},
+        get_timeline,
     },
-    types::{Object, Union},
+    types::{string::Cid, Object, Union},
 };
 use bsky_sdk::BskyAgent;
 use chrono::{DateTime, FixedOffset, Local};
@@ -72,6 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if app.handle_events().await? {
+            app.column.request_worker_tx.send(RequestMsg::Close)?;
             break;
         }
     }
@@ -99,6 +100,10 @@ impl App {
             return Ok(false);
         }
         match key.code {
+            KeyCode::Char('q') => {
+                return Ok(true);
+            }
+
             KeyCode::Char('j') => {
                 if feed.posts.len() > 0
                     && feed.state.selected == Some(feed.posts.len() - 1)
@@ -118,9 +123,30 @@ impl App {
                 feed.state.previous();
                 return Ok(false);
             }
-            KeyCode::Char('q') => {
-                return Ok(true);
+
+            KeyCode::Char(' ') => {
+                if feed.state.selected.is_none() {
+                    return Ok(false);
+                }
+                let post = &feed.posts[feed.state.selected.unwrap()];
+                if post.like.uri.is_some() {
+                    self.column.request_worker_tx.send(RequestMsg::UnlikePost(
+                        UnlikePostData {
+                            post_uri: post.uri.clone(),
+                            like_uri: post.like.uri.clone().unwrap(),
+                        },
+                    ))?;
+                } else {
+                    self.column.request_worker_tx.send(RequestMsg::LikePost(
+                        LikePostData {
+                            post_uri: post.uri.clone(),
+                            post_cid: post.cid.clone(),
+                        },
+                    ))?;
+                }
+                return Ok(false);
             }
+
             _ => {
                 return Ok(false);
             }
@@ -128,15 +154,21 @@ impl App {
     }
 }
 
+struct LikePostData {
+    post_uri: String,
+    post_cid: Cid,
+}
+
 struct UnlikePostData {
-    url: String,
-    did: String,
+    post_uri: String,
+    like_uri: String,
 }
 
 enum RequestMsg {
     OldPost,
-    LikePost(String),
+    LikePost(LikePostData),
     UnlikePost(UnlikePostData),
+    Close,
 }
 
 struct Column {
@@ -168,7 +200,7 @@ impl Column {
                     .bsky
                     .feed
                     .get_timeline(
-                        ParametersData {
+                        get_timeline::ParametersData {
                             algorithm: None,
                             cursor: None,
                             limit: None,
@@ -205,9 +237,10 @@ impl Column {
         tokio::spawn(async move {
             loop {
                 let Ok(msg) = rx.recv() else {
-                    continue;
+                    panic!("Column request worker message channel broken");
                 };
                 match msg {
+                    RequestMsg::Close => return,
                     RequestMsg::OldPost => {
                         get_old_posts(
                             &agent,
@@ -216,7 +249,38 @@ impl Column {
                         )
                         .await;
                     }
-                    _ => {}
+                    RequestMsg::LikePost(data) => {
+                        let Ok(output) = agent.create_record(
+                            atrium_api::app::bsky::feed::like::RecordData {
+                                created_at: atrium_api::types::string::Datetime::now(),
+                                subject: atrium_api::com::atproto::repo::strong_ref::MainData {
+                                    cid: data.post_cid,
+                                    uri: data.post_uri.clone(),
+                                }.into()
+                            },
+                        ).await else {
+                            continue;
+                        };
+                        let mut feed = feed.lock().await;
+                        feed.posts.iter_mut().for_each(|post| {
+                            if post.uri == data.post_uri {
+                                post.like.uri = Some(output.uri.clone());
+                            }
+                        });
+                    }
+                    RequestMsg::UnlikePost(data) => {
+                        let Ok(_) =
+                            agent.delete_record(data.like_uri.clone()).await
+                        else {
+                            continue;
+                        };
+                        let mut feed = feed.lock().await;
+                        feed.posts.iter_mut().for_each(|post| {
+                            if post.uri == data.post_uri {
+                                post.like.uri = None;
+                            }
+                        });
+                    }
                 }
             }
         });
@@ -234,7 +298,7 @@ async fn get_old_posts(
         .bsky
         .feed
         .get_timeline(
-            ParametersData {
+            get_timeline::ParametersData {
                 algorithm: None,
                 cursor: cursor.clone(),
                 limit: None,
@@ -324,25 +388,26 @@ enum Reply {
 #[derive(PartialEq, Eq, Clone)]
 struct Viewer {
     count: u32,
-    did: Option<String>,
+    uri: Option<String>,
 }
 
 impl Viewer {
-    fn new(count: Option<i64>, did: Option<String>) -> Viewer {
+    fn new(count: Option<i64>, uri: Option<String>) -> Viewer {
         Viewer {
-            count: count.unwrap_or(0) as u32 - did.is_some() as u32,
-            did,
+            count: count.unwrap_or(0) as u32 - uri.is_some() as u32,
+            uri,
         }
     }
 
     fn count(&self) -> u32 {
-        self.count + self.did.is_some() as u32
+        self.count + self.uri.is_some() as u32
     }
 }
 
 #[derive(PartialEq, Eq, Clone)]
 struct Post {
     uri: String,
+    cid: Cid,
     author: String,
     handle: String,
     created_at: DateTime<FixedOffset>,
@@ -409,6 +474,7 @@ impl Post {
 
         return Post {
             uri: view.post.uri.clone(),
+            cid: view.post.cid.clone(),
             author: author.display_name.clone().unwrap_or("(None)".to_string()),
             handle: author.handle.to_string(),
             created_at,
@@ -593,7 +659,7 @@ impl Widget for PostWidget {
                 "reposts"
             }
         ))
-        .style(if post.repost.did.is_some() {
+        .style(if post.repost.uri.is_some() {
             Color::Green
         } else {
             stat_color
@@ -610,7 +676,7 @@ impl Widget for PostWidget {
                 "likes"
             }
         ))
-        .style(if post.like.did.is_some() {
+        .style(if post.like.uri.is_some() {
             Color::Green
         } else {
             stat_color
