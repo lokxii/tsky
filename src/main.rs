@@ -36,10 +36,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     terminal.draw(|f| {
         f.render_widget("Creating column (starting workers)", f.area())
     })?;
-    let (tx, rx) = mpsc::channel::<()>();
+    let (tx, rx) = mpsc::channel();
     let column = Column::new(tx);
     column.spawn_feed_autoupdate(agent.clone());
-    column.spawn_get_old_posts_worker(agent.clone(), rx);
+    column.spawn_request_worker(agent.clone(), rx);
 
     let app = App::new(column);
 
@@ -108,7 +108,7 @@ impl App {
                         feed.state.next();
                         return Ok(false);
                     };
-                    self.column.old_post_worker_tx.send(())?;
+                    self.column.request_worker_tx.send(RequestMsg::OldPost)?;
                 } else {
                     feed.state.next();
                 }
@@ -128,21 +128,32 @@ impl App {
     }
 }
 
+struct UnlikePostData {
+    url: String,
+    did: String,
+}
+
+enum RequestMsg {
+    OldPost,
+    LikePost(String),
+    UnlikePost(UnlikePostData),
+}
+
 struct Column {
     feed: Arc<Mutex<ColumnFeed>>,
     cursor: Arc<Mutex<Option<String>>>,
-    old_post_worker_tx: Sender<()>,
+    request_worker_tx: Sender<RequestMsg>,
 }
 
 impl Column {
-    fn new(tx: Sender<()>) -> Column {
+    fn new(tx: Sender<RequestMsg>) -> Column {
         Column {
             feed: Arc::new(Mutex::new(ColumnFeed {
                 posts: VecDeque::new(),
                 state: ListState::default(),
             })),
             cursor: Arc::new(Mutex::new(None)),
-            old_post_worker_tx: tx,
+            request_worker_tx: tx,
         }
     }
 
@@ -188,7 +199,7 @@ impl Column {
         });
     }
 
-    fn spawn_get_old_posts_worker(&self, agent: BskyAgent, rx: Receiver<()>) {
+    fn spawn_request_worker(&self, agent: BskyAgent, rx: Receiver<RequestMsg>) {
         let feed = Arc::clone(&self.feed);
         let cursor = Arc::clone(&self.cursor);
         tokio::spawn(async move {
