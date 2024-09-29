@@ -398,14 +398,14 @@ enum Reply {
 }
 
 #[derive(PartialEq, Eq, Clone)]
-struct Viewer {
+struct LikeRepostViewer {
     count: u32,
     uri: Option<String>,
 }
 
-impl Viewer {
-    fn new(count: Option<i64>, uri: Option<String>) -> Viewer {
-        Viewer {
+impl LikeRepostViewer {
+    fn new(count: Option<i64>, uri: Option<String>) -> LikeRepostViewer {
+        LikeRepostViewer {
             count: count.unwrap_or(0) as u32 - uri.is_some() as u32,
             uri,
         }
@@ -427,8 +427,8 @@ struct Post {
     text: String,
     reason: Option<RepostBy>,
     reply_to: Option<Reply>,
-    like: Viewer,
-    repost: Viewer,
+    like: LikeRepostViewer,
+    repost: LikeRepostViewer,
     quote: u32,
     reply: u32,
     // embeds: (),
@@ -472,16 +472,17 @@ impl Post {
 
         let like = match &view.post.viewer {
             Some(viewer) => {
-                Viewer::new(view.post.like_count, viewer.like.clone())
+                LikeRepostViewer::new(view.post.like_count, viewer.like.clone())
             }
-            None => Viewer::new(None, None),
+            None => LikeRepostViewer::new(None, None),
         };
 
         let repost = match &view.post.viewer {
-            Some(viewer) => {
-                Viewer::new(view.post.repost_count, viewer.repost.clone())
-            }
-            None => Viewer::new(None, None),
+            Some(viewer) => LikeRepostViewer::new(
+                view.post.repost_count,
+                viewer.repost.clone(),
+            ),
+            None => LikeRepostViewer::new(None, None),
         };
 
         return Post {
