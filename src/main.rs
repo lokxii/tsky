@@ -11,6 +11,7 @@ use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
+    prelude::StatefulWidget,
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Paragraph, Widget},
@@ -49,25 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut feed = feed.lock().await;
 
             terminal.draw(move |f| {
-                let width = f.area().width;
-                let posts = feed.posts.clone();
-
-                let builder = ListBuilder::new(move |context| {
-                    let mut item =
-                        PostWidget::new(posts[context.index].clone());
-                    if context.is_selected {
-                        item = item
-                            .style(Style::default().bg(Color::Rgb(45, 50, 55)));
-                    }
-                    let height = item.calculate_height(width - 2) as u16;
-                    return (item, height);
-                });
-
-                let list = ListView::new(builder, feed.posts.len())
-                    .block(Block::default())
-                    .infinite_scrolling(false);
-
-                f.render_stateful_widget(list, f.area(), &mut feed.state);
+                f.render_widget(&mut *feed, f.area());
             })?;
         }
 
@@ -130,19 +113,19 @@ impl App {
                 }
                 let post = &feed.posts[feed.state.selected.unwrap()];
                 if post.like.uri.is_some() {
-                    self.column.request_worker_tx.send(RequestMsg::UnlikePost(
-                        UnlikePostData {
+                    self.column.request_worker_tx.send(
+                        RequestMsg::UnlikePost(UnlikePostData {
                             post_uri: post.uri.clone(),
                             like_uri: post.like.uri.clone().unwrap(),
-                        },
-                    ))?;
+                        }),
+                    )?;
                 } else {
-                    self.column.request_worker_tx.send(RequestMsg::LikePost(
-                        LikePostData {
+                    self.column.request_worker_tx.send(
+                        RequestMsg::LikePost(LikePostData {
                             post_uri: post.uri.clone(),
                             post_cid: post.cid.clone(),
-                        },
-                    ))?;
+                        }),
+                    )?;
                 }
                 return Ok(false);
             }
@@ -172,7 +155,7 @@ enum RequestMsg {
 }
 
 struct Column {
-    feed: Arc<Mutex<ColumnFeed>>,
+    feed: Arc<Mutex<Feed>>,
     cursor: Arc<Mutex<Option<String>>>,
     request_worker_tx: Sender<RequestMsg>,
 }
@@ -180,7 +163,7 @@ struct Column {
 impl Column {
     fn new(tx: Sender<RequestMsg>) -> Column {
         Column {
-            feed: Arc::new(Mutex::new(ColumnFeed {
+            feed: Arc::new(Mutex::new(Feed {
                 posts: VecDeque::new(),
                 state: ListState::default(),
             })),
@@ -237,7 +220,8 @@ impl Column {
         tokio::spawn(async move {
             loop {
                 let Ok(msg) = rx.recv() else {
-                    panic!("Column request worker message channel broken");
+                    // TODO: logging
+                    continue;
                 };
                 match msg {
                     RequestMsg::Close => return,
@@ -289,7 +273,7 @@ impl Column {
 
 async fn get_old_posts(
     agent: &BskyAgent,
-    feed: Arc<Mutex<ColumnFeed>>,
+    feed: Arc<Mutex<Feed>>,
     mut cursor: MutexGuard<'_, Option<String>>,
 ) {
     let new_posts = agent
@@ -320,12 +304,12 @@ async fn get_old_posts(
     feed.append_old_posts(posts.iter().map(Post::from));
 }
 
-struct ColumnFeed {
+struct Feed {
     posts: VecDeque<Post>,
     state: ListState,
 }
 
-impl ColumnFeed {
+impl Feed {
     async fn insert_new_posts<T>(&mut self, new_posts: T) -> bool
     where
         T: Iterator<Item = Post> + Clone,
@@ -363,6 +347,34 @@ impl ColumnFeed {
 
         let mut new_posts = new_posts.collect();
         self.posts.append(&mut new_posts);
+    }
+}
+
+impl Widget for &mut Feed {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+        let width = area.width;
+        let posts = self.posts.clone();
+
+        let builder = ListBuilder::new(move |context| {
+            let mut item = PostWidget::new(posts[context.index].clone());
+            if context.is_selected {
+                item = item.style(Style::default().bg(Color::Rgb(45, 50, 55)));
+            }
+            let height = item.calculate_height(width - 2) as u16;
+            return (item, height);
+        });
+
+        let list = ListView::new(builder, self.posts.len())
+            .block(Block::default())
+            .infinite_scrolling(false);
+
+        list.render(area, buf, &mut self.state);
     }
 }
 
