@@ -362,10 +362,10 @@ impl Widget for &mut Feed {
         let posts = self.posts.clone();
 
         let builder = ListBuilder::new(move |context| {
-            let mut item = PostWidget::new(posts[context.index].clone());
-            if context.is_selected {
-                item = item.style(Style::default().bg(Color::Rgb(45, 50, 55)));
-            }
+            let mut item = PostWidget::new(
+                posts[context.index].clone(),
+                context.is_selected,
+            );
             let height = item.calculate_height(width - 2) as u16;
             return (item, height);
         });
@@ -534,18 +534,20 @@ impl Post {
 struct PostWidget {
     post: Post,
     style: Style,
+    is_selected: bool,
 }
 
 impl PostWidget {
-    fn new(post: Post) -> PostWidget {
+    fn new(post: Post, is_selected: bool) -> PostWidget {
         PostWidget {
             post,
-            style: Style::default(),
+            style: if is_selected {
+                Style::default().bg(Color::Rgb(45, 50, 55))
+            } else {
+                Style::default()
+            },
+            is_selected,
         }
-    }
-
-    fn style(self, style: Style) -> PostWidget {
-        PostWidget { style, ..self }
     }
 
     fn calculate_height(&self, width: u16) -> u16 {
@@ -681,13 +683,14 @@ impl Widget for PostWidget {
         .render(repost_area, buf);
 
         Line::from(format!(
-            "{} {}",
+            "{} {}{}",
             post.like.count(),
             if post.like.count() == 1 {
                 "like"
             } else {
                 "likes"
-            }
+            },
+            if self.is_selected { " (space)" } else { "" }
         ))
         .style(if post.like.uri.is_some() {
             Color::Green
