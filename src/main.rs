@@ -29,8 +29,13 @@ use std::{
 use tokio::sync::{Mutex, MutexGuard};
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
+static LOGGER: Logger = Logger { logs: vec![] };
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    log::set_logger(&LOGGER).unwrap();
+    log::set_max_level(log::LevelFilter::Info);
+
     let mut terminal = ratatui::init();
 
     terminal.draw(|f| f.render_widget("Logging in", f.area()))?;
@@ -57,6 +62,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     ratatui::restore();
     return Ok(());
+}
+
+struct Logger {
+    logs: Vec<String>
+}
+
+impl log::Log for Logger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::Level::Info
+    }
+
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            println!("{} - {}", record.level(), record.args());
+        }
+    }
+
+    fn flush(&self) {}
 }
 
 struct App {

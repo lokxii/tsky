@@ -1466,6 +1466,7 @@ dependencies = [
  "crossterm",
  "dotenvy",
  "ipld-core",
+ "log",
  "ratatui",
  "tokio",
  "tui-widget-list",

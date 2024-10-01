@@ -10,6 +10,7 @@ chrono = "0.4.38"
 crossterm = "0.28.1"
 dotenvy = "0.15.7"
 ipld-core = "0.4.1"
+log = "0.4.22"
 ratatui = { version = "0.28.1", features = ["unstable-rendered-line-info"] }
 tokio = { version = "1.40.0", features = ["full"] }
 tui-widget-list = "0.12.2"
