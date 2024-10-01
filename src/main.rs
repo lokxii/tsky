@@ -11,14 +11,16 @@ use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
-    prelude::StatefulWidget,
+    prelude::{CrosstermBackend, StatefulWidget},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Paragraph, Widget},
+    Terminal,
 };
 use std::{
     collections::VecDeque,
     env,
+    io::Stdout,
     sync::{
         mpsc::{self, Receiver, Sender},
         Arc,
@@ -45,14 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = App::new(column);
 
     loop {
-        {
-            let feed = Arc::clone(&app.column.feed);
-            let mut feed = feed.lock().await;
-
-            terminal.draw(move |f| {
-                f.render_widget(&mut *feed, f.area());
-            })?;
-        }
+        app.render(&mut terminal).await?;
 
         if app.handle_events().await? {
             app.column.request_worker_tx.send(RequestMsg::Close)?;
@@ -71,6 +66,20 @@ struct App {
 impl App {
     fn new(column: Column) -> App {
         App { column }
+    }
+
+    async fn render(
+        &self,
+        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let feed = Arc::clone(&self.column.feed);
+        let mut feed = feed.lock().await;
+
+        terminal.draw(move |f| {
+            f.render_widget(&mut *feed, f.area());
+        })?;
+
+        return Ok(());
     }
 
     async fn handle_events(&self) -> Result<bool, Box<dyn std::error::Error>> {
@@ -362,7 +371,7 @@ impl Widget for &mut Feed {
         let posts = self.posts.clone();
 
         let builder = ListBuilder::new(move |context| {
-            let mut item = PostWidget::new(
+            let item = PostWidget::new(
                 posts[context.index].clone(),
                 context.is_selected,
             );
