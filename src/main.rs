@@ -9,6 +9,7 @@ use atrium_api::{
 use bsky_sdk::BskyAgent;
 use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
+use lazy_static::lazy_static;
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
     prelude::{CrosstermBackend, StatefulWidget},
@@ -26,10 +27,13 @@ use std::{
         Arc,
     },
 };
-use tokio::sync::{Mutex, MutexGuard};
+use tokio::sync::{Mutex, MutexGuard, RwLock};
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
-static LOGGER: Logger = Logger { logs: vec![] };
+lazy_static! {
+    static ref LOGSTORE: LogStore = LogStore::new();
+}
+static LOGGER: Logger = Logger;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -64,9 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     return Ok(());
 }
 
-struct Logger {
-    logs: Vec<String>
-}
+struct Logger;
 
 impl log::Log for Logger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
@@ -75,11 +77,28 @@ impl log::Log for Logger {
 
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
-            println!("{} - {}", record.level(), record.args());
+            let logs = Arc::clone(&LOGSTORE.logs);
+            let msg = format!("[{}] {}", record.level(), record.args());
+            tokio::spawn(async move {
+                let mut logs = logs.write().await;
+                logs.push(msg);
+            });
         }
     }
 
     fn flush(&self) {}
+}
+
+struct LogStore {
+    logs: Arc<RwLock<Vec<String>>>,
+}
+
+impl LogStore {
+    fn new() -> LogStore {
+        LogStore {
+            logs: Arc::new(RwLock::new(vec![])),
+        }
+    }
 }
 
 struct App {
@@ -98,8 +117,19 @@ impl App {
         let feed = Arc::clone(&self.column.feed);
         let mut feed = feed.lock().await;
 
+        let logs = Arc::clone(&LOGSTORE.logs);
+        let logs = logs.read().await;
+
         terminal.draw(move |f| {
-            f.render_widget(&mut *feed, f.area());
+            let [main_area, log_area] =
+                Layout::vertical([Constraint::Fill(1), Constraint::Length(1)])
+                    .areas(f.area());
+            f.render_widget(&mut *feed, main_area);
+
+            f.render_widget(
+                String::from("log: ") + logs.last().unwrap_or(&String::new()),
+                log_area,
+            );
         })?;
 
         return Ok(());
