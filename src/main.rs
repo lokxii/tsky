@@ -186,9 +186,9 @@ impl App {
                 if post.like.uri.is_some() {
                     self.column
                         .request_worker_tx
-                        .send(RequestMsg::UnlikePost(UnlikePostData {
+                        .send(RequestMsg::UnlikePost(DeleteRecordData {
                             post_uri: post.uri.clone(),
-                            like_uri: post.like.uri.clone().unwrap(),
+                            record_uri: post.like.uri.clone().unwrap(),
                         }))
                         .unwrap_or_else(|_| {
                             error!(
@@ -198,13 +198,46 @@ impl App {
                 } else {
                     self.column
                         .request_worker_tx
-                        .send(RequestMsg::LikePost(LikePostData {
+                        .send(RequestMsg::LikePost(CreateRecordData {
                             post_uri: post.uri.clone(),
                             post_cid: post.cid.clone(),
                         }))
                         .unwrap_or_else(|_| {
                             error!(
                                 "Cannot send message to worker unliking post"
+                            );
+                        });
+                }
+                return Ok(false);
+            }
+
+            KeyCode::Char('o') => {
+                if feed.state.selected.is_none() {
+                    return Ok(false);
+                }
+                let post = &feed.posts[feed.state.selected.unwrap()];
+                if post.repost.uri.is_some() {
+                    self.column
+                        .request_worker_tx
+                        .send(RequestMsg::UnrepostPost(DeleteRecordData {
+                            post_uri: post.uri.clone(),
+                            record_uri: post.repost.uri.clone().unwrap(),
+                        }))
+                        .unwrap_or_else(|_| {
+                            error!(
+                                "Cannot send message to worker repost post"
+                            );
+                        });
+                } else {
+                    self.column
+                        .request_worker_tx
+                        .send(RequestMsg::RepostPost(CreateRecordData {
+                            post_uri: post.uri.clone(),
+                            post_cid: post.cid.clone(),
+                        }))
+                        .unwrap_or_else(|_| {
+                            error!(
+                                "Cannot send message to worker unrepost post"
                             );
                         });
                 }
@@ -218,20 +251,22 @@ impl App {
     }
 }
 
-struct LikePostData {
+struct CreateRecordData {
     post_uri: String,
     post_cid: Cid,
 }
 
-struct UnlikePostData {
+struct DeleteRecordData {
     post_uri: String,
-    like_uri: String,
+    record_uri: String,
 }
 
 enum RequestMsg {
     OldPost,
-    LikePost(LikePostData),
-    UnlikePost(UnlikePostData),
+    LikePost(CreateRecordData),
+    UnlikePost(DeleteRecordData),
+    RepostPost(CreateRecordData),
+    UnrepostPost(DeleteRecordData),
     Close,
 }
 
@@ -337,7 +372,7 @@ impl Column {
                     }
                     RequestMsg::UnlikePost(data) => {
                         let Ok(_) =
-                            agent.delete_record(data.like_uri.clone()).await
+                            agent.delete_record(data.record_uri.clone()).await
                         else {
                             error!("Could not post delete record unliking post");
                             continue;
@@ -346,6 +381,40 @@ impl Column {
                         feed.posts.iter_mut().for_each(|post| {
                             if post.uri == data.post_uri {
                                 post.like.uri = None;
+                            }
+                        });
+                    }
+                    RequestMsg::RepostPost(data) => {
+                        let Ok(output) = agent.create_record(
+                            atrium_api::app::bsky::feed::repost::RecordData {
+                                created_at: atrium_api::types::string::Datetime::now(),
+                                subject: atrium_api::com::atproto::repo::strong_ref::MainData {
+                                    cid: data.post_cid,
+                                    uri: data.post_uri.clone(),
+                                }.into()
+                            },
+                        ).await else {
+                            error!("Could not post create record reposting post");
+                            continue;
+                        };
+                        let mut feed = feed.lock().await;
+                        feed.posts.iter_mut().for_each(|post| {
+                            if post.uri == data.post_uri {
+                                post.repost.uri = Some(output.uri.clone());
+                            }
+                        });
+                    }
+                    RequestMsg::UnrepostPost(data) => {
+                        let Ok(_) =
+                            agent.delete_record(data.record_uri.clone()).await
+                        else {
+                            error!("Could not post delete record unreposting post");
+                            continue;
+                        };
+                        let mut feed = feed.lock().await;
+                        feed.posts.iter_mut().for_each(|post| {
+                            if post.uri == data.post_uri {
+                                post.repost.uri = None;
                             }
                         });
                     }
