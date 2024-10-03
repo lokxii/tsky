@@ -10,6 +10,7 @@ use bsky_sdk::BskyAgent;
 use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
 use lazy_static::lazy_static;
+use log::error;
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
     prelude::{CrosstermBackend, StatefulWidget},
@@ -78,7 +79,12 @@ impl log::Log for Logger {
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
             let logs = Arc::clone(&LOGSTORE.logs);
-            let msg = format!("[{}] {}", record.level(), record.args());
+            let msg = format!(
+                "[{}][{}]{}",
+                record.level(),
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                record.args()
+            );
             tokio::spawn(async move {
                 let mut logs = logs.write().await;
                 logs.push(msg);
@@ -158,7 +164,10 @@ impl App {
                         feed.state.next();
                         return Ok(false);
                     };
-                    self.column.request_worker_tx.send(RequestMsg::OldPost)?;
+                    self.column.request_worker_tx.send(RequestMsg::OldPost)
+                        .unwrap_or_else(|_| {
+                            error!("Cannot send message to worker fetching old post");
+                        });
                 } else {
                     feed.state.next();
                 }
@@ -175,19 +184,29 @@ impl App {
                 }
                 let post = &feed.posts[feed.state.selected.unwrap()];
                 if post.like.uri.is_some() {
-                    self.column.request_worker_tx.send(
-                        RequestMsg::UnlikePost(UnlikePostData {
+                    self.column
+                        .request_worker_tx
+                        .send(RequestMsg::UnlikePost(UnlikePostData {
                             post_uri: post.uri.clone(),
                             like_uri: post.like.uri.clone().unwrap(),
-                        }),
-                    )?;
+                        }))
+                        .unwrap_or_else(|_| {
+                            error!(
+                                "Cannot send message to worker unliking post"
+                            );
+                        });
                 } else {
-                    self.column.request_worker_tx.send(
-                        RequestMsg::LikePost(LikePostData {
+                    self.column
+                        .request_worker_tx
+                        .send(RequestMsg::LikePost(LikePostData {
                             post_uri: post.uri.clone(),
                             post_cid: post.cid.clone(),
-                        }),
-                    )?;
+                        }))
+                        .unwrap_or_else(|_| {
+                            error!(
+                                "Cannot send message to worker unliking post"
+                            );
+                        });
                 }
                 return Ok(false);
             }
@@ -254,6 +273,7 @@ impl Column {
                     )
                     .await;
                 let Result::Ok(new_posts) = new_posts else {
+                    error!("Cannot fetch new posts");
                     tokio::time::sleep(tokio::time::Duration::from_secs(1))
                         .await;
                     continue;
@@ -282,7 +302,7 @@ impl Column {
         tokio::spawn(async move {
             loop {
                 let Ok(msg) = rx.recv() else {
-                    // TODO: logging
+                    error!("Error receiving request message in worker");
                     continue;
                 };
                 match msg {
@@ -305,6 +325,7 @@ impl Column {
                                 }.into()
                             },
                         ).await else {
+                            error!("Could not post create record liking post");
                             continue;
                         };
                         let mut feed = feed.lock().await;
@@ -318,6 +339,7 @@ impl Column {
                         let Ok(_) =
                             agent.delete_record(data.like_uri.clone()).await
                         else {
+                            error!("Could not post delete record unliking post");
                             continue;
                         };
                         let mut feed = feed.lock().await;
@@ -354,6 +376,7 @@ async fn get_old_posts(
         .await;
 
     let Result::Ok(new_posts) = new_posts else {
+        error!("Cannot fetch old posts");
         return;
     };
     let get_timeline::OutputData {
