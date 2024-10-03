@@ -1472,6 +1472,7 @@ dependencies = [
  "crossterm",
  "dotenvy",
  "ipld-core",
+ "itertools",
  "lazy_static",
  "log",
  "ratatui",

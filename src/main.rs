@@ -9,6 +9,7 @@ use atrium_api::{
 use bsky_sdk::BskyAgent;
 use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use log::error;
 use ratatui::{
@@ -224,9 +225,7 @@ impl App {
                             record_uri: post.repost.uri.clone().unwrap(),
                         }))
                         .unwrap_or_else(|_| {
-                            error!(
-                                "Cannot send message to worker repost post"
-                            );
+                            error!("Cannot send message to worker repost post");
                         });
                 } else {
                     self.column
@@ -374,7 +373,9 @@ impl Column {
                         let Ok(_) =
                             agent.delete_record(data.record_uri.clone()).await
                         else {
-                            error!("Could not post delete record unliking post");
+                            error!(
+                                "Could not post delete record unliking post"
+                            );
                             continue;
                         };
                         let mut feed = feed.lock().await;
@@ -408,7 +409,9 @@ impl Column {
                         let Ok(_) =
                             agent.delete_record(data.record_uri.clone()).await
                         else {
-                            error!("Could not post delete record unreposting post");
+                            error!(
+                                "Could not post delete record unreposting post"
+                            );
                             continue;
                         };
                         let mut feed = feed.lock().await;
@@ -471,6 +474,7 @@ impl Feed {
         if self.posts.len() == 0 {
             self.posts = new_posts.collect();
             self.state.select(Some(0));
+            self.remove_duplicate();
             return true;
         }
 
@@ -482,13 +486,15 @@ impl Feed {
                 if let Some(i) = self.state.selected {
                     self.state.select(Some(i + idx));
                 }
+                self.remove_duplicate();
+                return false;
             }
             None => {
                 self.posts = new_posts.collect();
+                self.remove_duplicate();
                 return true;
             }
         }
-        return false;
     }
 
     fn append_old_posts<T>(&mut self, new_posts: T)
@@ -501,6 +507,24 @@ impl Feed {
 
         let mut new_posts = new_posts.collect();
         self.posts.append(&mut new_posts);
+        self.remove_duplicate();
+    }
+
+    // TODO: Optimize this with caching?
+    fn remove_duplicate(&mut self) {
+        let uri = self.state.selected.map(|i| self.posts[i].uri.clone());
+        self.posts = self
+            .posts
+            .iter()
+            .unique_by(|post| post.uri.clone())
+            .map(|post| post.clone())
+            .collect();
+
+        if let Some(uri) = uri {
+            self.state.selected = Some(
+                self.posts.iter().position(|post| post.uri == uri).unwrap(),
+            );
+        }
     }
 }
 
