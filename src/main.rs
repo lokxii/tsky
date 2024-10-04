@@ -9,9 +9,7 @@ use atrium_api::{
 use bsky_sdk::BskyAgent;
 use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
-use itertools::Itertools;
 use lazy_static::lazy_static;
-use log::error;
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
     prelude::{CrosstermBackend, StatefulWidget},
@@ -29,7 +27,7 @@ use std::{
         Arc,
     },
 };
-use tokio::sync::{Mutex, MutexGuard, RwLock};
+use tokio::sync::{Mutex, MutexGuard};
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
 lazy_static! {
@@ -40,7 +38,7 @@ static LOGGER: Logger = Logger;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::set_logger(&LOGGER).unwrap();
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
 
     let mut terminal = ratatui::init();
 
@@ -87,7 +85,7 @@ impl log::Log for Logger {
                 record.args()
             );
             tokio::spawn(async move {
-                let mut logs = logs.write().await;
+                let mut logs = logs.lock().await;
                 logs.push(msg);
             });
         }
@@ -97,13 +95,13 @@ impl log::Log for Logger {
 }
 
 struct LogStore {
-    logs: Arc<RwLock<Vec<String>>>,
+    logs: Arc<Mutex<Vec<String>>>,
 }
 
 impl LogStore {
     fn new() -> LogStore {
         LogStore {
-            logs: Arc::new(RwLock::new(vec![])),
+            logs: Arc::new(Mutex::new(vec![])),
         }
     }
 }
@@ -125,7 +123,7 @@ impl App {
         let mut feed = feed.lock().await;
 
         let logs = Arc::clone(&LOGSTORE.logs);
-        let logs = logs.read().await;
+        let logs = logs.lock().await;
 
         terminal.draw(move |f| {
             let [main_area, log_area] =
@@ -143,6 +141,9 @@ impl App {
     }
 
     async fn handle_events(&self) -> Result<bool, Box<dyn std::error::Error>> {
+        if !event::poll(std::time::Duration::from_millis(500))? {
+            return Ok(false);
+        }
         let Event::Key(key) = event::read()? else {
             return Ok(false);
         };
@@ -167,7 +168,7 @@ impl App {
                     };
                     self.column.request_worker_tx.send(RequestMsg::OldPost)
                         .unwrap_or_else(|_| {
-                            error!("Cannot send message to worker fetching old post");
+                            log::error!("Cannot send message to worker fetching old post");
                         });
                 } else {
                     feed.state.next();
@@ -192,7 +193,7 @@ impl App {
                             record_uri: post.like.uri.clone().unwrap(),
                         }))
                         .unwrap_or_else(|_| {
-                            error!(
+                            log::error!(
                                 "Cannot send message to worker unliking post"
                             );
                         });
@@ -204,7 +205,7 @@ impl App {
                             post_cid: post.cid.clone(),
                         }))
                         .unwrap_or_else(|_| {
-                            error!(
+                            log::error!(
                                 "Cannot send message to worker unliking post"
                             );
                         });
@@ -225,7 +226,9 @@ impl App {
                             record_uri: post.repost.uri.clone().unwrap(),
                         }))
                         .unwrap_or_else(|_| {
-                            error!("Cannot send message to worker repost post");
+                            log::error!(
+                                "Cannot send message to worker repost post"
+                            );
                         });
                 } else {
                     self.column
@@ -235,7 +238,7 @@ impl App {
                             post_cid: post.cid.clone(),
                         }))
                         .unwrap_or_else(|_| {
-                            error!(
+                            log::error!(
                                 "Cannot send message to worker unrepost post"
                             );
                         });
@@ -292,6 +295,7 @@ impl Column {
         let cursor = Arc::clone(&self.cursor);
         tokio::spawn(async move {
             loop {
+                log::info!("here");
                 let new_posts = agent
                     .api
                     .app
@@ -307,7 +311,7 @@ impl Column {
                     )
                     .await;
                 let Result::Ok(new_posts) = new_posts else {
-                    error!("Cannot fetch new posts");
+                    log::error!("Cannot fetch new posts");
                     tokio::time::sleep(tokio::time::Duration::from_secs(1))
                         .await;
                     continue;
@@ -336,7 +340,7 @@ impl Column {
         tokio::spawn(async move {
             loop {
                 let Ok(msg) = rx.recv() else {
-                    error!("Error receiving request message in worker");
+                    log::error!("Error receiving request message in worker");
                     continue;
                 };
                 match msg {
@@ -359,7 +363,7 @@ impl Column {
                                 }.into()
                             },
                         ).await else {
-                            error!("Could not post create record liking post");
+                            log::error!("Could not post create record liking post");
                             continue;
                         };
                         let mut feed = feed.lock().await;
@@ -368,12 +372,13 @@ impl Column {
                                 post.like.uri = Some(output.uri.clone());
                             }
                         });
+                        log::info!("Liked post {}", data.post_uri);
                     }
                     RequestMsg::UnlikePost(data) => {
                         let Ok(_) =
                             agent.delete_record(data.record_uri.clone()).await
                         else {
-                            error!(
+                            log::error!(
                                 "Could not post delete record unliking post"
                             );
                             continue;
@@ -384,6 +389,7 @@ impl Column {
                                 post.like.uri = None;
                             }
                         });
+                        log::info!("Unliked post {}", data.post_uri);
                     }
                     RequestMsg::RepostPost(data) => {
                         let Ok(output) = agent.create_record(
@@ -395,7 +401,7 @@ impl Column {
                                 }.into()
                             },
                         ).await else {
-                            error!("Could not post create record reposting post");
+                            log::error!("Could not post create record reposting post");
                             continue;
                         };
                         let mut feed = feed.lock().await;
@@ -404,12 +410,13 @@ impl Column {
                                 post.repost.uri = Some(output.uri.clone());
                             }
                         });
+                        log::info!("Reposted post {}", data.post_uri);
                     }
                     RequestMsg::UnrepostPost(data) => {
                         let Ok(_) =
                             agent.delete_record(data.record_uri.clone()).await
                         else {
-                            error!(
+                            log::error!(
                                 "Could not post delete record unreposting post"
                             );
                             continue;
@@ -420,6 +427,7 @@ impl Column {
                                 post.repost.uri = None;
                             }
                         });
+                        log::info!("Unreposted post {}", data.post_uri);
                     }
                 }
             }
@@ -448,7 +456,7 @@ async fn get_old_posts(
         .await;
 
     let Result::Ok(new_posts) = new_posts else {
-        error!("Cannot fetch old posts");
+        log::error!("Cannot fetch old posts");
         return;
     };
     let get_timeline::OutputData {
@@ -471,30 +479,42 @@ impl Feed {
     where
         T: Iterator<Item = Post> + Clone,
     {
-        if self.posts.len() == 0 {
-            self.posts = new_posts.collect();
-            self.state.select(Some(0));
-            self.remove_duplicate();
+        let new_posts = new_posts.collect::<VecDeque<_>>();
+        if new_posts.len() == 0 {
             return true;
         }
 
-        let last_newest = &self.posts[0];
-        let overlap_idx = new_posts.clone().position(|p| &p == last_newest);
-        match overlap_idx {
-            Some(idx) => {
-                new_posts.take(idx).for_each(|p| self.posts.push_front(p));
-                if let Some(i) = self.state.selected {
-                    self.state.select(Some(i + idx));
-                }
-                self.remove_duplicate();
-                return false;
-            }
-            None => {
-                self.posts = new_posts.collect();
-                self.remove_duplicate();
-                return true;
-            }
+        if self.posts.len() == 0 {
+            self.posts = new_posts;
+            self.state.select(Some(0));
+            return true;
         }
+
+        let new_last = new_posts.back().unwrap();
+        let Some(overlap_idx) = self.posts.iter().position(|p| p == new_last)
+        else {
+            self.posts = new_posts;
+            self.state.select(Some(0));
+            return true;
+        };
+
+        for i in 0..self.posts.len() {
+            let Some(number_of_new_posts) =
+                new_posts.iter().position(|p| *p == self.posts[i])
+            else {
+                continue;
+            };
+            self.posts = new_posts
+                .into_iter()
+                .chain(self.posts.clone().into_iter().skip(overlap_idx + 1))
+                .collect();
+            self.state.select(
+                self.state.selected.map(|s| s + number_of_new_posts + i),
+            );
+            break;
+        }
+
+        return false;
     }
 
     fn append_old_posts<T>(&mut self, new_posts: T)
@@ -507,24 +527,6 @@ impl Feed {
 
         let mut new_posts = new_posts.collect();
         self.posts.append(&mut new_posts);
-        self.remove_duplicate();
-    }
-
-    // TODO: Optimize this with caching?
-    fn remove_duplicate(&mut self) {
-        let uri = self.state.selected.map(|i| self.posts[i].uri.clone());
-        self.posts = self
-            .posts
-            .iter()
-            .unique_by(|post| post.uri.clone())
-            .map(|post| post.clone())
-            .collect();
-
-        if let Some(uri) = uri {
-            self.state.selected = Some(
-                self.posts.iter().position(|post| post.uri == uri).unwrap(),
-            );
-        }
     }
 }
 
@@ -575,7 +577,7 @@ enum Reply {
     BlockedUser,
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Clone)]
 struct LikeRepostViewer {
     count: u32,
     uri: Option<String>,
@@ -594,7 +596,7 @@ impl LikeRepostViewer {
     }
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Clone)]
 struct Post {
     uri: String,
     cid: Cid,
@@ -708,6 +710,14 @@ impl Post {
         };
     }
 }
+
+impl PartialEq for Post {
+    fn eq(&self, other: &Self) -> bool {
+        return self.uri == other.uri && self.reply_to == other.reply_to;
+    }
+}
+
+impl Eq for Post {}
 
 struct PostWidget {
     post: Post,
