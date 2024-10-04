@@ -603,7 +603,6 @@ struct Post {
     author: String,
     handle: String,
     created_at: DateTime<FixedOffset>,
-    indexed_at_utc: DateTime<FixedOffset>,
     text: String,
     reason: Option<RepostBy>,
     reply_to: Option<Reply>,
@@ -627,17 +626,6 @@ impl Post {
         else {
             panic!("createdAt is not a string")
         };
-
-        let indexed_at_utc: DateTime<FixedOffset>;
-        if let Some(reason) = &view.reason {
-            let Union::Refs(reason) = reason else {
-                panic!("Unknown reason type");
-            };
-            let FeedViewPostReasonRefs::ReasonRepost(reason) = reason;
-            indexed_at_utc = *reason.indexed_at.as_ref();
-        } else {
-            indexed_at_utc = *view.post.indexed_at.as_ref();
-        }
 
         let ipld_core::ipld::Ipld::String(text) = &*record["text"] else {
             panic!("text is not a string")
@@ -671,7 +659,6 @@ impl Post {
             author: author.display_name.clone().unwrap_or("(None)".to_string()),
             handle: author.handle.to_string(),
             created_at,
-            indexed_at_utc,
             text: text.clone(),
             reason: view.reason.as_ref().map(|r| {
                 let Union::Refs(r) = r else {
