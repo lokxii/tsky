@@ -303,7 +303,6 @@ impl Column {
         let cursor = Arc::clone(&self.cursor);
         tokio::spawn(async move {
             loop {
-                log::info!("here");
                 let new_posts = agent
                     .api
                     .app
