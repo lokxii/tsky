@@ -681,6 +681,7 @@ impl Post {
         let ipld_core::ipld::Ipld::String(text) = &*record["text"] else {
             panic!("text is not a string")
         };
+        let text = text.clone();
 
         let dt = Local::now();
         let created_at_utc = DateTime::parse_from_rfc3339(created_at)
@@ -742,7 +743,7 @@ impl Post {
             author: author.display_name.clone().unwrap_or("(None)".to_string()),
             handle: author.handle.to_string(),
             created_at,
-            text: text.clone(),
+            text,
             reason,
             reply_to,
             like,
@@ -822,7 +823,7 @@ impl Widget for PostWidget {
                 ),
                 Constraint::Length(1),
                 Constraint::Length(1),
-                Constraint::Min(0),
+                Constraint::Min(1),
                 Constraint::Length(1),
             ])
             .areas(inner_area);
