@@ -545,6 +545,10 @@ impl Feed {
         let mut new_posts = new_posts.collect();
         self.posts.append(&mut new_posts);
     }
+
+    fn remove_duplicate(&mut self) {
+        // TODO: how??
+    }
 }
 
 impl Widget for &mut Feed {
