@@ -148,16 +148,19 @@ impl App {
         let Event::Key(key) = event::read()? else {
             return Ok(false);
         };
-        let feed = Arc::clone(&self.column.feed);
-        let mut feed = feed.lock().await;
         if key.kind != event::KeyEventKind::Press {
             return Ok(false);
         }
+
+        let feed = Arc::clone(&self.column.feed);
+        let mut feed = feed.lock().await;
+
         match key.code {
             KeyCode::Char('q') => {
                 return Ok(true);
             }
 
+            // Cursor move down
             KeyCode::Char('j') => {
                 if feed.posts.len() > 0
                     && feed.state.selected == Some(feed.posts.len() - 1)
@@ -176,11 +179,14 @@ impl App {
                 }
                 return Ok(false);
             }
+
+            // Cursor move up
             KeyCode::Char('k') => {
                 feed.state.previous();
                 return Ok(false);
             }
 
+            // Like
             KeyCode::Char(' ') => {
                 if feed.state.selected.is_none() {
                     return Ok(false);
@@ -214,6 +220,7 @@ impl App {
                 return Ok(false);
             }
 
+            // Repost
             KeyCode::Char('o') => {
                 if feed.state.selected.is_none() {
                     return Ok(false);
@@ -317,6 +324,7 @@ impl Column {
                         .await;
                     continue;
                 };
+
                 let get_timeline::OutputData {
                     feed: posts,
                     cursor: new_cursor,
@@ -344,8 +352,10 @@ impl Column {
                     log::error!("Error receiving request message in worker");
                     continue;
                 };
+
                 match msg {
                     RequestMsg::Close => return,
+
                     RequestMsg::OldPost => {
                         get_old_posts(
                             &agent,
@@ -354,6 +364,7 @@ impl Column {
                         )
                         .await;
                     }
+
                     RequestMsg::LikePost(data) => {
                         let Ok(output) = agent.create_record(
                             atrium_api::app::bsky::feed::like::RecordData {
@@ -367,6 +378,7 @@ impl Column {
                             log::error!("Could not post create record liking post");
                             continue;
                         };
+
                         let mut feed = feed.lock().await;
                         feed.posts.iter_mut().for_each(|post| {
                             if post.uri == data.post_uri {
@@ -375,6 +387,7 @@ impl Column {
                         });
                         log::info!("Liked post {}", data.post_uri);
                     }
+
                     RequestMsg::UnlikePost(data) => {
                         let Ok(_) =
                             agent.delete_record(data.record_uri.clone()).await
@@ -384,6 +397,7 @@ impl Column {
                             );
                             continue;
                         };
+
                         let mut feed = feed.lock().await;
                         feed.posts.iter_mut().for_each(|post| {
                             if post.uri == data.post_uri {
@@ -392,6 +406,7 @@ impl Column {
                         });
                         log::info!("Unliked post {}", data.post_uri);
                     }
+
                     RequestMsg::RepostPost(data) => {
                         let Ok(output) = agent.create_record(
                             atrium_api::app::bsky::feed::repost::RecordData {
@@ -405,6 +420,7 @@ impl Column {
                             log::error!("Could not post create record reposting post");
                             continue;
                         };
+
                         let mut feed = feed.lock().await;
                         feed.posts.iter_mut().for_each(|post| {
                             if post.uri == data.post_uri {
@@ -413,6 +429,7 @@ impl Column {
                         });
                         log::info!("Reposted post {}", data.post_uri);
                     }
+
                     RequestMsg::UnrepostPost(data) => {
                         let Ok(_) =
                             agent.delete_record(data.record_uri.clone()).await
@@ -422,6 +439,7 @@ impl Column {
                             );
                             continue;
                         };
+
                         let mut feed = feed.lock().await;
                         feed.posts.iter_mut().for_each(|post| {
                             if post.uri == data.post_uri {
@@ -455,11 +473,11 @@ async fn get_old_posts(
             .into(),
         )
         .await;
-
     let Result::Ok(new_posts) = new_posts else {
         log::error!("Cannot fetch old posts");
         return;
     };
+
     let get_timeline::OutputData {
         feed: posts,
         cursor: new_cursor,
@@ -543,6 +561,7 @@ impl Feed {
             .unique_by(|p| &p.uri)
             .map(|p| p.clone())
             .collect::<VecDeque<_>>();
+
         self.state.select(selected_post.map(|(post, i)| {
             if let Some(i) = new_view.iter().position(|p| *p == post) {
                 return i;
@@ -583,11 +602,10 @@ impl Widget for &mut Feed {
             return (item, height);
         });
 
-        let list = ListView::new(builder, self.posts.len())
+        ListView::new(builder, self.posts.len())
             .block(Block::default())
-            .infinite_scrolling(false);
-
-        list.render(area, buf, &mut self.state);
+            .infinite_scrolling(false)
+            .render(area, buf, &mut self.state);
     }
 }
 
@@ -686,6 +704,38 @@ impl Post {
             None => LikeRepostViewer::new(None, None),
         };
 
+        let reason = view.reason.as_ref().map(|r| {
+            let Union::Refs(r) = r else {
+                panic!("Unknown reason type");
+            };
+            let FeedViewPostReasonRefs::ReasonRepost(r) = r;
+            RepostBy {
+                author: r.by.display_name.clone().unwrap_or(String::new()),
+                handle: r.by.handle.to_string(),
+            }
+        });
+
+        let reply_to = view.reply.as_ref().map(|r| {
+            let Union::Refs(parent) = &r.data.parent else {
+                panic!("Unknown parent type");
+            };
+            match parent {
+                ReplyRefParentRefs::PostView(view) => {
+                    Reply::Author(ReplyToAuthor {
+                        author: view
+                            .data
+                            .author
+                            .display_name
+                            .clone()
+                            .unwrap_or("".to_string()),
+                        handle: view.data.author.handle.to_string(),
+                    })
+                }
+                ReplyRefParentRefs::NotFoundPost(_) => Reply::DeletedPost,
+                ReplyRefParentRefs::BlockedPost(_) => Reply::BlockedUser,
+            }
+        });
+
         return Post {
             uri: view.post.uri.clone(),
             cid: view.post.cid.clone(),
@@ -693,36 +743,8 @@ impl Post {
             handle: author.handle.to_string(),
             created_at,
             text: text.clone(),
-            reason: view.reason.as_ref().map(|r| {
-                let Union::Refs(r) = r else {
-                    panic!("Unknown reason type");
-                };
-                let FeedViewPostReasonRefs::ReasonRepost(r) = r;
-                RepostBy {
-                    author: r.by.display_name.clone().unwrap_or(String::new()),
-                    handle: r.by.handle.to_string(),
-                }
-            }),
-            reply_to: view.reply.as_ref().map(|r| {
-                let Union::Refs(parent) = &r.data.parent else {
-                    panic!("Unknown parent type");
-                };
-                match parent {
-                    ReplyRefParentRefs::PostView(view) => {
-                        Reply::Author(ReplyToAuthor {
-                            author: view
-                                .data
-                                .author
-                                .display_name
-                                .clone()
-                                .unwrap_or("".to_string()),
-                            handle: view.data.author.handle.to_string(),
-                        })
-                    }
-                    ReplyRefParentRefs::NotFoundPost(_) => Reply::DeletedPost,
-                    ReplyRefParentRefs::BlockedPost(_) => Reply::BlockedUser,
-                }
-            }),
+            reason,
+            reply_to,
             like,
             quote: view.post.quote_count.unwrap_or(0) as u32,
             repost,
