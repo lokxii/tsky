@@ -9,7 +9,6 @@ use atrium_api::{
 use bsky_sdk::BskyAgent;
 use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
-use itertools::Itertools;
 use lazy_static::lazy_static;
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
@@ -505,7 +504,6 @@ impl Feed {
         if self.posts.len() == 0 {
             self.posts = new_posts;
             self.state.select(Some(0));
-            self.remove_duplicate();
             return true;
         }
 
@@ -514,7 +512,6 @@ impl Feed {
         else {
             self.posts = new_posts;
             self.state.select(Some(0));
-            self.remove_duplicate();
             return true;
         };
 
@@ -531,7 +528,6 @@ impl Feed {
             self.state.select(
                 self.state.selected.map(|s| s + number_of_new_posts + i),
             );
-            self.remove_duplicate();
             break;
         }
 
@@ -548,36 +544,6 @@ impl Feed {
 
         let mut new_posts = new_posts.collect();
         self.posts.append(&mut new_posts);
-        self.remove_duplicate();
-    }
-
-    fn remove_duplicate(&mut self) {
-        let selected_post =
-            self.state.selected.map(|i| (self.posts[i].clone(), i));
-        let new_view = self
-            .posts
-            .iter()
-            .unique_by(|p| &p.uri)
-            .map(|p| p.clone())
-            .collect::<VecDeque<_>>();
-
-        self.state.select(selected_post.map(|(post, i)| {
-            if let Some(i) = new_view.iter().position(|p| *p == post) {
-                return i;
-            }
-            let i = i as i64;
-            while i >= 0 {
-                if let Some(i) =
-                    new_view.iter().position(|p| *p == self.posts[i as usize])
-                {
-                    return i;
-                }
-            }
-            panic!(
-                "Cannot decide which post to select after removing duplicates"
-            );
-        }));
-        self.posts = new_view;
     }
 }
 
