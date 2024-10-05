@@ -28,7 +28,10 @@ use std::{
         Arc,
     },
 };
-use tokio::sync::{Mutex, MutexGuard};
+use tokio::{
+    process::Command,
+    sync::{Mutex, MutexGuard},
+};
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
 lazy_static! {
@@ -250,6 +253,28 @@ impl App {
                                 "Cannot send message to worker unrepost post"
                             );
                         });
+                }
+                return Ok(false);
+            }
+
+            KeyCode::Char('p') => {
+                if feed.state.selected.is_none() {
+                    return Ok(false);
+                }
+                let post_uri = feed.posts[feed.state.selected.unwrap()]
+                    .uri
+                    .split('/')
+                    .collect_vec();
+                let author = post_uri[2];
+                let post_id = post_uri[4];
+                let url = format!(
+                    "https://bsky.app/profile/{}/post/{}",
+                    author, post_id
+                );
+                if let Result::Err(e) =
+                    Command::new("xdg-open").arg(url).spawn()
+                {
+                    log::error!("{:?}", e);
                 }
                 return Ok(false);
             }
@@ -519,7 +544,9 @@ impl Feed {
             .into_iter()
             .chain(self.posts.clone().into_iter().skip(overlap_idx + 1))
             .collect();
-        self.state.select(selected.map(|post| self.posts.iter().position(|p| *p == post).unwrap_or(0)));
+        self.state.select(selected.map(|post| {
+            self.posts.iter().position(|p| *p == post).unwrap_or(0)
+        }));
         self.remove_duplicate();
 
         return false;
@@ -842,12 +869,13 @@ impl Widget for PostWidget {
 
         self.body_paragraph().render(text_area, buf);
 
-        let [reply_area, quote_area, repost_area, like_area] =
+        let [reply_area, quote_area, repost_area, like_area, bsky_area] =
             Layout::horizontal([
-                Constraint::Percentage(25),
-                Constraint::Percentage(25),
-                Constraint::Percentage(25),
-                Constraint::Percentage(25),
+                Constraint::Percentage(20),
+                Constraint::Percentage(20),
+                Constraint::Percentage(20),
+                Constraint::Percentage(20),
+                Constraint::Percentage(20),
             ])
             .areas(stats_area);
 
@@ -905,6 +933,13 @@ impl Widget for PostWidget {
         })
         .alignment(Alignment::Left)
         .render(like_area, buf);
+
+        if self.is_selected {
+            Line::from("🦋 (p)")
+                .style(stat_color)
+                .alignment(Alignment::Left)
+                .render(bsky_area, buf);
+        }
     }
 }
 
