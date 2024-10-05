@@ -437,10 +437,10 @@ impl Column {
                         feed.posts.iter_mut().for_each(|post| {
                             if post.uri == data.post_uri {
                                 post.like.uri = Some(output.uri.clone());
+                                post.like.count += 1;
                             }
                         });
-                        // remove logging causes liking post stops feed
-                        log::info!("Liked post {}", data.post_uri);
+                        tokio::spawn(async {}); // black magic, removing this causes feed autoupdating to stop
                     }
 
                     RequestMsg::UnlikePost(data) => {
@@ -457,9 +457,10 @@ impl Column {
                         feed.posts.iter_mut().for_each(|post| {
                             if post.uri == data.post_uri {
                                 post.like.uri = None;
+                                post.like.count -= 1;
                             }
                         });
-                        log::info!("Unliked post {}", data.post_uri);
+                        tokio::spawn(async {});
                     }
 
                     RequestMsg::RepostPost(data) => {
@@ -484,9 +485,10 @@ impl Column {
                         feed.posts.iter_mut().for_each(|post| {
                             if post.uri == data.post_uri {
                                 post.repost.uri = Some(output.uri.clone());
+                                post.repost.count += 1;
                             }
                         });
-                        log::info!("Reposted post {}", data.post_uri);
+                        tokio::spawn(async {});
                     }
 
                     RequestMsg::UnrepostPost(data) => {
@@ -503,9 +505,10 @@ impl Column {
                         feed.posts.iter_mut().for_each(|post| {
                             if post.uri == data.post_uri {
                                 post.repost.uri = None;
+                                post.repost.count -= 1;
                             }
                         });
-                        log::info!("Unreposted post {}", data.post_uri);
+                        tokio::spawn(async {});
                     }
                 }
             }
@@ -678,13 +681,9 @@ struct LikeRepostViewer {
 impl LikeRepostViewer {
     fn new(count: Option<i64>, uri: Option<String>) -> LikeRepostViewer {
         LikeRepostViewer {
-            count: count.unwrap_or(0) as u32 - uri.is_some() as u32,
+            count: count.unwrap_or(0) as u32,
             uri,
         }
-    }
-
-    fn count(&self) -> u32 {
-        self.count + self.uri.is_some() as u32
     }
 }
 
@@ -941,8 +940,8 @@ impl Widget for PostWidget {
 
         Line::from(format!(
             "{} {}",
-            post.repost.count(),
-            if post.repost.count() == 1 {
+            post.repost.count,
+            if post.repost.count == 1 {
                 "repost"
             } else {
                 "reposts"
@@ -958,8 +957,8 @@ impl Widget for PostWidget {
 
         Line::from(format!(
             "{} {}{}",
-            post.like.count(),
-            if post.like.count() == 1 {
+            post.like.count,
+            if post.like.count == 1 {
                 "like"
             } else {
                 "likes"
