@@ -417,6 +417,7 @@ impl Column {
                                 post.like.uri = Some(output.uri.clone());
                             }
                         });
+                        // remove logging causes liking post stops feed
                         log::info!("Liked post {}", data.post_uri);
                     }
 
