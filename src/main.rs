@@ -824,8 +824,9 @@ impl PostWidget {
 
     fn calculate_height(&self, width: u16) -> u16 {
         self.post.reason.is_some() as u16
+            + self.post.reply_to.is_some() as u16
             + 2 // author and date
-            + self.body_paragraph().line_count(width) as u16
+            + if self.post.text.len() == 0 { 0 } else { self.body_paragraph().line_count(width) as u16 }
             + 1 // stats
             + 2 // borders
     }
@@ -864,7 +865,7 @@ impl Widget for PostWidget {
                 ),
                 Constraint::Length(1),
                 Constraint::Length(1),
-                Constraint::Min(1),
+                Constraint::Min(0),
                 Constraint::Length(1),
             ])
             .areas(inner_area);
