@@ -6,7 +6,10 @@ use atrium_api::{
     },
     types::{string::Cid, Object, Union},
 };
-use bsky_sdk::BskyAgent;
+use bsky_sdk::{
+    agent::config::{Config, FileStore},
+    BskyAgent,
+};
 use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
 use itertools::Itertools;
@@ -69,6 +72,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     ratatui::restore();
+    agent
+        .to_config()
+        .await
+        .save(&FileStore::new("session.json"))
+        .await?;
     return Ok(());
 }
 
@@ -431,6 +439,8 @@ impl Column {
                                 post.like.uri = Some(output.uri.clone());
                             }
                         });
+                        // remove logging causes liking post stops feed
+                        log::info!("Liked post {}", data.post_uri);
                     }
 
                     RequestMsg::UnlikePost(data) => {
@@ -449,6 +459,7 @@ impl Column {
                                 post.like.uri = None;
                             }
                         });
+                        log::info!("Unliked post {}", data.post_uri);
                     }
 
                     RequestMsg::RepostPost(data) => {
@@ -471,6 +482,7 @@ impl Column {
                                 post.repost.uri = Some(output.uri.clone());
                             }
                         });
+                        log::info!("Reposted post {}", data.post_uri);
                     }
 
                     RequestMsg::UnrepostPost(data) => {
@@ -489,6 +501,7 @@ impl Column {
                                 post.repost.uri = None;
                             }
                         });
+                        log::info!("Unreposted post {}", data.post_uri);
                     }
                 }
             }
@@ -780,7 +793,7 @@ impl Post {
 
 impl PartialEq for Post {
     fn eq(&self, other: &Self) -> bool {
-        return self.uri == other.uri && self.reply_to == other.reply_to;
+        return self.uri == other.uri && self.reason == other.reason;
     }
 }
 
@@ -984,8 +997,22 @@ async fn login() -> Result<BskyAgent, Box<dyn std::error::Error>> {
     let handle = env::var("handle")?;
     let password = env::var("password")?;
 
-    let agent = BskyAgent::builder().build().await?;
-    agent.login(handle, password).await?;
-
-    return Ok(agent);
+    match Config::load(&FileStore::new("session.json")).await {
+        Ok(config) => {
+            let agent = BskyAgent::builder().config(config).build().await?;
+            return Ok(agent);
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            eprintln!("Using env var to login");
+            let agent = BskyAgent::builder().build().await?;
+            agent.login(handle, password).await?;
+            agent
+                .to_config()
+                .await
+                .save(&FileStore::new("session.json"))
+                .await?;
+            return Ok(agent);
+        }
+    };
 }
