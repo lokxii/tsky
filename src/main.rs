@@ -286,6 +286,24 @@ impl App {
     }
 }
 
+macro_rules! request_retry {
+    ($retry:expr, $request:expr) => {{
+        let mut count = 0;
+        loop {
+            let r = $request;
+            match r {
+                Ok(output) => break Some(output),
+                Err(_) => {
+                    count += 1;
+                    if count == $retry {
+                        break None;
+                    }
+                }
+            }
+        }
+    }};
+}
+
 struct CreateRecordData {
     post_uri: String,
     post_cid: Cid,
@@ -390,16 +408,20 @@ impl Column {
                     }
 
                     RequestMsg::LikePost(data) => {
-                        let Ok(output) = agent.create_record(
-                            atrium_api::app::bsky::feed::like::RecordData {
-                                created_at: atrium_api::types::string::Datetime::now(),
-                                subject: atrium_api::com::atproto::repo::strong_ref::MainData {
-                                    cid: data.post_cid,
-                                    uri: data.post_uri.clone(),
-                                }.into()
-                            },
-                        ).await else {
-                            log::error!("Could not post create record liking post");
+                        let Some(output) = request_retry!(3, {
+                            agent.create_record(
+                                atrium_api::app::bsky::feed::like::RecordData {
+                                    created_at: atrium_api::types::string::Datetime::now(),
+                                    subject: atrium_api::com::atproto::repo::strong_ref::MainData {
+                                        cid: data.post_cid.clone(),
+                                        uri: data.post_uri.clone(),
+                                    }.into()
+                                },
+                            ).await
+                        }) else {
+                            log::error!(
+                                "Could not post create record liking post"
+                            );
                             continue;
                         };
 
