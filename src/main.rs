@@ -23,7 +23,6 @@ use ratatui::{
     Terminal,
 };
 use std::{
-    collections::VecDeque,
     env,
     io::Stdout,
     sync::{
@@ -341,7 +340,7 @@ impl Column {
     fn new(tx: Sender<RequestMsg>) -> Column {
         Column {
             feed: Arc::new(Mutex::new(Feed {
-                posts: VecDeque::new(),
+                posts: Vec::new(),
                 state: ListState::default(),
             })),
             cursor: Arc::new(Mutex::new(None)),
@@ -555,7 +554,7 @@ async fn get_old_posts(
 }
 
 struct Feed {
-    posts: VecDeque<Post>,
+    posts: Vec<Post>,
     state: ListState,
 }
 
@@ -564,7 +563,7 @@ impl Feed {
     where
         T: Iterator<Item = Post> + Clone,
     {
-        let new_posts = new_posts.collect::<VecDeque<_>>();
+        let new_posts = new_posts.collect::<Vec<_>>();
         if new_posts.len() == 0 {
             return true;
         }
@@ -577,7 +576,7 @@ impl Feed {
         }
 
         let selected = self.state.selected.map(|s| self.posts[s].clone());
-        let new_last = new_posts.back().unwrap();
+        let new_last = new_posts.last().unwrap();
         let Some(overlap_idx) = self.posts.iter().position(|p| p == new_last)
         else {
             self.posts = new_posts;
@@ -618,7 +617,7 @@ impl Feed {
             .iter()
             .unique_by(|p| &p.uri)
             .map(Post::clone)
-            .collect::<VecDeque<_>>();
+            .collect::<Vec<_>>();
 
         self.state.selected = selected_post.map(|post| {
             if let Some(i) = new_view.iter().position(|p| p.uri == post.uri) {
