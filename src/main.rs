@@ -417,6 +417,7 @@ impl Column {
                                 post.like.uri = Some(output.uri.clone());
                             }
                         });
+                        log::info!("Liked post {}", data.post_uri);
                     }
 
                     RequestMsg::UnlikePost(data) => {
@@ -435,6 +436,7 @@ impl Column {
                                 post.like.uri = None;
                             }
                         });
+                        log::info!("Unliked post {}", data.post_uri);
                     }
 
                     RequestMsg::RepostPost(data) => {
@@ -457,6 +459,7 @@ impl Column {
                                 post.repost.uri = Some(output.uri.clone());
                             }
                         });
+                        log::info!("Reposted post {}", data.post_uri);
                     }
 
                     RequestMsg::UnrepostPost(data) => {
@@ -475,6 +478,7 @@ impl Column {
                                 post.repost.uri = None;
                             }
                         });
+                        log::info!("Unreposted post {}", data.post_uri);
                     }
                 }
             }
