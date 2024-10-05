@@ -771,7 +771,7 @@ impl Post {
 
 impl PartialEq for Post {
     fn eq(&self, other: &Self) -> bool {
-        return self.uri == other.uri && self.reply_to == other.reply_to;
+        return self.uri == other.uri && self.reason == other.reason;
     }
 }
 
