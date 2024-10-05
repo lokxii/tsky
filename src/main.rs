@@ -6,7 +6,10 @@ use atrium_api::{
     },
     types::{string::Cid, Object, Union},
 };
-use bsky_sdk::BskyAgent;
+use bsky_sdk::{
+    agent::config::{Config, FileStore},
+    BskyAgent,
+};
 use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
 use itertools::Itertools;
@@ -69,6 +72,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     ratatui::restore();
+    agent
+        .to_config()
+        .await
+        .save(&FileStore::new("session.json"))
+        .await?;
     return Ok(());
 }
 
@@ -962,8 +970,22 @@ async fn login() -> Result<BskyAgent, Box<dyn std::error::Error>> {
     let handle = env::var("handle")?;
     let password = env::var("password")?;
 
-    let agent = BskyAgent::builder().build().await?;
-    agent.login(handle, password).await?;
-
-    return Ok(agent);
+    match Config::load(&FileStore::new("session.json")).await {
+        Ok(config) => {
+            let agent = BskyAgent::builder().config(config).build().await?;
+            return Ok(agent);
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            eprintln!("Using env var to login");
+            let agent = BskyAgent::builder().build().await?;
+            agent.login(handle, password).await?;
+            agent
+                .to_config()
+                .await
+                .save(&FileStore::new("session.json"))
+                .await?;
+            return Ok(agent);
+        }
+    };
 }
