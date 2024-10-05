@@ -444,9 +444,9 @@ impl Column {
                     }
 
                     RequestMsg::UnlikePost(data) => {
-                        let Ok(_) =
+                        let Some(_) = request_retry!(3, {
                             agent.delete_record(data.record_uri.clone()).await
-                        else {
+                        }) else {
                             log::error!(
                                 "Could not post delete record unliking post"
                             );
@@ -463,16 +463,20 @@ impl Column {
                     }
 
                     RequestMsg::RepostPost(data) => {
-                        let Ok(output) = agent.create_record(
-                            atrium_api::app::bsky::feed::repost::RecordData {
-                                created_at: atrium_api::types::string::Datetime::now(),
-                                subject: atrium_api::com::atproto::repo::strong_ref::MainData {
-                                    cid: data.post_cid,
-                                    uri: data.post_uri.clone(),
-                                }.into()
-                            },
-                        ).await else {
-                            log::error!("Could not post create record reposting post");
+                        let Some(output) = request_retry!(3, {
+                            agent.create_record(
+                                atrium_api::app::bsky::feed::repost::RecordData {
+                                    created_at: atrium_api::types::string::Datetime::now(),
+                                    subject: atrium_api::com::atproto::repo::strong_ref::MainData {
+                                        cid: data.post_cid.clone(),
+                                        uri: data.post_uri.clone(),
+                                    }.into()
+                                }
+                            ).await
+                        }) else {
+                            log::error!(
+                                "Could not post create record reposting post"
+                            );
                             continue;
                         };
 
@@ -486,9 +490,9 @@ impl Column {
                     }
 
                     RequestMsg::UnrepostPost(data) => {
-                        let Ok(_) =
+                        let Some(_) = request_retry!(3, {
                             agent.delete_record(data.record_uri.clone()).await
-                        else {
+                        }) else {
                             log::error!(
                                 "Could not post delete record unreposting post"
                             );
