@@ -1,8 +1,17 @@
 use atrium_api::{
     self,
-    app::bsky::feed::{
-        defs::{FeedViewPostData, FeedViewPostReasonRefs, ReplyRefParentRefs},
-        get_timeline,
+    app::bsky::{
+        embed::{
+            record::{ViewRecord, ViewRecordRefs},
+            record_with_media::ViewMediaRefs,
+        },
+        feed::{
+            defs::{
+                FeedViewPostData, FeedViewPostReasonRefs, PostViewEmbedRefs,
+                ReplyRefParentRefs,
+            },
+            get_timeline,
+        },
     },
     types::{string::Cid, Object, Union},
 };
@@ -704,7 +713,8 @@ struct Post {
     repost: LikeRepostViewer,
     quote: u32,
     reply: u32,
-    // embeds: (),
+    embed: Option<Embed>,
+    // label
 }
 
 impl Post {
@@ -780,6 +790,8 @@ impl Post {
             }
         });
 
+        let embed = view.post.embed.as_ref().map(Embed::from);
+
         return Post {
             uri: view.post.uri.clone(),
             cid: view.post.cid.clone(),
@@ -793,6 +805,7 @@ impl Post {
             quote: view.post.quote_count.unwrap_or(0) as u32,
             repost,
             reply: view.post.reply_count.unwrap_or(0) as u32,
+            embed,
         };
     }
 }
@@ -997,6 +1010,236 @@ impl std::fmt::Display for Post {
         );
     }
 }
+
+#[derive(Clone)]
+enum Embed {
+    Image(Vec<Image>),
+    Video(Video),
+    External(External),
+    Record(Record),
+}
+
+impl Embed {
+    fn from(e: &Union<PostViewEmbedRefs>) -> Embed {
+        let Union::Refs(e) = e else {
+            panic!("Unknown embed type");
+        };
+        match e {
+            PostViewEmbedRefs::AppBskyEmbedImagesView(view) => {
+                Embed::Image(view.images.iter().map(Image::from).collect())
+            }
+            PostViewEmbedRefs::AppBskyEmbedVideoView(view) => {
+                Embed::Video(Video::from(view))
+            }
+            PostViewEmbedRefs::AppBskyEmbedExternalView(view) => {
+                Embed::External(External::from(view))
+            }
+            PostViewEmbedRefs::AppBskyEmbedRecordView(view) => {
+                Embed::Record(Record::from(&*view, None))
+            }
+            PostViewEmbedRefs::AppBskyEmbedRecordWithMediaView(view) => {
+                let media = Some(EmbededPostEmbed::from(&view.media));
+                Embed::Record(Record::from(&view.record, media))
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+enum Record {
+    Post(EmbededPost),
+    Blocked,
+    NotFound,
+    Detached,
+    // List(EmbededList),
+    // Generator(EmbededGenerator),
+    // Labler(EmbededLabler),
+    // StarterPack(EmbededStarterPack),
+    NotImplemented,
+}
+
+impl Record {
+    fn from(
+        view: &Object<atrium_api::app::bsky::embed::record::ViewData>,
+        media: Option<EmbededPostEmbed>,
+    ) -> Record {
+        let Union::Refs(record) = &view.record else {
+            panic!("Unknown embeded record type");
+        };
+        match record {
+            ViewRecordRefs::ViewRecord(post) => {
+                let atrium_api::types::Unknown::Object(record) = &post.value
+                else {
+                    panic!("Unknown embeded post value type");
+                };
+                let ipld_core::ipld::Ipld::String(text) = &*record["text"]
+                else {
+                    panic!("embeded text is not a string");
+                };
+                let text = text.clone();
+                Record::Post(EmbededPost {
+                    uri: post.uri.clone(),
+                    author: post
+                        .author
+                        .display_name
+                        .clone()
+                        .unwrap_or(String::new()),
+                    handle: post.author.handle.to_string(),
+                    embed: None,
+                    text,
+                })
+            }
+            ViewRecordRefs::ViewBlocked(_) => Record::Blocked,
+            ViewRecordRefs::ViewNotFound(_) => Record::NotFound,
+            ViewRecordRefs::ViewDetached(_) => Record::Detached,
+            _ => Record::NotImplemented,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct EmbededPost {
+    uri: String,
+    author: String,
+    handle: String,
+    embed: Option<EmbededPostEmbed>,
+    text: String,
+    // label
+}
+
+#[derive(Clone)]
+enum EmbededPostEmbed {
+    Images(Vec<Image>),
+    Video(Video),
+    External(External),
+}
+
+impl EmbededPostEmbed {
+    fn from(
+        media: &Union<
+            atrium_api::app::bsky::embed::record_with_media::ViewMediaRefs,
+        >,
+    ) -> EmbededPostEmbed {
+        let Union::Refs(media) = media else {
+            panic!("Unknown embed media type");
+        };
+        match media {
+            ViewMediaRefs::AppBskyEmbedImagesView(data) => {
+                EmbededPostEmbed::Images(
+                    data.images
+                        .iter()
+                        .map(|image| Image {
+                            url: image.fullsize.clone(),
+                            alt: image.alt.clone(),
+                        })
+                        .collect(),
+                )
+            }
+            ViewMediaRefs::AppBskyEmbedVideoView(data) => {
+                EmbededPostEmbed::Video(Video {
+                    m3u8: data.playlist.clone(),
+                    alt: data.alt.clone().unwrap_or(String::new()),
+                })
+            }
+            ViewMediaRefs::AppBskyEmbedExternalView(data) => {
+                EmbededPostEmbed::External(External {
+                    url: data.external.uri.clone(),
+                    title: data.external.title.clone(),
+                    description: data.external.description.clone(),
+                })
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Image {
+    alt: String,
+    url: String, // full size image
+}
+
+impl Image {
+    fn from(
+        image: &Object<atrium_api::app::bsky::embed::images::ViewImageData>,
+    ) -> Image {
+        Image {
+            url: image.fullsize.clone(),
+            alt: image.alt.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Video {
+    alt: String,
+    m3u8: String,
+}
+
+impl Video {
+    fn from(
+        video: &Object<atrium_api::app::bsky::embed::video::ViewData>,
+    ) -> Video {
+        Video {
+            alt: video.alt.clone().unwrap_or(String::new()),
+            m3u8: video.playlist.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct External {
+    url: String,
+    title: String,
+    description: String,
+}
+
+impl External {
+    fn from(
+        external: &Object<atrium_api::app::bsky::embed::external::ViewData>,
+    ) -> External {
+        External {
+            url: external.external.uri.clone(),
+            title: external.external.title.clone(),
+            description: external.external.description.clone(),
+        }
+    }
+}
+
+// #[derive(Clone)]
+// struct EmbededList {
+//     uri: String,
+//     name: String,
+//     description: String,
+//     author: String,
+//     handle: String,
+// }
+//
+// #[derive(Clone)]
+// struct EmbededGenerator {
+//     uri: String,
+//     name: String,
+//     description: String,
+//     author: String,
+//     handle: String,
+//     // label
+// }
+//
+// #[derive(Clone)]
+// struct EmbededLabler {
+//     // No name?
+//     uri: String,
+//     // name: String,
+//     // description: String,
+//     author: String,
+//     handle: String,
+// }
+//
+// #[derive(Clone)]
+// struct EmbededStarterPack {
+//     uri: String,
+//     author: String,
+//     handle: String,
+// }
 
 async fn login() -> Result<BskyAgent, Box<dyn std::error::Error>> {
     dotenvy::dotenv()?;
