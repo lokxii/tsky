@@ -77,11 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     ratatui::restore();
-    agent
-        .to_config()
-        .await
-        .save(&FileStore::new("session.json"))
-        .await?;
+    agent.to_config().await.save(&FileStore::new("session.json")).await?;
     return Ok(());
 }
 
@@ -117,9 +113,7 @@ struct LogStore {
 
 impl LogStore {
     fn new() -> LogStore {
-        LogStore {
-            logs: Arc::new(Mutex::new(vec![])),
-        }
+        LogStore { logs: Arc::new(Mutex::new(vec![])) }
     }
 }
 
@@ -549,10 +543,8 @@ async fn get_old_posts(
         return;
     };
 
-    let get_timeline::OutputData {
-        feed: posts,
-        cursor: new_cursor,
-    } = new_posts.data;
+    let get_timeline::OutputData { feed: posts, cursor: new_cursor } =
+        new_posts.data;
     *cursor = new_cursor;
 
     let mut feed = feed.lock().await;
@@ -689,10 +681,7 @@ struct LikeRepostViewer {
 
 impl LikeRepostViewer {
     fn new(count: Option<i64>, uri: Option<String>) -> LikeRepostViewer {
-        LikeRepostViewer {
-            count: count.unwrap_or(0) as u32,
-            uri,
-        }
+        LikeRepostViewer { count: count.unwrap_or(0) as u32, uri }
     }
 }
 
@@ -734,9 +723,8 @@ impl Post {
         let text = text.clone();
 
         let dt = Local::now();
-        let created_at_utc = DateTime::parse_from_rfc3339(created_at)
-            .unwrap()
-            .naive_local();
+        let created_at_utc =
+            DateTime::parse_from_rfc3339(created_at).unwrap().naive_local();
         let created_at =
             DateTime::from_naive_utc_and_offset(created_at_utc, *dt.offset());
 
@@ -968,11 +956,7 @@ impl Widget for PostWidget {
         Line::from(format!(
             "{} {}",
             post.repost.count,
-            if post.repost.count == 1 {
-                "repost"
-            } else {
-                "reposts"
-            }
+            if post.repost.count == 1 { "repost" } else { "reposts" }
         ))
         .style(if post.repost.uri.is_some() {
             Color::Green
@@ -985,18 +969,10 @@ impl Widget for PostWidget {
         Line::from(format!(
             "{} {}{}",
             post.like.count,
-            if post.like.count == 1 {
-                "like"
-            } else {
-                "likes"
-            },
+            if post.like.count == 1 { "like" } else { "likes" },
             if self.is_selected { " (space)" } else { "" }
         ))
-        .style(if post.like.uri.is_some() {
-            Color::Green
-        } else {
-            stat_color
-        })
+        .style(if post.like.uri.is_some() { Color::Green } else { stat_color })
         .alignment(Alignment::Left)
         .render(like_area, buf);
 
@@ -1364,10 +1340,7 @@ impl Image {
     fn from(
         image: &Object<atrium_api::app::bsky::embed::images::ViewImageData>,
     ) -> Image {
-        Image {
-            url: image.fullsize.clone(),
-            alt: image.alt.clone(),
-        }
+        Image { url: image.fullsize.clone(), alt: image.alt.clone() }
     }
 }
 
