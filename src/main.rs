@@ -1,10 +1,7 @@
 use atrium_api::{
     self,
     app::bsky::{
-        embed::{
-            record::{ViewRecord, ViewRecordRefs},
-            record_with_media::ViewMediaRefs,
-        },
+        embed::{record::ViewRecordRefs, record_with_media::ViewMediaRefs},
         feed::{
             defs::{
                 FeedViewPostData, FeedViewPostReasonRefs, PostViewEmbedRefs,
@@ -1007,19 +1004,6 @@ impl Widget for PostWidget {
     }
 }
 
-impl std::fmt::Display for Post {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        return write!(
-            f,
-            "{} @{}\n{}\n{}\n",
-            self.author,
-            self.handle,
-            self.created_at.to_string(),
-            self.text
-        );
-    }
-}
-
 #[derive(Clone)]
 enum Embed {
     Images(Vec<Image>),
@@ -1175,6 +1159,7 @@ impl Record {
                     text,
                 })
             }
+
             ViewRecordRefs::ViewBlocked(_) => Record::Blocked,
             ViewRecordRefs::ViewNotFound(_) => Record::NotFound,
             ViewRecordRefs::ViewDetached(_) => Record::Detached,
@@ -1203,26 +1188,29 @@ impl RecordWidget {
     }
 
     fn calculate_height(&self, width: u16) -> u16 {
-        2 + match &self.record {
+        match &self.record {
             Record::Post(post) => {
-                1 + Paragraph::new(
+                let text_lines = Paragraph::new(
                     post.text
                         .split('\n')
                         .map(|line| Line::from(line).style(Color::White))
                         .collect::<Vec<Line>>(),
                 )
                 .wrap(ratatui::widgets::Wrap { trim: true })
-                .line_count(width - 2) as u16
-                    + post
-                        .clone()
-                        .embed
-                        .map(|e| {
-                            EmbedWidget::new(e.into(), false)
-                                .calculate_height(width - 2)
-                        })
-                        .unwrap_or(0)
+                .line_count(width - 2) as u16;
+
+                let embed_lines = post
+                    .clone()
+                    .embed
+                    .map(|e| {
+                        EmbedWidget::new(e.into(), false)
+                            .calculate_height(width - 2)
+                    })
+                    .unwrap_or(0);
+
+                1 + text_lines + embed_lines + 2
             }
-            _ => 1,
+            _ => 1 + 2,
         }
     }
 }
@@ -1271,6 +1259,7 @@ impl Widget for RecordWidget {
                         .render(embed_area, buf);
                 });
             }
+
             Record::Blocked => {
                 Line::from("[blocked]").render(area, buf);
             }
