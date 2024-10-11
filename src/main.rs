@@ -26,7 +26,7 @@ use lazy_static::lazy_static;
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
     prelude::{CrosstermBackend, StatefulWidget},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Paragraph, Widget},
     Terminal,
@@ -843,6 +843,7 @@ impl PostWidget {
             + 2 // author and date
             + if self.post.text.len() == 0 { 0 } else { self.body_paragraph().line_count(width) as u16 }
             + 1 // stats
+            + self.post.embed.clone().map(|e| EmbedWidget::new(e, false).calculate_height(width - 2) as u16).unwrap_or(0)
             + 2 // borders
     }
 
@@ -872,7 +873,9 @@ impl Widget for PostWidget {
 
         borders.render(area, buf);
 
-        let [top_area, author_area, datetime_area, text_area, stats_area] =
+        let text = self.body_paragraph();
+
+        let [top_area, author_area, datetime_area, text_area, stats_area, embed_area] =
             Layout::vertical([
                 Constraint::Length(
                     self.post.reason.is_some() as u16
@@ -880,8 +883,9 @@ impl Widget for PostWidget {
                 ),
                 Constraint::Length(1),
                 Constraint::Length(1),
-                Constraint::Min(0),
+                Constraint::Length(text.line_count(inner_area.width) as u16),
                 Constraint::Length(1),
+                Constraint::Min(0),
             ])
             .areas(inner_area);
 
@@ -995,6 +999,11 @@ impl Widget for PostWidget {
                 .alignment(Alignment::Left)
                 .render(bsky_area, buf);
         }
+
+        self.post.embed.map(|e| {
+            EmbedWidget::new(e.into(), self.is_selected)
+                .render(embed_area, buf);
+        });
     }
 }
 
@@ -1013,7 +1022,7 @@ impl std::fmt::Display for Post {
 
 #[derive(Clone)]
 enum Embed {
-    Image(Vec<Image>),
+    Images(Vec<Image>),
     Video(Video),
     External(External),
     Record(Record),
@@ -1026,7 +1035,7 @@ impl Embed {
         };
         match e {
             PostViewEmbedRefs::AppBskyEmbedImagesView(view) => {
-                Embed::Image(view.images.iter().map(Image::from).collect())
+                Embed::Images(view.images.iter().map(Image::from).collect())
             }
             PostViewEmbedRefs::AppBskyEmbedVideoView(view) => {
                 Embed::Video(Video::from(view))
@@ -1041,6 +1050,82 @@ impl Embed {
                 let media = Some(EmbededPostEmbed::from(&view.media));
                 Embed::Record(Record::from(&view.record, media))
             }
+        }
+    }
+}
+
+struct EmbedWidget {
+    embed: Embed,
+    style: Style,
+    is_selected: bool,
+}
+
+impl EmbedWidget {
+    fn new(embed: Embed, is_selected: bool) -> EmbedWidget {
+        EmbedWidget {
+            embed,
+            style: if is_selected {
+                Style::default().bg(Color::Rgb(45, 50, 55))
+            } else {
+                Style::default()
+            },
+            is_selected,
+        }
+    }
+
+    fn non_record_paragraph(&self) -> Paragraph {
+        match &self.embed {
+            Embed::Images(images) => Paragraph::new(
+                images
+                    .iter()
+                    .map(|image| {
+                        Line::from(format!("[image, alt: {}]", image.alt))
+                    })
+                    .collect::<Vec<Line>>(),
+            ),
+
+            Embed::Video(video) => {
+                Paragraph::new(format!("[video, alt: {}]", video.alt))
+            }
+
+            Embed::External(external) => Paragraph::new(vec![
+                Line::from(external.title.clone())
+                    .style(Style::default().add_modifier(Modifier::BOLD)),
+                Line::from(external.description.clone()),
+                Line::from(external.url.clone())
+                    .style(Style::default().add_modifier(Modifier::UNDERLINED)),
+            ]),
+
+            Embed::Record(_) => panic!("Shouldn't happen"),
+        }
+    }
+
+    fn calculate_height(&self, width: u16) -> u16 {
+        if let Embed::Record(record) = &self.embed {
+            RecordWidget::new(record.clone(), false).calculate_height(width)
+                as u16
+        } else {
+            self.non_record_paragraph().line_count(width) as u16 + 2
+        }
+    }
+}
+
+impl Widget for EmbedWidget {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+        let borders = Block::bordered().style(self.style);
+        let inner_area = borders.inner(area);
+
+        if let Embed::Record(record) = self.embed {
+            RecordWidget::new(record, self.is_selected).render(area, buf);
+        } else {
+            borders.render(area, buf);
+            self.non_record_paragraph().render(inner_area, buf);
         }
     }
 }
@@ -1077,6 +1162,7 @@ impl Record {
                     panic!("embeded text is not a string");
                 };
                 let text = text.clone();
+
                 Record::Post(EmbededPost {
                     uri: post.uri.clone(),
                     author: post
@@ -1093,6 +1179,110 @@ impl Record {
             ViewRecordRefs::ViewNotFound(_) => Record::NotFound,
             ViewRecordRefs::ViewDetached(_) => Record::Detached,
             _ => Record::NotImplemented,
+        }
+    }
+}
+
+struct RecordWidget {
+    record: Record,
+    style: Style,
+    is_selected: bool,
+}
+
+impl RecordWidget {
+    fn new(record: Record, is_selected: bool) -> RecordWidget {
+        RecordWidget {
+            record,
+            style: if is_selected {
+                Style::default().bg(Color::Rgb(45, 50, 55))
+            } else {
+                Style::default()
+            },
+            is_selected,
+        }
+    }
+
+    fn calculate_height(&self, width: u16) -> u16 {
+        2 + match &self.record {
+            Record::Post(post) => {
+                1 + Paragraph::new(
+                    post.text
+                        .split('\n')
+                        .map(|line| Line::from(line).style(Color::White))
+                        .collect::<Vec<Line>>(),
+                )
+                .wrap(ratatui::widgets::Wrap { trim: true })
+                .line_count(width - 2) as u16
+                    + post
+                        .clone()
+                        .embed
+                        .map(|e| {
+                            EmbedWidget::new(e.into(), false)
+                                .calculate_height(width - 2)
+                        })
+                        .unwrap_or(0)
+            }
+            _ => 1,
+        }
+    }
+}
+
+impl Widget for RecordWidget {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+        let borders = Block::bordered().style(self.style);
+        let inner_area = borders.inner(area);
+        borders.render(area, buf);
+
+        match self.record {
+            Record::Post(post) => {
+                let [author_area, text_area, embed_area] = Layout::vertical([
+                    Constraint::Length(1),
+                    Constraint::Min(0),
+                    Constraint::Min(0),
+                ])
+                .areas(inner_area);
+
+                Line::from(
+                    Span::styled(post.author.clone(), Color::Cyan)
+                        + Span::styled(
+                            format!(" @{}", post.handle),
+                            Color::Gray,
+                        ),
+                )
+                .render(author_area, buf);
+
+                Paragraph::new(
+                    post.text
+                        .split('\n')
+                        .map(|line| Line::from(line).style(Color::White))
+                        .collect::<Vec<Line>>(),
+                )
+                .wrap(ratatui::widgets::Wrap { trim: true })
+                .render(text_area, buf);
+
+                post.embed.map(|e| {
+                    EmbedWidget::new(e.into(), self.is_selected)
+                        .render(embed_area, buf);
+                });
+            }
+            Record::Blocked => {
+                Line::from("[blocked]").render(area, buf);
+            }
+            Record::NotFound => {
+                Line::from("[Not found]").render(area, buf);
+            }
+            Record::Detached => {
+                Line::from("[Detached]").render(area, buf);
+            }
+            Record::NotImplemented => {
+                Line::from("[Not implemented]").render(area, buf);
+            }
         }
     }
 }
@@ -1148,6 +1338,16 @@ impl EmbededPostEmbed {
                     description: data.external.description.clone(),
                 })
             }
+        }
+    }
+}
+
+impl Into<Embed> for EmbededPostEmbed {
+    fn into(self) -> Embed {
+        match self {
+            Self::Images(images) => Embed::Images(images),
+            Self::Video(video) => Embed::Video(video),
+            Self::External(external) => Embed::External(external),
         }
     }
 }
