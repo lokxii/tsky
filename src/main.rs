@@ -651,7 +651,7 @@ impl Widget for &mut Feed {
                 posts[context.index].clone(),
                 context.is_selected,
             );
-            let height = item.calculate_height(width - 2) as u16;
+            let height = item.line_count(width - 2) as u16;
             return (item, height);
         });
 
@@ -834,13 +834,13 @@ impl PostWidget {
         }
     }
 
-    fn calculate_height(&self, width: u16) -> u16 {
+    fn line_count(&self, width: u16) -> u16 {
         self.post.reason.is_some() as u16
             + self.post.reply_to.is_some() as u16
             + 2 // author and date
-            + if self.post.text.len() == 0 { 0 } else { self.body_paragraph().line_count(width) as u16 }
+            + self.body_paragraph().line_count(width) as u16
             + 1 // stats
-            + self.post.embed.clone().map(|e| EmbedWidget::new(e, false).calculate_height(width - 2) as u16).unwrap_or(0)
+            + self.post.embed.clone().map(|e| EmbedWidget::new(e, false).line_count(width - 2) as u16).unwrap_or(0)
             + 2 // borders
     }
 
@@ -871,6 +871,11 @@ impl Widget for PostWidget {
         borders.render(area, buf);
 
         let text = self.body_paragraph();
+        let embed = self
+            .post
+            .embed
+            .clone()
+            .map(|e| EmbedWidget::new(e.into(), self.is_selected));
 
         let [top_area, author_area, datetime_area, text_area, stats_area, embed_area] =
             Layout::vertical([
@@ -882,7 +887,12 @@ impl Widget for PostWidget {
                 Constraint::Length(1),
                 Constraint::Length(text.line_count(inner_area.width) as u16),
                 Constraint::Length(1),
-                Constraint::Min(0),
+                Constraint::Length(
+                    embed
+                        .as_ref()
+                        .map(|e| e.line_count(inner_area.width))
+                        .unwrap_or(0),
+                ),
             ])
             .areas(inner_area);
 
@@ -997,14 +1007,11 @@ impl Widget for PostWidget {
                 .render(bsky_area, buf);
         }
 
-        self.post.embed.map(|e| {
-            EmbedWidget::new(e.into(), self.is_selected)
-                .render(embed_area, buf);
-        });
+        embed.map(|e| e.render(embed_area, buf));
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum Embed {
     Images(Vec<Image>),
     Video(Video),
@@ -1084,12 +1091,11 @@ impl EmbedWidget {
         }
     }
 
-    fn calculate_height(&self, width: u16) -> u16 {
+    fn line_count(&self, width: u16) -> u16 {
         if let Embed::Record(record) = &self.embed {
-            RecordWidget::new(record.clone(), false).calculate_height(width)
-                as u16
+            RecordWidget::new(record.clone(), false).line_count(width) as u16
         } else {
-            self.non_record_paragraph().line_count(width) as u16 + 2
+            self.non_record_paragraph().line_count(width - 2) as u16 + 2
         }
     }
 }
@@ -1102,19 +1108,18 @@ impl Widget for EmbedWidget {
     ) where
         Self: Sized,
     {
-        let borders = Block::bordered().style(self.style);
-        let inner_area = borders.inner(area);
-
         if let Embed::Record(record) = self.embed {
             RecordWidget::new(record, self.is_selected).render(area, buf);
         } else {
+            let borders = Block::bordered().style(self.style);
+            let inner_area = borders.inner(area);
             borders.render(area, buf);
             self.non_record_paragraph().render(inner_area, buf);
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum Record {
     Post(EmbededPost),
     Blocked,
@@ -1155,7 +1160,7 @@ impl Record {
                         .clone()
                         .unwrap_or(String::new()),
                     handle: post.author.handle.to_string(),
-                    embed: None,
+                    embed: media,
                     text,
                 })
             }
@@ -1187,7 +1192,7 @@ impl RecordWidget {
         }
     }
 
-    fn calculate_height(&self, width: u16) -> u16 {
+    fn line_count(&self, width: u16) -> u16 {
         match &self.record {
             Record::Post(post) => {
                 let text_lines = Paragraph::new(
@@ -1200,11 +1205,10 @@ impl RecordWidget {
                 .line_count(width - 2) as u16;
 
                 let embed_lines = post
-                    .clone()
                     .embed
+                    .clone()
                     .map(|e| {
-                        EmbedWidget::new(e.into(), false)
-                            .calculate_height(width - 2)
+                        EmbedWidget::new(e.into(), false).line_count(width - 2)
                     })
                     .unwrap_or(0);
 
@@ -1229,12 +1233,32 @@ impl Widget for RecordWidget {
 
         match self.record {
             Record::Post(post) => {
-                let [author_area, text_area, embed_area] = Layout::vertical([
-                    Constraint::Length(1),
-                    Constraint::Min(0),
-                    Constraint::Min(0),
-                ])
-                .areas(inner_area);
+                let text = Paragraph::new(
+                    post.text
+                        .split('\n')
+                        .map(|line| Line::from(line).style(Color::White))
+                        .collect::<Vec<Line>>(),
+                )
+                .wrap(ratatui::widgets::Wrap { trim: true });
+
+                let embed = post
+                    .embed
+                    .map(|e| EmbedWidget::new(e.into(), self.is_selected));
+
+                let [author_area, text_area, embed_area] =
+                    Layout::vertical([
+                        Constraint::Length(1),
+                        Constraint::Length(
+                            text.line_count(inner_area.width) as u16
+                        ),
+                        Constraint::Length(
+                            embed
+                                .as_ref()
+                                .map(|e| e.line_count(inner_area.width))
+                                .unwrap_or(0),
+                        ),
+                    ])
+                    .areas(inner_area);
 
                 Line::from(
                     Span::styled(post.author.clone(), Color::Cyan)
@@ -1245,19 +1269,8 @@ impl Widget for RecordWidget {
                 )
                 .render(author_area, buf);
 
-                Paragraph::new(
-                    post.text
-                        .split('\n')
-                        .map(|line| Line::from(line).style(Color::White))
-                        .collect::<Vec<Line>>(),
-                )
-                .wrap(ratatui::widgets::Wrap { trim: true })
-                .render(text_area, buf);
-
-                post.embed.map(|e| {
-                    EmbedWidget::new(e.into(), self.is_selected)
-                        .render(embed_area, buf);
-                });
+                text.render(text_area, buf);
+                embed.map(|e| e.render(embed_area, buf));
             }
 
             Record::Blocked => {
@@ -1276,7 +1289,7 @@ impl Widget for RecordWidget {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct EmbededPost {
     uri: String,
     author: String,
@@ -1286,7 +1299,7 @@ struct EmbededPost {
     // label
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum EmbededPostEmbed {
     Images(Vec<Image>),
     Video(Video),
@@ -1341,7 +1354,7 @@ impl Into<Embed> for EmbededPostEmbed {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Image {
     alt: String,
     url: String, // full size image
@@ -1358,7 +1371,7 @@ impl Image {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Video {
     alt: String,
     m3u8: String,
@@ -1375,7 +1388,7 @@ impl Video {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct External {
     url: String,
     title: String,
