@@ -865,7 +865,7 @@ impl Widget for PostWidget {
             .clone()
             .map(|e| EmbedWidget::new(e.into(), self.is_selected));
 
-        let [top_area, author_area, datetime_area, text_area, stats_area, embed_area] =
+        let [top_area, author_area, datetime_area, text_area, embed_area, stats_area] =
             Layout::vertical([
                 Constraint::Length(
                     self.post.reason.is_some() as u16
@@ -874,13 +874,13 @@ impl Widget for PostWidget {
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(text.line_count(inner_area.width) as u16),
-                Constraint::Length(1),
                 Constraint::Length(
                     embed
                         .as_ref()
                         .map(|e| e.line_count(inner_area.width))
                         .unwrap_or(0),
                 ),
+                Constraint::Length(1),
             ])
             .areas(inner_area);
 
