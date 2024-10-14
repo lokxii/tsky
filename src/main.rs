@@ -828,7 +828,7 @@ impl PostWidget {
             + 2 // author and date
             + self.body_paragraph().line_count(width) as u16
             + 1 // stats
-            + self.post.embed.clone().map(|e| EmbedWidget::new(e, false).line_count(width - 2) as u16).unwrap_or(0)
+            + self.post.embed.clone().map(|e| EmbedWidget::new(e, false).line_count(width) as u16).unwrap_or(0)
             + 2 // borders
     }
 
@@ -1014,7 +1014,7 @@ impl Embed {
                 Embed::Record(Record::from(&*view, None))
             }
             PostViewEmbedRefs::AppBskyEmbedRecordWithMediaView(view) => {
-                let media = Some(EmbededPostEmbed::from(&view.media));
+                let media = Some(EmbededPostMedia::from(&view.media));
                 Embed::Record(Record::from(&view.record, media))
             }
         }
@@ -1111,7 +1111,7 @@ enum Record {
 impl Record {
     fn from(
         view: &Object<atrium_api::app::bsky::embed::record::ViewData>,
-        media: Option<EmbededPostEmbed>,
+        media: Option<EmbededPostMedia>,
     ) -> Record {
         let Union::Refs(record) = &view.record else {
             panic!("Unknown embeded record type");
@@ -1136,7 +1136,12 @@ impl Record {
                         .clone()
                         .unwrap_or(String::new()),
                     handle: post.author.handle.to_string(),
-                    embed: media,
+                    has_embed: post
+                        .embeds
+                        .as_ref()
+                        .map(|v| v.len() > 0)
+                        .unwrap_or(false),
+                    media,
                     text,
                 })
             }
@@ -1180,15 +1185,16 @@ impl RecordWidget {
                 .wrap(ratatui::widgets::Wrap { trim: true })
                 .line_count(width - 2) as u16;
 
-                let embed_lines = post
-                    .embed
+                let media_lines = post
+                    .media
                     .clone()
                     .map(|e| {
                         EmbedWidget::new(e.into(), false).line_count(width - 2)
+                            + 2
                     })
                     .unwrap_or(0);
 
-                1 + text_lines + embed_lines + 2
+                media_lines + (1 + text_lines) + post.has_embed as u16 + 2
             }
             _ => 1 + 2,
         }
@@ -1203,10 +1209,6 @@ impl Widget for RecordWidget {
     ) where
         Self: Sized,
     {
-        let borders = Block::bordered().style(self.style);
-        let inner_area = borders.inner(area);
-        borders.render(area, buf);
-
         match self.record {
             Record::Post(post) => {
                 let text = Paragraph::new(
@@ -1217,24 +1219,41 @@ impl Widget for RecordWidget {
                 )
                 .wrap(ratatui::widgets::Wrap { trim: true });
 
-                let embed = post
-                    .embed
+                let media = post
+                    .media
                     .map(|e| EmbedWidget::new(e.into(), self.is_selected));
 
-                let [author_area, text_area, embed_area] =
+                let [media_area, quote_area] = Layout::vertical([
+                    Constraint::Length(
+                        media
+                            .as_ref()
+                            .map(|m| m.line_count(area.width - 2))
+                            .unwrap_or(0),
+                    ),
+                    Constraint::Length(
+                        text.line_count(area.width - 2) as u16
+                            + 1
+                            + post.has_embed as u16
+                            + 2,
+                    ),
+                ])
+                .areas(area);
+
+                media.map(|e| e.render(media_area, buf));
+
+                let quote_border = Block::bordered().style(self.style);
+                let quote_inner_area = quote_border.inner(quote_area);
+                quote_border.render(quote_area, buf);
+
+                let [author_area, text_area, quote_embed_area] =
                     Layout::vertical([
                         Constraint::Length(1),
                         Constraint::Length(
-                            text.line_count(inner_area.width) as u16
+                            text.line_count(area.width - 2) as u16
                         ),
-                        Constraint::Length(
-                            embed
-                                .as_ref()
-                                .map(|e| e.line_count(inner_area.width))
-                                .unwrap_or(0),
-                        ),
+                        Constraint::Length(post.has_embed as u16),
                     ])
-                    .areas(inner_area);
+                    .areas(quote_inner_area);
 
                 Line::from(
                     Span::styled(post.author.clone(), Color::Cyan)
@@ -1244,9 +1263,12 @@ impl Widget for RecordWidget {
                         ),
                 )
                 .render(author_area, buf);
-
                 text.render(text_area, buf);
-                embed.map(|e| e.render(embed_area, buf));
+                if post.has_embed {
+                    Line::from("[embed]")
+                        .style(Color::DarkGray)
+                        .render(quote_embed_area, buf);
+                }
             }
 
             Record::Blocked => {
@@ -1270,30 +1292,31 @@ struct EmbededPost {
     uri: String,
     author: String,
     handle: String,
-    embed: Option<EmbededPostEmbed>,
+    has_embed: bool,
+    media: Option<EmbededPostMedia>,
     text: String,
     // label
 }
 
 #[derive(Clone, Debug)]
-enum EmbededPostEmbed {
+enum EmbededPostMedia {
     Images(Vec<Image>),
     Video(Video),
     External(External),
 }
 
-impl EmbededPostEmbed {
+impl EmbededPostMedia {
     fn from(
         media: &Union<
             atrium_api::app::bsky::embed::record_with_media::ViewMediaRefs,
         >,
-    ) -> EmbededPostEmbed {
+    ) -> EmbededPostMedia {
         let Union::Refs(media) = media else {
             panic!("Unknown embed media type");
         };
         match media {
             ViewMediaRefs::AppBskyEmbedImagesView(data) => {
-                EmbededPostEmbed::Images(
+                EmbededPostMedia::Images(
                     data.images
                         .iter()
                         .map(|image| Image {
@@ -1304,13 +1327,13 @@ impl EmbededPostEmbed {
                 )
             }
             ViewMediaRefs::AppBskyEmbedVideoView(data) => {
-                EmbededPostEmbed::Video(Video {
+                EmbededPostMedia::Video(Video {
                     m3u8: data.playlist.clone(),
                     alt: data.alt.clone().unwrap_or(String::new()),
                 })
             }
             ViewMediaRefs::AppBskyEmbedExternalView(data) => {
-                EmbededPostEmbed::External(External {
+                EmbededPostMedia::External(External {
                     url: data.external.uri.clone(),
                     title: data.external.title.clone(),
                     description: data.external.description.clone(),
@@ -1320,7 +1343,7 @@ impl EmbededPostEmbed {
     }
 }
 
-impl Into<Embed> for EmbededPostEmbed {
+impl Into<Embed> for EmbededPostMedia {
     fn into(self) -> Embed {
         match self {
             Self::Images(images) => Embed::Images(images),
