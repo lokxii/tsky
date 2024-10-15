@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         f.render_widget("Creating column (starting workers)", f.area())
     })?;
     let (tx, rx) = mpsc::channel();
-    let column = Column::new(tx);
+    let column = UpdatingFeed::new(tx);
     column.spawn_feed_autoupdate(agent.clone());
     column.spawn_request_worker(agent.clone(), rx);
 
@@ -79,6 +79,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ratatui::restore();
     agent.to_config().await.save(&FileStore::new("session.json")).await?;
     return Ok(());
+}
+
+async fn login() -> Result<BskyAgent, Box<dyn std::error::Error>> {
+    dotenvy::dotenv()?;
+
+    let handle = env::var("handle")?;
+    let password = env::var("password")?;
+
+    match Config::load(&FileStore::new("session.json")).await {
+        Ok(config) => {
+            let agent = BskyAgent::builder().config(config).build().await?;
+            return Ok(agent);
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            eprintln!("Using env var to login");
+            let agent = BskyAgent::builder().build().await?;
+            agent.login(handle, password).await?;
+            agent
+                .to_config()
+                .await
+                .save(&FileStore::new("session.json"))
+                .await?;
+            return Ok(agent);
+        }
+    };
 }
 
 struct Logger;
@@ -118,11 +144,11 @@ impl LogStore {
 }
 
 struct App {
-    column: Column,
+    column: UpdatingFeed,
 }
 
 impl App {
-    fn new(column: Column) -> App {
+    fn new(column: UpdatingFeed) -> App {
         App { column }
     }
 
@@ -311,14 +337,9 @@ macro_rules! request_retry {
     }};
 }
 
-struct CreateRecordData {
-    post_uri: String,
-    post_cid: Cid,
-}
-
-struct DeleteRecordData {
-    post_uri: String,
-    record_uri: String,
+enum Column {
+    UpdatingFeed(UpdatingFeed),
+    Thread(Thread),
 }
 
 enum RequestMsg {
@@ -330,15 +351,25 @@ enum RequestMsg {
     Close,
 }
 
-struct Column {
+struct CreateRecordData {
+    post_uri: String,
+    post_cid: Cid,
+}
+
+struct DeleteRecordData {
+    post_uri: String,
+    record_uri: String,
+}
+
+struct UpdatingFeed {
     feed: Arc<Mutex<Feed>>,
     cursor: Arc<Mutex<Option<String>>>,
     request_worker_tx: Sender<RequestMsg>,
 }
 
-impl Column {
-    fn new(tx: Sender<RequestMsg>) -> Column {
-        Column {
+impl UpdatingFeed {
+    fn new(tx: Sender<RequestMsg>) -> UpdatingFeed {
+        UpdatingFeed {
             feed: Arc::new(Mutex::new(Feed {
                 posts: Vec::new(),
                 state: ListState::default(),
@@ -1439,28 +1470,4 @@ impl External {
 //     handle: String,
 // }
 
-async fn login() -> Result<BskyAgent, Box<dyn std::error::Error>> {
-    dotenvy::dotenv()?;
-
-    let handle = env::var("handle")?;
-    let password = env::var("password")?;
-
-    match Config::load(&FileStore::new("session.json")).await {
-        Ok(config) => {
-            let agent = BskyAgent::builder().config(config).build().await?;
-            return Ok(agent);
-        }
-        Err(e) => {
-            eprintln!("{}", e);
-            eprintln!("Using env var to login");
-            let agent = BskyAgent::builder().build().await?;
-            agent.login(handle, password).await?;
-            agent
-                .to_config()
-                .await
-                .save(&FileStore::new("session.json"))
-                .await?;
-            return Ok(agent);
-        }
-    };
-}
+struct Thread {}
