@@ -21,7 +21,7 @@ use crossterm::event::{self, Event, KeyCode};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use ratatui::{
-    layout::{Alignment, Constraint, Layout},
+    layout::{Alignment, Constraint, Layout, Position},
     prelude::{CrosstermBackend, StatefulWidget},
     style::{Color, Modifier, Style},
     text::{Line, Span},
@@ -40,7 +40,6 @@ use tokio::{
     process::Command,
     sync::{Mutex, MutexGuard},
 };
-use tui_widget_list::{ListBuilder, ListState, ListView};
 
 lazy_static! {
     static ref LOGSTORE: LogStore = LogStore::new();
@@ -114,6 +113,209 @@ struct LogStore {
 impl LogStore {
     fn new() -> LogStore {
         LogStore { logs: Arc::new(Mutex::new(vec![])) }
+    }
+}
+
+struct ListState {
+    selected: Option<usize>,
+    selected_y: Option<i32>,
+    height: u16,
+    prev_height: u16,
+}
+
+impl Default for ListState {
+    fn default() -> Self {
+        ListState {
+            selected: None,
+            selected_y: None,
+            height: 0,
+            prev_height: 0,
+        }
+    }
+}
+
+impl ListState {
+    fn select(&mut self, i: Option<usize>) {
+        self.selected = i;
+        if let None = self.selected_y {
+            self.selected_y = Some(0);
+        }
+    }
+
+    fn next(&mut self) {
+        self.selected.as_mut().map(|i| *i += 1);
+        self.selected_y.as_mut().map(|y| *y += self.height as i32);
+    }
+
+    fn previous(&mut self) {
+        self.selected.as_mut().map(|i| {
+            if *i > 0 {
+                *i -= 1
+            }
+        });
+        self.selected_y.as_mut().map(|y| {
+            *y -= self.height as i32;
+            if *y < 0 {
+                *y = 0
+            }
+        });
+    }
+}
+
+struct ListContext {
+    index: usize,
+    is_selected: bool,
+}
+
+struct List<T>
+where
+    T: Widget,
+{
+    len: usize,
+    f: Box<dyn Fn(ListContext) -> (T, u16)>,
+}
+
+impl<T> List<T>
+where
+    T: Widget,
+{
+    fn new(len: usize, f: Box<dyn Fn(ListContext) -> (T, u16)>) -> Self {
+        List { len, f }
+    }
+}
+
+impl<T> StatefulWidget for List<T>
+where
+    T: Widget,
+{
+    type State = ListState;
+
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+        state: &mut Self::State,
+    ) {
+        let borders = Block::bordered();
+        let inner_area = borders.inner(area);
+        borders.render(area, buf);
+
+        if state.selected.is_some() {
+            if state.selected.unwrap() >= self.len {
+                state.select(Some(self.len - 1));
+                state.selected_y.as_mut().map(|y| *y -= state.height as i32);
+            }
+        }
+        let mut i = state.selected.unwrap_or(0) as i32;
+        let mut y = state.selected_y.unwrap_or(0);
+        let mut bottom_y = 0;
+        let mut first = true;
+
+        while i >= 0 {
+            let (item, height) = (self.f)(ListContext {
+                index: i as usize,
+                is_selected: i == state.selected.unwrap() as i32,
+            });
+
+            if first {
+                state.height = height;
+                if i > 0 {
+                    let (_, h) = (self.f)(ListContext {
+                        index: i as usize - 1,
+                        is_selected: false,
+                    });
+                    state.prev_height = h;
+                }
+                bottom_y = y as u16 + height;
+                if bottom_y > inner_area.height {
+                    y = (inner_area.height - height) as i32;
+                    state.selected_y = Some(y);
+                }
+                first = false;
+            } else {
+                y -= height as i32;
+            }
+
+            render_truncated(
+                item,
+                SignedRect {
+                    x: inner_area.left() as i32,
+                    y: inner_area.top() as i32 + y,
+                    width: inner_area.width,
+                    height,
+                },
+                inner_area,
+                buf,
+            );
+            i -= 1;
+        }
+
+        let mut i = state.selected.unwrap() + 1;
+        let mut y = bottom_y;
+        while i < self.len && y < inner_area.height {
+            let (item, height) =
+                (self.f)(ListContext { index: i as usize, is_selected: false });
+
+            render_truncated(
+                item,
+                SignedRect {
+                    x: inner_area.left() as i32,
+                    y: (inner_area.top() + y) as i32,
+                    width: inner_area.width,
+                    height,
+                },
+                inner_area,
+                buf,
+            );
+            i += 1;
+            y += height;
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SignedRect {
+    x: i32,
+    y: i32,
+    width: u16,
+    height: u16,
+}
+
+fn render_truncated<T>(
+    widget: T,
+    widget_area: SignedRect,
+    available_area: ratatui::layout::Rect,
+    buf: &mut ratatui::buffer::Buffer,
+) where
+    T: Widget,
+{
+    let mut internal_buf =
+        ratatui::buffer::Buffer::empty(ratatui::layout::Rect {
+            x: 0,
+            y: 0,
+            width: widget_area.width,
+            height: widget_area.height,
+        });
+    widget.render(internal_buf.area, &mut internal_buf);
+
+    for y in widget_area.y..widget_area.y + widget_area.height as i32 {
+        for x in widget_area.x..widget_area.x + widget_area.width as i32 {
+            if !(y as u16 >= available_area.top()
+                && (y as u16) < available_area.bottom()
+                && x as u16 >= available_area.left()
+                && (x as u16) < available_area.right())
+            {
+                continue;
+            }
+            if let Some(to) = buf.cell_mut(Position::new(x as u16, y as u16)) {
+                if let Some(from) = internal_buf.cell(Position::new(
+                    (x - widget_area.x) as u16,
+                    (y - widget_area.y) as u16,
+                )) {
+                    *to = from.clone();
+                }
+            }
+        }
     }
 }
 
@@ -617,12 +819,12 @@ impl Feed {
             .map(Post::clone)
             .collect::<Vec<_>>();
 
-        self.state.selected = selected_post.map(|post| {
+        self.state.select(selected_post.map(|post| {
             if let Some(i) = new_view.iter().position(|p| p.uri == post.uri) {
                 return i;
             }
             panic!("Cannot decide which post to select after removing duplications");
-        });
+        }));
         self.posts = new_view;
     }
 }
@@ -638,19 +840,18 @@ impl Widget for &mut Feed {
         let width = area.width;
         let posts = self.posts.clone();
 
-        let builder = ListBuilder::new(move |context| {
-            let item = PostWidget::new(
-                posts[context.index].clone(),
-                context.is_selected,
-            );
-            let height = item.line_count(width - 2) as u16;
-            return (item, height);
-        });
-
-        ListView::new(builder, self.posts.len())
-            .block(Block::default())
-            .infinite_scrolling(false)
-            .render(area, buf, &mut self.state);
+        List::new(
+            self.posts.len(),
+            Box::new(move |context: ListContext| {
+                let item = PostWidget::new(
+                    posts[context.index].clone(),
+                    context.is_selected,
+                );
+                let height = item.line_count(width - 2) as u16;
+                return (item, height);
+            }),
+        )
+        .render(area, buf, &mut self.state);
     }
 }
 
