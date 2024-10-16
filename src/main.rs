@@ -200,6 +200,10 @@ where
         let inner_area = borders.inner(area);
         borders.render(area, buf);
 
+        if self.len == 0 {
+            return;
+        }
+
         if state.selected.is_some() {
             if state.selected.unwrap() >= self.len {
                 state.select(Some(self.len - 1));
@@ -214,7 +218,10 @@ where
         while i >= 0 {
             let (item, height) = (self.f)(ListContext {
                 index: i as usize,
-                is_selected: i == state.selected.unwrap() as i32,
+                is_selected: state
+                    .selected
+                    .map(|s| i == s as i32)
+                    .unwrap_or(false),
             });
 
             if first {

@@ -1477,16 +1477,6 @@ dependencies = [
  "log",
  "ratatui",
  "tokio",
- "tui-widget-list",
-]
-
-[[package]]
-name = "tui-widget-list"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d523011019b6af3065b61c56408490d473ca9656778c29bfb18c5d2c1053630"
-dependencies = [
- "ratatui",
 ]
 
 [[package]]
