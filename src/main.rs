@@ -1342,7 +1342,7 @@ impl Record {
                         .author
                         .display_name
                         .clone()
-                        .unwrap_or(String::new()),
+                        .unwrap_or_default(),
                     handle: post.author.handle.to_string(),
                     has_embed: post
                         .embeds
@@ -1537,7 +1537,7 @@ impl EmbededPostMedia {
             ViewMediaRefs::AppBskyEmbedVideoView(data) => {
                 EmbededPostMedia::Video(Video {
                     m3u8: data.playlist.clone(),
-                    alt: data.alt.clone().unwrap_or(String::new()),
+                    alt: data.alt.clone().unwrap_or_default(),
                 })
             }
             ViewMediaRefs::AppBskyEmbedExternalView(data) => {
@@ -1586,7 +1586,7 @@ impl Video {
         video: &Object<atrium_api::app::bsky::embed::video::ViewData>,
     ) -> Video {
         Video {
-            alt: video.alt.clone().unwrap_or(String::new()),
+            alt: video.alt.clone().unwrap_or_default(),
             m3u8: video.playlist.clone(),
         }
     }
