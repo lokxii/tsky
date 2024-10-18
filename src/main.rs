@@ -6,6 +6,7 @@ use atrium_api::{
             defs::{
                 FeedViewPost, FeedViewPostReasonRefs, PostView,
                 PostViewEmbedRefs, ReplyRefParentRefs,
+                ThreadViewPostRepliesItem,
             },
             get_post_thread::OutputThreadRefs as GetPostThreadOutput,
             get_timeline,
@@ -672,7 +673,23 @@ impl UpdatingFeed {
                     GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
                         thread,
                     ) => {
-                        todo!("Implement");
+                        return Ok(
+                            AppEvent::ColumnNewThreadLayer(Thread {
+                                post: Post::from_post_view(&thread.post),
+                                replies: thread.replies.as_ref().map(|replies| {
+                                    replies.iter().filter_map(|reply| {
+                                        let Union::Refs(reply) = reply else {
+                                            return None;
+                                        };
+                                        if let ThreadViewPostRepliesItem::ThreadViewPost(post) = reply {
+                                            Some(Post::from_post_view(&post.post))
+                                        } else {
+                                            None
+                                        }
+                                    }).collect()
+                                })
+                                .unwrap_or_default()
+                            }));
                     }
                     GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
                         log::error!("Blocked thread");
@@ -1786,14 +1803,10 @@ impl External {
 //     handle: String,
 // }
 
+// Without all the reasons and reply to
 struct Thread {
-    post: Post, // replies
-}
-
-impl Thread {
-    fn new() -> Thread {
-        todo!("Implement");
-    }
+    post: Post,
+    replies: Vec<Post>,
 }
 
 impl Widget for &Thread {
