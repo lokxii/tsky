@@ -187,7 +187,7 @@ impl ListState {
             }
         });
         self.selected_y.as_mut().map(|y| {
-            *y -= self.height as i32;
+            *y -= self.prev_height as i32;
             if *y < 0 {
                 *y = 0
             }
