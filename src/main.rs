@@ -66,22 +66,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     feed.spawn_feed_autoupdate(agent.clone());
     feed.spawn_request_worker(agent.clone(), rx);
 
-    let app = App::new(ColumnStack::from(vec![Column::UpdatingFeed(feed)]));
+    let mut app = App::new(ColumnStack::from(vec![Column::UpdatingFeed(feed)]));
 
     loop {
         app.render(&mut terminal).await?;
 
-        if let AppEvent::Quit = app.handle_events(agent.clone()).await? {
-            for col in app.column.stack {
-                match col {
-                    Column::UpdatingFeed(feed) => {
-                        feed.request_worker_tx.send(RequestMsg::Close)?;
+        match app.handle_events(agent.clone()).await? {
+            AppEvent::None => {}
+
+            AppEvent::Quit => {
+                for col in &app.column.stack {
+                    match col {
+                        Column::UpdatingFeed(feed) => {
+                            feed.request_worker_tx.send(RequestMsg::Close)?;
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
+                break;
             }
-            break;
-        }
+
+            AppEvent::ColumnNewThreadLayer(thread) => {
+                app.column.push(Column::Thread(thread));
+            }
+
+            AppEvent::ColumnPopLayer => {
+                app.column.pop();
+            }
+        };
     }
 
     ratatui::restore();
@@ -436,8 +448,23 @@ impl App {
 
         match self.column.last() {
             None => Ok(AppEvent::None),
-            Some(Column::UpdatingFeed(feed)) => feed.handle_events(agent).await,
-            Some(Column::Thread(_)) => todo!("Implement"),
+            Some(Column::UpdatingFeed(feed)) => {
+                feed.handle_input_events(agent).await
+            }
+            Some(Column::Thread(_)) => {
+                let Event::Key(key) = event::read()? else {
+                    return Ok(AppEvent::None);
+                };
+                if key.kind != event::KeyEventKind::Press {
+                    return Ok(AppEvent::None);
+                }
+
+                if key.code == KeyCode::Backspace {
+                    return Ok(AppEvent::ColumnPopLayer);
+                } else {
+                    return Ok(AppEvent::None);
+                }
+            }
         }
     }
 }
@@ -524,7 +551,7 @@ impl UpdatingFeed {
         }
     }
 
-    async fn handle_events(
+    async fn handle_input_events(
         &self,
         agent: BskyAgent,
     ) -> Result<AppEvent, Box<dyn std::error::Error>> {
@@ -659,6 +686,7 @@ impl UpdatingFeed {
                 if feed.state.selected.is_none() {
                     return Ok(AppEvent::None);
                 }
+
                 let out = agent.api.app.bsky.feed.get_post_thread(
                     atrium_api::app::bsky::feed::get_post_thread::ParametersData {
                         depth: Some(1.try_into().unwrap()),
@@ -669,6 +697,7 @@ impl UpdatingFeed {
                     log::error!("Unknown thread response");
                     return Ok(AppEvent::None);
                 };
+
                 match thread {
                     GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
                         thread,
