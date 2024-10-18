@@ -60,17 +60,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         f.render_widget("Creating column (starting workers)", f.area())
     })?;
     let (tx, rx) = mpsc::channel();
-    let column = UpdatingFeed::new(tx);
-    column.spawn_feed_autoupdate(agent.clone());
-    column.spawn_request_worker(agent.clone(), rx);
+    let feed = UpdatingFeed::new(tx);
+    feed.spawn_feed_autoupdate(agent.clone());
+    feed.spawn_request_worker(agent.clone(), rx);
 
-    let app = App::new(column);
+    let app = App::new(ColumnStack::from(vec![Column::UpdatingFeed(feed)]));
 
     loop {
         app.render(&mut terminal).await?;
 
         if app.handle_events().await? {
-            app.column.request_worker_tx.send(RequestMsg::Close)?;
+            for col in app.column.stack {
+                match col {
+                    Column::UpdatingFeed(feed) => {
+                        feed.request_worker_tx.send(RequestMsg::Close)?;
+                    }
+                    _ => {}
+                }
+            }
             break;
         }
     }
@@ -353,11 +360,11 @@ fn render_truncated<T>(
 }
 
 struct App {
-    column: UpdatingFeed,
+    column: ColumnStack,
 }
 
 impl App {
-    fn new(column: UpdatingFeed) -> App {
+    fn new(column: ColumnStack) -> App {
         App { column }
     }
 
@@ -365,23 +372,34 @@ impl App {
         &self,
         terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let feed = Arc::clone(&self.column.feed);
-        let mut feed = feed.lock().await;
-
         let logs = Arc::clone(&LOGSTORE.logs);
         let logs = logs.lock().await;
 
-        terminal.draw(move |f| {
-            let [main_area, log_area] =
-                Layout::vertical([Constraint::Fill(1), Constraint::Length(1)])
-                    .areas(f.area());
-            f.render_widget(&mut *feed, main_area);
+        match self.column.last() {
+            None => {}
+            Some(Column::UpdatingFeed(feed)) => {
+                let feed = Arc::clone(&feed.feed);
+                let mut feed = feed.lock().await;
 
-            f.render_widget(
-                String::from("log: ") + logs.last().unwrap_or(&String::new()),
-                log_area,
-            );
-        })?;
+                terminal.draw(|f| {
+                    let [main_area, log_area] = Layout::vertical([
+                        Constraint::Fill(1),
+                        Constraint::Length(1),
+                    ])
+                    .areas(f.area());
+                    f.render_widget(&mut *feed, main_area);
+
+                    f.render_widget(
+                        String::from("log: ")
+                            + logs.last().unwrap_or(&String::new()),
+                        log_area,
+                    );
+                })?;
+            }
+            Some(Column::Thread(_)) => {
+                todo!("Implement");
+            }
+        }
 
         return Ok(());
     }
@@ -390,6 +408,98 @@ impl App {
         if !event::poll(std::time::Duration::from_millis(500))? {
             return Ok(false);
         }
+
+        match self.column.last() {
+            None => Ok(false),
+            Some(Column::UpdatingFeed(feed)) => feed.handle_events().await,
+            Some(Column::Thread(_)) => todo!("Implement"),
+        }
+    }
+}
+
+macro_rules! request_retry {
+    ($retry:expr, $request:expr) => {{
+        let mut count = 0;
+        loop {
+            let r = $request;
+            match r {
+                Ok(output) => break Some(output),
+                Err(_) => {
+                    count += 1;
+                    if count == $retry {
+                        break None;
+                    }
+                }
+            }
+        }
+    }};
+}
+
+enum Column {
+    UpdatingFeed(UpdatingFeed),
+    Thread(Thread),
+}
+
+struct ColumnStack {
+    stack: Vec<Column>,
+}
+
+impl ColumnStack {
+    fn from(stack: Vec<Column>) -> ColumnStack {
+        ColumnStack { stack }
+    }
+
+    fn push(&mut self, column: Column) {
+        self.stack.push(column);
+    }
+
+    fn pop(&mut self) {
+        self.stack.pop();
+    }
+
+    fn last(&self) -> Option<&Column> {
+        self.stack.last()
+    }
+}
+
+enum RequestMsg {
+    OldPost,
+    LikePost(CreateRecordData),
+    UnlikePost(DeleteRecordData),
+    RepostPost(CreateRecordData),
+    UnrepostPost(DeleteRecordData),
+    Close,
+}
+
+struct CreateRecordData {
+    post_uri: String,
+    post_cid: Cid,
+}
+
+struct DeleteRecordData {
+    post_uri: String,
+    record_uri: String,
+}
+
+struct UpdatingFeed {
+    feed: Arc<Mutex<Feed>>,
+    cursor: Arc<Mutex<Option<String>>>,
+    request_worker_tx: Sender<RequestMsg>,
+}
+
+impl UpdatingFeed {
+    fn new(tx: Sender<RequestMsg>) -> UpdatingFeed {
+        UpdatingFeed {
+            feed: Arc::new(Mutex::new(Feed {
+                posts: Vec::new(),
+                state: ListState::default(),
+            })),
+            cursor: Arc::new(Mutex::new(None)),
+            request_worker_tx: tx,
+        }
+    }
+
+    async fn handle_events(&self) -> Result<bool, Box<dyn std::error::Error>> {
         let Event::Key(key) = event::read()? else {
             return Ok(false);
         };
@@ -397,7 +507,7 @@ impl App {
             return Ok(false);
         }
 
-        let feed = Arc::clone(&self.column.feed);
+        let feed = Arc::clone(&self.feed);
         let mut feed = feed.lock().await;
 
         match key.code {
@@ -410,12 +520,12 @@ impl App {
                 if feed.posts.len() > 0
                     && feed.state.selected == Some(feed.posts.len() - 1)
                 {
-                    let cursor = Arc::clone(&self.column.cursor);
+                    let cursor = Arc::clone(&self.cursor);
                     if let Result::Err(_) = cursor.try_lock() {
                         feed.state.next();
                         return Ok(false);
                     };
-                    self.column.request_worker_tx.send(RequestMsg::OldPost)
+                    self.request_worker_tx.send(RequestMsg::OldPost)
                         .unwrap_or_else(|_| {
                             log::error!("Cannot send message to worker fetching old post");
                         });
@@ -438,8 +548,7 @@ impl App {
                 }
                 let post = &feed.posts[feed.state.selected.unwrap()];
                 if post.like.uri.is_some() {
-                    self.column
-                        .request_worker_tx
+                    self.request_worker_tx
                         .send(RequestMsg::UnlikePost(DeleteRecordData {
                             post_uri: post.uri.clone(),
                             record_uri: post.like.uri.clone().unwrap(),
@@ -450,8 +559,7 @@ impl App {
                             );
                         });
                 } else {
-                    self.column
-                        .request_worker_tx
+                    self.request_worker_tx
                         .send(RequestMsg::LikePost(CreateRecordData {
                             post_uri: post.uri.clone(),
                             post_cid: post.cid.clone(),
@@ -472,8 +580,7 @@ impl App {
                 }
                 let post = &feed.posts[feed.state.selected.unwrap()];
                 if post.repost.uri.is_some() {
-                    self.column
-                        .request_worker_tx
+                    self.request_worker_tx
                         .send(RequestMsg::UnrepostPost(DeleteRecordData {
                             post_uri: post.uri.clone(),
                             record_uri: post.repost.uri.clone().unwrap(),
@@ -484,8 +591,7 @@ impl App {
                             );
                         });
                 } else {
-                    self.column
-                        .request_worker_tx
+                    self.request_worker_tx
                         .send(RequestMsg::RepostPost(CreateRecordData {
                             post_uri: post.uri.clone(),
                             post_cid: post.cid.clone(),
@@ -525,67 +631,6 @@ impl App {
                 return Ok(false);
             }
         };
-    }
-}
-
-macro_rules! request_retry {
-    ($retry:expr, $request:expr) => {{
-        let mut count = 0;
-        loop {
-            let r = $request;
-            match r {
-                Ok(output) => break Some(output),
-                Err(_) => {
-                    count += 1;
-                    if count == $retry {
-                        break None;
-                    }
-                }
-            }
-        }
-    }};
-}
-
-enum Column {
-    UpdatingFeed(UpdatingFeed),
-    Thread(Thread),
-}
-
-enum RequestMsg {
-    OldPost,
-    LikePost(CreateRecordData),
-    UnlikePost(DeleteRecordData),
-    RepostPost(CreateRecordData),
-    UnrepostPost(DeleteRecordData),
-    Close,
-}
-
-struct CreateRecordData {
-    post_uri: String,
-    post_cid: Cid,
-}
-
-struct DeleteRecordData {
-    post_uri: String,
-    record_uri: String,
-}
-
-struct UpdatingFeed {
-    feed: Arc<Mutex<Feed>>,
-    cursor: Arc<Mutex<Option<String>>>,
-    request_worker_tx: Sender<RequestMsg>,
-}
-
-impl UpdatingFeed {
-    fn new(tx: Sender<RequestMsg>) -> UpdatingFeed {
-        UpdatingFeed {
-            feed: Arc::new(Mutex::new(Feed {
-                posts: Vec::new(),
-                state: ListState::default(),
-            })),
-            cursor: Arc::new(Mutex::new(None)),
-            request_worker_tx: tx,
-        }
     }
 
     fn spawn_feed_autoupdate(&self, agent: BskyAgent) {
