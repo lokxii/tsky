@@ -4,9 +4,10 @@ use atrium_api::{
         embed::{record::ViewRecordRefs, record_with_media::ViewMediaRefs},
         feed::{
             defs::{
-                FeedViewPostData, FeedViewPostReasonRefs, PostViewEmbedRefs,
-                ReplyRefParentRefs,
+                FeedViewPost, FeedViewPostReasonRefs, PostView,
+                PostViewEmbedRefs, ReplyRefParentRefs,
             },
+            get_post_thread::OutputThreadRefs as GetPostThreadOutput,
             get_timeline,
         },
     },
@@ -69,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         app.render(&mut terminal).await?;
 
-        if app.handle_events().await? {
+        if let AppEvent::Quit = app.handle_events(agent.clone()).await? {
             for col in app.column.stack {
                 match col {
                     Column::UpdatingFeed(feed) => {
@@ -359,6 +360,13 @@ fn render_truncated<T>(
     }
 }
 
+enum AppEvent {
+    None,
+    Quit,
+    ColumnNewThreadLayer(Thread),
+    ColumnPopLayer,
+}
+
 struct App {
     column: ColumnStack,
 }
@@ -396,22 +404,38 @@ impl App {
                     );
                 })?;
             }
-            Some(Column::Thread(_)) => {
-                todo!("Implement");
+            Some(Column::Thread(thread)) => {
+                terminal.draw(|f| {
+                    let [main_area, log_area] = Layout::vertical([
+                        Constraint::Fill(1),
+                        Constraint::Length(1),
+                    ])
+                    .areas(f.area());
+                    f.render_widget(thread, main_area);
+
+                    f.render_widget(
+                        String::from("log: ")
+                            + logs.last().unwrap_or(&String::new()),
+                        log_area,
+                    );
+                })?;
             }
         }
 
         return Ok(());
     }
 
-    async fn handle_events(&self) -> Result<bool, Box<dyn std::error::Error>> {
+    async fn handle_events(
+        &self,
+        agent: BskyAgent,
+    ) -> Result<AppEvent, Box<dyn std::error::Error>> {
         if !event::poll(std::time::Duration::from_millis(500))? {
-            return Ok(false);
+            return Ok(AppEvent::None);
         }
 
         match self.column.last() {
-            None => Ok(false),
-            Some(Column::UpdatingFeed(feed)) => feed.handle_events().await,
+            None => Ok(AppEvent::None),
+            Some(Column::UpdatingFeed(feed)) => feed.handle_events(agent).await,
             Some(Column::Thread(_)) => todo!("Implement"),
         }
     }
@@ -499,12 +523,15 @@ impl UpdatingFeed {
         }
     }
 
-    async fn handle_events(&self) -> Result<bool, Box<dyn std::error::Error>> {
+    async fn handle_events(
+        &self,
+        agent: BskyAgent,
+    ) -> Result<AppEvent, Box<dyn std::error::Error>> {
         let Event::Key(key) = event::read()? else {
-            return Ok(false);
+            return Ok(AppEvent::None);
         };
         if key.kind != event::KeyEventKind::Press {
-            return Ok(false);
+            return Ok(AppEvent::None);
         }
 
         let feed = Arc::clone(&self.feed);
@@ -512,7 +539,7 @@ impl UpdatingFeed {
 
         match key.code {
             KeyCode::Char('q') => {
-                return Ok(true);
+                return Ok(AppEvent::Quit);
             }
 
             // Cursor move down
@@ -523,7 +550,7 @@ impl UpdatingFeed {
                     let cursor = Arc::clone(&self.cursor);
                     if let Result::Err(_) = cursor.try_lock() {
                         feed.state.next();
-                        return Ok(false);
+                        return Ok(AppEvent::None);
                     };
                     self.request_worker_tx.send(RequestMsg::OldPost)
                         .unwrap_or_else(|_| {
@@ -532,19 +559,19 @@ impl UpdatingFeed {
                 } else {
                     feed.state.next();
                 }
-                return Ok(false);
+                return Ok(AppEvent::None);
             }
 
             // Cursor move up
             KeyCode::Char('k') => {
                 feed.state.previous();
-                return Ok(false);
+                return Ok(AppEvent::None);
             }
 
             // Like
             KeyCode::Char(' ') => {
                 if feed.state.selected.is_none() {
-                    return Ok(false);
+                    return Ok(AppEvent::None);
                 }
                 let post = &feed.posts[feed.state.selected.unwrap()];
                 if post.like.uri.is_some() {
@@ -570,13 +597,13 @@ impl UpdatingFeed {
                             );
                         });
                 }
-                return Ok(false);
+                return Ok(AppEvent::None);
             }
 
             // Repost
             KeyCode::Char('o') => {
                 if feed.state.selected.is_none() {
-                    return Ok(false);
+                    return Ok(AppEvent::None);
                 }
                 let post = &feed.posts[feed.state.selected.unwrap()];
                 if post.repost.uri.is_some() {
@@ -602,12 +629,12 @@ impl UpdatingFeed {
                             );
                         });
                 }
-                return Ok(false);
+                return Ok(AppEvent::None);
             }
 
             KeyCode::Char('p') => {
                 if feed.state.selected.is_none() {
-                    return Ok(false);
+                    return Ok(AppEvent::None);
                 }
                 let post_uri = feed.posts[feed.state.selected.unwrap()]
                     .uri
@@ -624,11 +651,42 @@ impl UpdatingFeed {
                 {
                     log::error!("{:?}", e);
                 }
-                return Ok(false);
+                return Ok(AppEvent::None);
+            }
+
+            KeyCode::Enter => {
+                if feed.state.selected.is_none() {
+                    return Ok(AppEvent::None);
+                }
+                let out = agent.api.app.bsky.feed.get_post_thread(
+                    atrium_api::app::bsky::feed::get_post_thread::ParametersData {
+                        depth: Some(1.try_into().unwrap()),
+                        parent_height: None,
+                        uri: feed.posts[feed.state.selected.unwrap()].uri.clone(),
+                    }.into()).await?;
+                let Union::Refs(thread) = out.data.thread else {
+                    log::error!("Unknown thread response");
+                    return Ok(AppEvent::None);
+                };
+                match thread {
+                    GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
+                        thread,
+                    ) => {
+                        todo!("Implement");
+                    }
+                    GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
+                        log::error!("Blocked thread");
+                        return Ok(AppEvent::None);
+                    }
+                    GetPostThreadOutput::AppBskyFeedDefsNotFoundPost(_) => {
+                        log::error!("Thread not found");
+                        return Ok(AppEvent::None);
+                    }
+                }
             }
 
             _ => {
-                return Ok(false);
+                return Ok(AppEvent::None);
             }
         };
     }
@@ -663,7 +721,7 @@ impl UpdatingFeed {
                     feed: posts,
                     cursor: new_cursor,
                 } = new_posts.data;
-                let new_posts = posts.iter().map(Post::from);
+                let new_posts = posts.iter().map(Post::from_feed_view_post);
 
                 {
                     let mut feed = feed.lock().await;
@@ -833,7 +891,7 @@ async fn get_old_posts(
     *cursor = new_cursor;
 
     let mut feed = feed.lock().await;
-    feed.append_old_posts(posts.iter().map(Post::from));
+    feed.append_old_posts(posts.iter().map(Post::from_feed_view_post));
 }
 
 struct Feed {
@@ -988,9 +1046,9 @@ struct Post {
 }
 
 impl Post {
-    fn from(view: &Object<FeedViewPostData>) -> Post {
-        let author = &view.post.author;
-        let content = &view.post.record;
+    fn from_post_view(view: &PostView) -> Post {
+        let author = &view.author;
+        let content = &view.record;
 
         let atrium_api::types::Unknown::Object(record) = content else {
             panic!("Invalid content type");
@@ -1012,20 +1070,41 @@ impl Post {
         let created_at =
             DateTime::from_naive_utc_and_offset(created_at_utc, *dt.offset());
 
-        let like = match &view.post.viewer {
+        let like = match &view.viewer {
             Some(viewer) => {
-                LikeRepostViewer::new(view.post.like_count, viewer.like.clone())
+                LikeRepostViewer::new(view.like_count, viewer.like.clone())
             }
             None => LikeRepostViewer::new(None, None),
         };
 
-        let repost = match &view.post.viewer {
-            Some(viewer) => LikeRepostViewer::new(
-                view.post.repost_count,
-                viewer.repost.clone(),
-            ),
+        let repost = match &view.viewer {
+            Some(viewer) => {
+                LikeRepostViewer::new(view.repost_count, viewer.repost.clone())
+            }
             None => LikeRepostViewer::new(None, None),
         };
+
+        let embed = view.embed.as_ref().map(Embed::from);
+
+        return Post {
+            uri: view.uri.clone(),
+            cid: view.cid.clone(),
+            author: author.display_name.clone().unwrap_or("(None)".to_string()),
+            handle: author.handle.to_string(),
+            created_at,
+            text,
+            reason: None,
+            reply_to: None,
+            like,
+            quote: view.quote_count.unwrap_or(0) as u32,
+            repost,
+            reply: view.reply_count.unwrap_or(0) as u32,
+            embed,
+        };
+    }
+
+    fn from_feed_view_post(view: &FeedViewPost) -> Post {
+        let post = Post::from_post_view(&view.post);
 
         let reason = view.reason.as_ref().map(|r| {
             let Union::Refs(r) = r else {
@@ -1059,23 +1138,7 @@ impl Post {
             }
         });
 
-        let embed = view.post.embed.as_ref().map(Embed::from);
-
-        return Post {
-            uri: view.post.uri.clone(),
-            cid: view.post.cid.clone(),
-            author: author.display_name.clone().unwrap_or("(None)".to_string()),
-            handle: author.handle.to_string(),
-            created_at,
-            text,
-            reason,
-            reply_to,
-            like,
-            quote: view.post.quote_count.unwrap_or(0) as u32,
-            repost,
-            reply: view.post.reply_count.unwrap_or(0) as u32,
-            embed,
-        };
+        return Post { reason, reply_to, ..post };
     }
 }
 
@@ -1723,4 +1786,23 @@ impl External {
 //     handle: String,
 // }
 
-struct Thread {}
+struct Thread {
+    post: Post, // replies
+}
+
+impl Thread {
+    fn new() -> Thread {
+        todo!("Implement");
+    }
+}
+
+impl Widget for &Thread {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+    }
+}
