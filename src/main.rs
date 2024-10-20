@@ -301,7 +301,7 @@ where
             i -= 1;
         }
 
-        let mut i = state.selected.map(|i| i + 1).unwrap_or(0);
+        let mut i = state.selected.map(|i| i + 1).unwrap_or(1);
         let mut y = bottom_y;
         while i < self.len && y < area.height {
             let (item, height) =
