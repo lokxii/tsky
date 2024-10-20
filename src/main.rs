@@ -243,10 +243,6 @@ where
         buf: &mut ratatui::prelude::Buffer,
         state: &mut Self::State,
     ) {
-        let borders = Block::bordered();
-        let inner_area = borders.inner(area);
-        borders.render(area, buf);
-
         if self.len == 0 {
             return;
         }
@@ -281,8 +277,8 @@ where
                     state.prev_height = h;
                 }
                 bottom_y = y as u16 + height;
-                if bottom_y > inner_area.height {
-                    y = (inner_area.height - height) as i32;
+                if bottom_y > area.height {
+                    y = (area.height - height) as i32;
                     state.selected_y = Some(y);
                 }
                 first = false;
@@ -293,12 +289,12 @@ where
             render_truncated(
                 item,
                 SignedRect {
-                    x: inner_area.left() as i32,
-                    y: inner_area.top() as i32 + y,
-                    width: inner_area.width,
+                    x: area.left() as i32,
+                    y: area.top() as i32 + y,
+                    width: area.width,
                     height,
                 },
-                inner_area,
+                area,
                 buf,
             );
             i -= 1;
@@ -306,19 +302,19 @@ where
 
         let mut i = state.selected.map(|i| i + 1).unwrap_or(0);
         let mut y = bottom_y;
-        while i < self.len && y < inner_area.height {
+        while i < self.len && y < area.height {
             let (item, height) =
                 (self.f)(ListContext { index: i as usize, is_selected: false });
 
             render_truncated(
                 item,
                 SignedRect {
-                    x: inner_area.left() as i32,
-                    y: (inner_area.top() + y) as i32,
-                    width: inner_area.width,
+                    x: area.left() as i32,
+                    y: (area.top() + y) as i32,
+                    width: area.width,
                     height,
                 },
-                inner_area,
+                area,
                 buf,
             );
             i += 1;
@@ -1034,7 +1030,7 @@ impl Widget for &mut Feed {
                     posts[context.index].clone(),
                     context.is_selected,
                 );
-                let height = item.line_count(width - 2) as u16;
+                let height = item.line_count(width) as u16;
                 return (item, height);
             }),
         )
@@ -1870,8 +1866,7 @@ impl Widget for &Thread {
                     replies[context.index].clone(),
                     context.is_selected,
                 );
-                let height =
-                    item.line_count(replies_block_inner.width - 2) as u16;
+                let height = item.line_count(replies_block_inner.width) as u16;
                 return (item, height);
             }),
         )
