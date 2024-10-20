@@ -26,8 +26,9 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Position},
     prelude::{CrosstermBackend, StatefulWidget},
     style::{Color, Modifier, Style},
+    symbols,
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Widget},
+    widgets::{Block, Borders, Padding, Paragraph, Widget},
     Terminal,
 };
 use std::{
@@ -1241,7 +1242,9 @@ impl Widget for PostWidget {
     ) where
         Self: Sized,
     {
-        let borders = Block::bordered().style(self.style);
+        let borders = Block::bordered()
+            .style(self.style)
+            .border_set(symbols::border::ROUNDED);
         let inner_area = borders.inner(area);
         let post = &self.post;
 
@@ -1476,7 +1479,9 @@ impl Widget for EmbedWidget {
         if let Embed::Record(record) = self.embed {
             RecordWidget::new(record, self.is_selected).render(area, buf);
         } else {
-            let borders = Block::bordered().style(self.style);
+            let borders = Block::bordered()
+                .style(self.style)
+                .border_set(symbols::border::ROUNDED);
             let inner_area = borders.inner(area);
             borders.render(area, buf);
             self.non_record_paragraph().render(inner_area, buf);
@@ -1630,7 +1635,9 @@ impl Widget for RecordWidget {
 
                 media.map(|e| e.render(media_area, buf));
 
-                let quote_border = Block::bordered().style(self.style);
+                let quote_border = Block::bordered()
+                    .style(self.style)
+                    .border_set(symbols::border::ROUNDED);
                 let quote_inner_area = quote_border.inner(quote_area);
                 quote_border.render(quote_area, buf);
 
@@ -1853,7 +1860,8 @@ impl Widget for &Thread {
 
         post_widget.render(post_area, buf);
 
-        let replies_block = Block::new().borders(Borders::TOP);
+        let replies_block =
+            Block::new().borders(Borders::TOP).padding(Padding::uniform(1));
         let replies_block_inner = replies_block.inner(replies_area);
         replies_block.render(replies_area, buf);
 
