@@ -1851,8 +1851,9 @@ impl Widget for &Thread {
         let post_widget = PostWidget::new(self.post.clone(), false);
         let post_height = post_widget.line_count(area.width);
 
-        let [post_area, replies_area] = Layout::vertical([
+        let [post_area, _, replies_area] = Layout::vertical([
             Constraint::Length(post_height),
+            Constraint::Length(1),
             Constraint::Fill(1),
         ])
         .areas(area);
