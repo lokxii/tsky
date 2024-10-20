@@ -27,7 +27,7 @@ use ratatui::{
     prelude::{CrosstermBackend, StatefulWidget},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, Borders, Paragraph, Widget},
     Terminal,
 };
 use std::{
@@ -304,7 +304,7 @@ where
             i -= 1;
         }
 
-        let mut i = state.selected.unwrap() + 1;
+        let mut i = state.selected.map(|i| i + 1).unwrap_or(0);
         let mut y = bottom_y;
         while i < self.len && y < inner_area.height {
             let (item, height) =
@@ -1846,5 +1846,35 @@ impl Widget for &Thread {
     ) where
         Self: Sized,
     {
+        let post_widget = PostWidget::new(self.post.clone(), false);
+        let post_height = post_widget.line_count(area.width);
+
+        let [post_area, replies_area] = Layout::vertical([
+            Constraint::Length(post_height),
+            Constraint::Fill(1),
+        ])
+        .areas(area);
+
+        post_widget.render(post_area, buf);
+
+        let replies_block = Block::new().borders(Borders::TOP);
+        let replies_block_inner = replies_block.inner(replies_area);
+        replies_block.render(replies_area, buf);
+
+        let mut state = ListState::default();
+        let replies = self.replies.clone();
+        List::new(
+            self.replies.len(),
+            Box::new(move |context: ListContext| {
+                let item = PostWidget::new(
+                    replies[context.index].clone(),
+                    context.is_selected,
+                );
+                let height =
+                    item.line_count(replies_block_inner.width - 2) as u16;
+                return (item, height);
+            }),
+        )
+        .render(replies_block_inner, buf, &mut state);
     }
 }
