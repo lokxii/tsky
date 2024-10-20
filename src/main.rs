@@ -1584,7 +1584,6 @@ impl RecordWidget {
                     .clone()
                     .map(|e| {
                         EmbedWidget::new(e.into(), false).line_count(width - 2)
-                            + 2
                     })
                     .unwrap_or(0);
 
