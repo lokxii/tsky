@@ -959,7 +959,7 @@ impl Feed {
             return true;
         }
 
-        let selected = self.state.selected.map(|s| self.posts[s].clone());
+        // let selected = self.state.selected.map(|s| self.posts[s].clone());
         let new_last = new_posts.last().unwrap();
         let Some(overlap_idx) = self.posts.iter().position(|p| p == new_last)
         else {
@@ -969,13 +969,24 @@ impl Feed {
             return true;
         };
 
-        self.posts = new_posts
+        // self.posts = new_posts
+        let new_posts = new_posts
             .into_iter()
             .chain(self.posts.clone().into_iter().skip(overlap_idx + 1))
-            .collect();
-        self.state.select(selected.map(|post| {
-            self.posts.iter().position(|p| *p == post).unwrap_or(0)
+            .collect::<Vec<_>>();
+        self.state.select(self.state.selected.map(|i| {
+            let mut i = i;
+            while i < self.posts.len() {
+                let post = &self.posts[i];
+                if let Some(i) = new_posts.iter().position(|p| p == post) {
+                    return i;
+                } else {
+                    i += 1;
+                }
+            }
+            return 0;
         }));
+        self.posts = new_posts;
         self.remove_duplicate();
 
         return false;
