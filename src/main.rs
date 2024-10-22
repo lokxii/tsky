@@ -1350,9 +1350,10 @@ impl Widget for PostWidget {
         .render(quote_area, buf);
 
         Line::from(format!(
-            "{} {}",
+            "{} {}{}",
             post.repost.count,
-            if post.repost.count == 1 { "repost" } else { "reposts" }
+            if post.repost.count == 1 { "repost" } else { "reposts" },
+            if self.is_selected { " (o)" } else { "" }
         ))
         .style(if post.repost.uri.is_some() {
             Color::Green
