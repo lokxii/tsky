@@ -1,4 +1,5 @@
 mod list;
+mod logger;
 
 use atrium_api::{
     self,
@@ -23,8 +24,8 @@ use bsky_sdk::{
 use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use list::{List, ListContext, ListState};
+use logger::{LOGGER, LOGSTORE};
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
     prelude::{CrosstermBackend, StatefulWidget},
@@ -46,11 +47,6 @@ use tokio::{
     process::Command,
     sync::{Mutex, MutexGuard},
 };
-
-lazy_static! {
-    static ref LOGSTORE: LogStore = LogStore::new();
-}
-static LOGGER: Logger = Logger;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -129,42 +125,6 @@ async fn login() -> Result<BskyAgent, Box<dyn std::error::Error>> {
             return Ok(agent);
         }
     };
-}
-
-struct Logger;
-
-impl log::Log for Logger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
-        metadata.level() <= log::Level::Info
-    }
-
-    fn log(&self, record: &log::Record) {
-        if self.enabled(record.metadata()) {
-            let logs = Arc::clone(&LOGSTORE.logs);
-            let msg = format!(
-                "[{}][{}]{}",
-                record.level(),
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-                record.args()
-            );
-            tokio::spawn(async move {
-                let mut logs = logs.lock().await;
-                logs.push(msg);
-            });
-        }
-    }
-
-    fn flush(&self) {}
-}
-
-struct LogStore {
-    logs: Arc<Mutex<Vec<String>>>,
-}
-
-impl LogStore {
-    fn new() -> LogStore {
-        LogStore { logs: Arc::new(Mutex::new(vec![])) }
-    }
 }
 
 enum AppEvent {
