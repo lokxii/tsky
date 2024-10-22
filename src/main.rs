@@ -387,13 +387,13 @@ impl App {
     }
 
     async fn render(
-        &self,
+        &mut self,
         terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let logs = Arc::clone(&LOGSTORE.logs);
         let logs = logs.lock().await;
 
-        match self.column.last() {
+        match self.column.last_mut() {
             None => {}
             Some(Column::UpdatingFeed(feed)) => {
                 let feed = Arc::clone(&feed.feed);
@@ -436,33 +436,22 @@ impl App {
     }
 
     async fn handle_events(
-        &self,
+        &mut self,
         agent: BskyAgent,
     ) -> Result<AppEvent, Box<dyn std::error::Error>> {
         if !event::poll(std::time::Duration::from_millis(500))? {
             return Ok(AppEvent::None);
         }
 
-        match self.column.last() {
-            None => Ok(AppEvent::None),
+        match self.column.last_mut() {
+            None => return Ok(AppEvent::None),
             Some(Column::UpdatingFeed(feed)) => {
-                feed.handle_input_events(agent).await
+                return feed.handle_input_events(agent).await
             }
-            Some(Column::Thread(_)) => {
-                let Event::Key(key) = event::read()? else {
-                    return Ok(AppEvent::None);
-                };
-                if key.kind != event::KeyEventKind::Press {
-                    return Ok(AppEvent::None);
-                }
-
-                if key.code == KeyCode::Backspace {
-                    return Ok(AppEvent::ColumnPopLayer);
-                } else {
-                    return Ok(AppEvent::None);
-                }
+            Some(Column::Thread(thread)) => {
+                return thread.handle_input_events().await
             }
-        }
+        };
     }
 }
 
@@ -508,6 +497,10 @@ impl ColumnStack {
 
     fn last(&self) -> Option<&Column> {
         self.stack.last()
+    }
+
+    fn last_mut(&mut self) -> Option<&mut Column> {
+        self.stack.last_mut()
     }
 }
 
@@ -699,23 +692,23 @@ impl UpdatingFeed {
                     GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
                         thread,
                     ) => {
-                        return Ok(
-                            AppEvent::ColumnNewThreadLayer(Thread {
-                                post: Post::from_post_view(&thread.post),
-                                replies: thread.replies.as_ref().map(|replies| {
-                                    replies.iter().filter_map(|reply| {
-                                        let Union::Refs(reply) = reply else {
-                                            return None;
-                                        };
-                                        if let ThreadViewPostRepliesItem::ThreadViewPost(post) = reply {
-                                            Some(Post::from_post_view(&post.post))
-                                        } else {
-                                            None
-                                        }
-                                    }).collect()
-                                })
-                                .unwrap_or_default()
-                            }));
+                        let post = Post::from_post_view(&thread.post);
+                        let replies = thread.replies.as_ref().map(|replies| {
+                            replies.iter().filter_map(|reply| {
+                                let Union::Refs(reply) = reply else {
+                                    return None;
+                                };
+                                if let ThreadViewPostRepliesItem::ThreadViewPost(post) = reply {
+                                    Some(Post::from_post_view(&post.post))
+                                } else {
+                                    None
+                                }
+                            }).collect()
+                        })
+                        .unwrap_or_default();
+                        return Ok(AppEvent::ColumnNewThreadLayer(
+                            Thread::new(post, replies),
+                        ));
                     }
                     GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
                         log::error!("Blocked thread");
@@ -1845,13 +1838,54 @@ impl External {
 //     handle: String,
 // }
 
-// Without all the reasons and reply to
 struct Thread {
     post: Post,
     replies: Vec<Post>,
+    state: ListState,
 }
 
-impl Widget for &Thread {
+impl Thread {
+    fn new(post: Post, replies: Vec<Post>) -> Thread {
+        Thread { post, replies, state: ListState::default() }
+    }
+
+    async fn handle_input_events(
+        &mut self,
+    ) -> Result<AppEvent, Box<dyn std::error::Error>> {
+        let Event::Key(key) = event::read()? else {
+            return Ok(AppEvent::None);
+        };
+        if key.kind != event::KeyEventKind::Press {
+            return Ok(AppEvent::None);
+        }
+
+        match key.code {
+            KeyCode::Backspace => return Ok(AppEvent::ColumnPopLayer),
+
+            KeyCode::Char('j') => {
+                if let None = self.state.selected {
+                    self.state.select(Some(0));
+                } else {
+                    self.state.next();
+                }
+                return Ok(AppEvent::None);
+            }
+
+            KeyCode::Char('k') => {
+                if let Some(0) = self.state.selected {
+                    self.state.select(None)
+                } else {
+                    self.state.previous();
+                }
+                return Ok(AppEvent::None);
+            }
+
+            _ => return Ok(AppEvent::None),
+        }
+    }
+}
+
+impl Widget for &mut Thread {
     fn render(
         self,
         area: ratatui::prelude::Rect,
@@ -1859,7 +1893,8 @@ impl Widget for &Thread {
     ) where
         Self: Sized,
     {
-        let post_widget = PostWidget::new(self.post.clone(), false);
+        let post_widget =
+            PostWidget::new(self.post.clone(), self.state.selected.is_none());
         let post_height = post_widget.line_count(area.width);
 
         let [post_area, _, replies_area] = Layout::vertical([
@@ -1876,7 +1911,6 @@ impl Widget for &Thread {
         let replies_block_inner = replies_block.inner(replies_area);
         replies_block.render(replies_area, buf);
 
-        let mut state = ListState::default();
         let replies = self.replies.clone();
         List::new(
             self.replies.len(),
@@ -1889,6 +1923,6 @@ impl Widget for &Thread {
                 return (item, height);
             }),
         )
-        .render(replies_block_inner, buf, &mut state);
+        .render(replies_block_inner, buf, &mut self.state);
     }
 }
