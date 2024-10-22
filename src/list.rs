@@ -83,16 +83,19 @@ where
         buf: &mut ratatui::prelude::Buffer,
         state: &mut Self::State,
     ) {
-        if self.len == 0 {
-            return;
-        }
-
         if state.selected.is_some() {
-            if state.selected.unwrap() >= self.len {
+            if self.len == 0 {
+                state.selected = None;
+                state.selected_y = None;
+            } else if state.selected.unwrap() >= self.len {
                 state.select(Some(self.len - 1));
                 state.selected_y.as_mut().map(|y| *y -= state.height as i32);
             }
         }
+        if self.len == 0 {
+            return;
+        }
+
         let mut i = state.selected.unwrap_or(0) as i32;
         let mut y = state.selected_y.unwrap_or(0);
         let mut bottom_y = 0;
