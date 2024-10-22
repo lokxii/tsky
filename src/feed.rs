@@ -1,5 +1,17 @@
+use atrium_api::{
+    app::bsky::feed::defs::{
+        FeedViewPost, FeedViewPostReasonRefs, ReplyRefParentRefs,
+    },
+    types::Union,
+};
 use itertools::Itertools;
-use ratatui::widgets::{StatefulWidget, Widget};
+use ratatui::{
+    layout::{Constraint, Layout},
+    style::{Color, Style},
+    symbols,
+    text::{Line, Span},
+    widgets::{Block, StatefulWidget, Widget},
+};
 
 use crate::{
     list::{List, ListContext, ListState},
@@ -8,14 +20,14 @@ use crate::{
 };
 
 pub struct Feed {
-    pub posts: Vec<Post>,
+    pub posts: Vec<FeedPost>,
     pub state: ListState,
 }
 
 impl Feed {
     pub async fn insert_new_posts<T>(&mut self, new_posts: T) -> bool
     where
-        T: Iterator<Item = Post> + Clone,
+        T: Iterator<Item = FeedPost> + Clone,
     {
         let new_posts = new_posts.collect::<Vec<_>>();
         if new_posts.len() == 0 {
@@ -64,7 +76,7 @@ impl Feed {
 
     pub fn append_old_posts<T>(&mut self, new_posts: T)
     where
-        T: Iterator<Item = Post> + Clone,
+        T: Iterator<Item = FeedPost> + Clone,
     {
         if self.posts.len() == 0 {
             return;
@@ -80,12 +92,12 @@ impl Feed {
         let new_view = self
             .posts
             .iter()
-            .unique_by(|p| &p.uri)
-            .map(Post::clone)
+            .unique_by(|p| &p.post.uri)
+            .map(FeedPost::clone)
             .collect::<Vec<_>>();
 
         self.state.select(selected_post.map(|post| {
-            if let Some(i) = new_view.iter().position(|p| p.uri == post.uri) {
+            if let Some(i) = new_view.iter().position(|p| p.post.uri == post.post.uri) {
                 return i;
             }
             panic!("Cannot decide which post to select after removing duplications");
@@ -108,7 +120,7 @@ impl Widget for &mut Feed {
         List::new(
             self.posts.len(),
             Box::new(move |context: ListContext| {
-                let item = PostWidget::new(
+                let item = FeedPostWidget::new(
                     posts[context.index].clone(),
                     context.is_selected,
                 );
@@ -117,5 +129,164 @@ impl Widget for &mut Feed {
             }),
         )
         .render(area, buf, &mut self.state);
+    }
+}
+
+#[derive(PartialEq, Eq, Clone)]
+pub struct RepostBy {
+    pub author: String,
+    pub handle: String,
+}
+
+#[derive(PartialEq, Eq, Clone)]
+pub struct ReplyToAuthor {
+    pub author: String,
+    pub handle: String,
+}
+
+#[derive(PartialEq, Eq, Clone)]
+pub enum Reply {
+    Author(ReplyToAuthor),
+    DeletedPost,
+    BlockedUser,
+}
+
+#[derive(Clone)]
+pub struct FeedPost {
+    pub post: Post,
+    pub reason: Option<RepostBy>,
+    pub reply_to: Option<Reply>,
+}
+
+impl FeedPost {
+    pub fn from(view: &FeedViewPost) -> FeedPost {
+        let post = Post::from(&view.post);
+
+        let reason = view.reason.as_ref().map(|r| {
+            let Union::Refs(r) = r else {
+                panic!("Unknown reason type");
+            };
+            let FeedViewPostReasonRefs::ReasonRepost(r) = r;
+            RepostBy {
+                author: r.by.display_name.clone().unwrap_or(String::new()),
+                handle: r.by.handle.to_string(),
+            }
+        });
+
+        let reply_to = view.reply.as_ref().map(|r| {
+            let Union::Refs(parent) = &r.data.parent else {
+                panic!("Unknown parent type");
+            };
+            match parent {
+                ReplyRefParentRefs::PostView(view) => {
+                    Reply::Author(ReplyToAuthor {
+                        author: view
+                            .data
+                            .author
+                            .display_name
+                            .clone()
+                            .unwrap_or("".to_string()),
+                        handle: view.data.author.handle.to_string(),
+                    })
+                }
+                ReplyRefParentRefs::NotFoundPost(_) => Reply::DeletedPost,
+                ReplyRefParentRefs::BlockedPost(_) => Reply::BlockedUser,
+            }
+        });
+
+        return FeedPost { post, reason, reply_to };
+    }
+}
+
+impl PartialEq for FeedPost {
+    fn eq(&self, other: &Self) -> bool {
+        return self.post.uri == other.post.uri && self.reason == other.reason;
+    }
+}
+
+impl Eq for FeedPost {}
+
+struct FeedPostWidget {
+    feed_post: FeedPost,
+    is_selected: bool,
+    style: Style,
+}
+
+impl FeedPostWidget {
+    fn new(feed_post: FeedPost, is_selected: bool) -> FeedPostWidget {
+        FeedPostWidget {
+            feed_post,
+            style: if is_selected {
+                Style::default().bg(Color::Rgb(45, 50, 55))
+            } else {
+                Style::default()
+            },
+            is_selected,
+        }
+    }
+
+    fn line_count(&self, width: u16) -> u16 {
+        PostWidget::new(self.feed_post.post.clone(), false, false)
+            .line_count(width)
+            + self.feed_post.reply_to.is_some() as u16
+            + self.feed_post.reason.is_some() as u16
+            + 2 // borders
+    }
+}
+
+impl Widget for FeedPostWidget {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+        let borders = Block::bordered()
+            .style(self.style)
+            .border_set(symbols::border::ROUNDED);
+        let inner_area = borders.inner(area);
+        borders.render(area, buf);
+
+        let post_widget =
+            PostWidget::new(self.feed_post.post, self.is_selected, false);
+
+        let [top_area, post_area] = Layout::vertical([
+            Constraint::Length(
+                self.feed_post.reason.is_some() as u16
+                    + self.feed_post.reply_to.is_some() as u16,
+            ),
+            Constraint::Length(post_widget.line_count(inner_area.width)),
+        ])
+        .areas(inner_area);
+
+        let [repost_area, reply_area] = Layout::vertical([
+            Constraint::Length(self.feed_post.reason.is_some() as u16),
+            Constraint::Length(self.feed_post.reply_to.is_some() as u16),
+        ])
+        .areas(top_area);
+
+        if let Some(repost) = &self.feed_post.reason {
+            Line::from(Span::styled(
+                format!("⭮ Reposted by {}", repost.author),
+                Color::Green,
+            ))
+            .render(repost_area, buf);
+        }
+
+        if let Some(reply_to) = &self.feed_post.reply_to {
+            let reply_to = match reply_to {
+                Reply::Author(a) => &a.author,
+                Reply::DeletedPost => "[deleted post]",
+                Reply::BlockedUser => "[blocked user]",
+            };
+            Line::from(Span::styled(
+                format!("⮡ Reply to {}", reply_to),
+                Color::Rgb(180, 180, 180),
+            ))
+            .render(reply_area, buf);
+        }
+
+        post_widget.render(post_area, buf);
     }
 }

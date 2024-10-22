@@ -66,8 +66,11 @@ impl Widget for &mut ThreadView {
     ) where
         Self: Sized,
     {
-        let post_widget =
-            PostWidget::new(self.post.clone(), self.state.selected.is_none());
+        let post_widget = PostWidget::new(
+            self.post.clone(),
+            self.state.selected.is_none(),
+            true,
+        );
         let post_height = post_widget.line_count(area.width);
 
         let [post_area, _, replies_area] = Layout::vertical([
@@ -91,6 +94,7 @@ impl Widget for &mut ThreadView {
                 let item = PostWidget::new(
                     replies[context.index].clone(),
                     context.is_selected,
+                    true,
                 );
                 let height = item.line_count(replies_block_inner.width) as u16;
                 return (item, height);

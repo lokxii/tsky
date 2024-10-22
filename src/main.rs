@@ -21,7 +21,7 @@ use bsky_sdk::{
     BskyAgent,
 };
 use crossterm::event::{self, Event, KeyCode};
-use feed::Feed;
+use feed::{Feed, FeedPost};
 use list::ListState;
 use logger::{LOGGER, LOGSTORE};
 use post::Post;
@@ -345,11 +345,11 @@ impl UpdatingFeed {
                     return Ok(AppEvent::None);
                 }
                 let post = &feed.posts[feed.state.selected.unwrap()];
-                if post.like.uri.is_some() {
+                if post.post.like.uri.is_some() {
                     self.request_worker_tx
                         .send(RequestMsg::UnlikePost(DeleteRecordData {
-                            post_uri: post.uri.clone(),
-                            record_uri: post.like.uri.clone().unwrap(),
+                            post_uri: post.post.uri.clone(),
+                            record_uri: post.post.like.uri.clone().unwrap(),
                         }))
                         .unwrap_or_else(|_| {
                             log::error!(
@@ -359,8 +359,8 @@ impl UpdatingFeed {
                 } else {
                     self.request_worker_tx
                         .send(RequestMsg::LikePost(CreateRecordData {
-                            post_uri: post.uri.clone(),
-                            post_cid: post.cid.clone(),
+                            post_uri: post.post.uri.clone(),
+                            post_cid: post.post.cid.clone(),
                         }))
                         .unwrap_or_else(|_| {
                             log::error!(
@@ -377,11 +377,11 @@ impl UpdatingFeed {
                     return Ok(AppEvent::None);
                 }
                 let post = &feed.posts[feed.state.selected.unwrap()];
-                if post.repost.uri.is_some() {
+                if post.post.repost.uri.is_some() {
                     self.request_worker_tx
                         .send(RequestMsg::UnrepostPost(DeleteRecordData {
-                            post_uri: post.uri.clone(),
-                            record_uri: post.repost.uri.clone().unwrap(),
+                            post_uri: post.post.uri.clone(),
+                            record_uri: post.post.repost.uri.clone().unwrap(),
                         }))
                         .unwrap_or_else(|_| {
                             log::error!(
@@ -391,8 +391,8 @@ impl UpdatingFeed {
                 } else {
                     self.request_worker_tx
                         .send(RequestMsg::RepostPost(CreateRecordData {
-                            post_uri: post.uri.clone(),
-                            post_cid: post.cid.clone(),
+                            post_uri: post.post.uri.clone(),
+                            post_cid: post.post.cid.clone(),
                         }))
                         .unwrap_or_else(|_| {
                             log::error!(
@@ -408,6 +408,7 @@ impl UpdatingFeed {
                     return Ok(AppEvent::None);
                 }
                 let post_uri = feed.posts[feed.state.selected.unwrap()]
+                    .post
                     .uri
                     .split('/')
                     .collect::<Vec<_>>();
@@ -434,7 +435,7 @@ impl UpdatingFeed {
                     atrium_api::app::bsky::feed::get_post_thread::ParametersData {
                         depth: Some(1.try_into().unwrap()),
                         parent_height: None,
-                        uri: feed.posts[feed.state.selected.unwrap()].uri.clone(),
+                        uri: feed.posts[feed.state.selected.unwrap()].post.uri.clone(),
                     }.into()).await?;
                 let Union::Refs(thread) = out.data.thread else {
                     log::error!("Unknown thread response");
@@ -445,14 +446,14 @@ impl UpdatingFeed {
                     GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
                         thread,
                     ) => {
-                        let post = Post::from_post_view(&thread.post);
+                        let post = Post::from(&thread.post);
                         let replies = thread.replies.as_ref().map(|replies| {
                             replies.iter().filter_map(|reply| {
                                 let Union::Refs(reply) = reply else {
                                     return None;
                                 };
                                 if let ThreadViewPostRepliesItem::ThreadViewPost(post) = reply {
-                                    Some(Post::from_post_view(&post.post))
+                                    Some(Post::from(&post.post))
                                 } else {
                                     None
                                 }
@@ -510,7 +511,7 @@ impl UpdatingFeed {
                     feed: posts,
                     cursor: new_cursor,
                 } = new_posts.data;
-                let new_posts = posts.iter().map(Post::from_feed_view_post);
+                let new_posts = posts.iter().map(FeedPost::from);
 
                 {
                     let mut feed = feed.lock().await;
@@ -568,10 +569,10 @@ impl UpdatingFeed {
                         let post = feed
                             .posts
                             .iter_mut()
-                            .find(|post| post.uri == data.post_uri)
+                            .find(|post| post.post.uri == data.post_uri)
                             .unwrap();
-                        post.like.uri = Some(output.uri.clone());
-                        post.like.count += 1;
+                        post.post.like.uri = Some(output.uri.clone());
+                        post.post.like.count += 1;
                         tokio::spawn(async {}); // black magic, removing this causes feed autoupdating to stop
                     }
 
@@ -589,10 +590,10 @@ impl UpdatingFeed {
                         let post = feed
                             .posts
                             .iter_mut()
-                            .find(|post| post.uri == data.post_uri)
+                            .find(|post| post.post.uri == data.post_uri)
                             .unwrap();
-                        post.like.uri = None;
-                        post.like.count -= 1;
+                        post.post.like.uri = None;
+                        post.post.like.count -= 1;
                         tokio::spawn(async {});
                     }
 
@@ -618,10 +619,10 @@ impl UpdatingFeed {
                         let post = feed
                             .posts
                             .iter_mut()
-                            .find(|post| post.uri == data.post_uri)
+                            .find(|post| post.post.uri == data.post_uri)
                             .unwrap();
-                        post.repost.uri = Some(output.uri.clone());
-                        post.repost.count += 1;
+                        post.post.repost.uri = Some(output.uri.clone());
+                        post.post.repost.count += 1;
                         tokio::spawn(async {});
                     }
 
@@ -639,10 +640,10 @@ impl UpdatingFeed {
                         let post = feed
                             .posts
                             .iter_mut()
-                            .find(|post| post.uri == data.post_uri)
+                            .find(|post| post.post.uri == data.post_uri)
                             .unwrap();
-                        post.repost.uri = None;
-                        post.repost.count -= 1;
+                        post.post.repost.uri = None;
+                        post.post.repost.count -= 1;
                         tokio::spawn(async {});
                     }
                 }
@@ -680,5 +681,5 @@ async fn get_old_posts(
     *cursor = new_cursor;
 
     let mut feed = feed.lock().await;
-    feed.append_old_posts(posts.iter().map(Post::from_feed_view_post));
+    feed.append_old_posts(posts.iter().map(FeedPost::from));
 }

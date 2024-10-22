@@ -6,19 +6,17 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 
-use crate::{
-    embed_widget::EmbedWidget,
-    post::{Post, Reply},
-};
+use crate::{embed_widget::EmbedWidget, post::Post};
 
 pub struct PostWidget {
     pub post: Post,
     pub style: Style,
     pub is_selected: bool,
+    pub has_border: bool,
 }
 
 impl PostWidget {
-    pub fn new(post: Post, is_selected: bool) -> PostWidget {
+    pub fn new(post: Post, is_selected: bool, has_border: bool) -> PostWidget {
         PostWidget {
             post,
             style: if is_selected {
@@ -27,17 +25,16 @@ impl PostWidget {
                 Style::default()
             },
             is_selected,
+            has_border,
         }
     }
 
     pub fn line_count(&self, width: u16) -> u16 {
-        self.post.reason.is_some() as u16
-            + self.post.reply_to.is_some() as u16
-            + 2 // author and date
+        2 // author and date
             + self.body_paragraph().line_count(width) as u16
             + 1 // stats
             + self.post.embed.clone().map(|e| EmbedWidget::new(e, false).line_count(width) as u16).unwrap_or(0)
-            + 2 // borders
+            + self.has_border as u16 * 2
     }
 
     pub fn body_paragraph(&self) -> Paragraph {
@@ -60,13 +57,17 @@ impl Widget for PostWidget {
     ) where
         Self: Sized,
     {
-        let borders = Block::bordered()
-            .style(self.style)
-            .border_set(symbols::border::ROUNDED);
-        let inner_area = borders.inner(area);
+        let area = if self.has_border {
+            let borders = Block::bordered()
+                .style(self.style)
+                .border_set(symbols::border::ROUNDED);
+            let inner_area = borders.inner(area);
+            borders.render(area, buf);
+            inner_area
+        } else {
+            area
+        };
         let post = &self.post;
-
-        borders.render(area, buf);
 
         let text = self.body_paragraph();
         let embed = self
@@ -75,51 +76,20 @@ impl Widget for PostWidget {
             .clone()
             .map(|e| EmbedWidget::new(e.into(), self.is_selected));
 
-        let [top_area, author_area, datetime_area, text_area, embed_area, stats_area] =
+        let [author_area, datetime_area, text_area, embed_area, stats_area] =
             Layout::vertical([
-                Constraint::Length(
-                    self.post.reason.is_some() as u16
-                        + self.post.reply_to.is_some() as u16,
-                ),
                 Constraint::Length(1),
                 Constraint::Length(1),
-                Constraint::Length(text.line_count(inner_area.width) as u16),
+                Constraint::Length(text.line_count(area.width) as u16),
                 Constraint::Length(
                     embed
                         .as_ref()
-                        .map(|e| e.line_count(inner_area.width))
+                        .map(|e| e.line_count(area.width))
                         .unwrap_or(0),
                 ),
                 Constraint::Length(1),
             ])
-            .areas(inner_area);
-
-        let [repost_area, reply_area] = Layout::vertical([
-            Constraint::Length(self.post.reason.is_some() as u16),
-            Constraint::Length(self.post.reply_to.is_some() as u16),
-        ])
-        .areas(top_area);
-
-        if let Some(repost) = &self.post.reason {
-            Line::from(Span::styled(
-                format!("⭮ Reposted by {}", repost.author),
-                Color::Green,
-            ))
-            .render(repost_area, buf);
-        }
-
-        if let Some(reply_to) = &self.post.reply_to {
-            let reply_to = match reply_to {
-                Reply::Author(a) => &a.author,
-                Reply::DeletedPost => "[deleted post]",
-                Reply::BlockedUser => "[blocked user]",
-            };
-            Line::from(Span::styled(
-                format!("⮡ Reply to {}", reply_to),
-                Color::Rgb(180, 180, 180),
-            ))
-            .render(reply_area, buf);
-        }
+            .areas(area);
 
         Line::from(
             Span::styled(post.author.clone(), Color::Cyan)
