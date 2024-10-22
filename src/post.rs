@@ -6,7 +6,7 @@ use atrium_api::{
 };
 use chrono::{DateTime, FixedOffset, Local};
 
-use crate::Embed;
+use crate::embed::Embed;
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct RepostBy {

@@ -1,37 +1,36 @@
+mod embed;
 mod list;
 mod logger;
 mod post;
 mod post_widget;
+mod thread_view;
 
 use atrium_api::{
     self,
-    app::bsky::{
-        embed::{record::ViewRecordRefs, record_with_media::ViewMediaRefs},
-        feed::{
-            defs::{PostViewEmbedRefs, ThreadViewPostRepliesItem},
-            get_post_thread::OutputThreadRefs as GetPostThreadOutput,
-            get_timeline,
-        },
+    app::bsky::feed::{
+        defs::ThreadViewPostRepliesItem,
+        get_post_thread::OutputThreadRefs as GetPostThreadOutput, get_timeline,
     },
-    types::{string::Cid, Object, Union},
+    types::{string::Cid, Union},
 };
 use bsky_sdk::{
     agent::config::{Config, FileStore},
     BskyAgent,
 };
 use crossterm::event::{self, Event, KeyCode};
+use embed::{Embed, Record};
 use itertools::Itertools;
 use list::{List, ListContext, ListState};
 use logger::{LOGGER, LOGSTORE};
-use post::{Post, Reply};
+use post::Post;
 use post_widget::PostWidget;
 use ratatui::{
-    layout::{Alignment, Constraint, Layout},
+    layout::{Constraint, Layout},
     prelude::{CrosstermBackend, StatefulWidget},
     style::{Color, Modifier, Style},
     symbols,
     text::{Line, Span},
-    widgets::{Block, Borders, Padding, Paragraph, Widget},
+    widgets::{Block, Paragraph, Widget},
     Terminal,
 };
 use std::{
@@ -42,6 +41,7 @@ use std::{
         Arc,
     },
 };
+use thread_view::ThreadView;
 use tokio::{
     process::Command,
     sync::{Mutex, MutexGuard},
@@ -126,10 +126,10 @@ async fn login() -> Result<BskyAgent, Box<dyn std::error::Error>> {
     };
 }
 
-enum AppEvent {
+pub enum AppEvent {
     None,
     Quit,
-    ColumnNewThreadLayer(Thread),
+    ColumnNewThreadLayer(ThreadView),
     ColumnPopLayer,
 }
 
@@ -231,7 +231,7 @@ macro_rules! request_retry {
 
 enum Column {
     UpdatingFeed(UpdatingFeed),
-    Thread(Thread),
+    Thread(ThreadView),
 }
 
 struct ColumnStack {
@@ -463,7 +463,7 @@ impl UpdatingFeed {
                         })
                         .unwrap_or_default();
                         return Ok(AppEvent::ColumnNewThreadLayer(
-                            Thread::new(post, replies),
+                            ThreadView::new(post, replies),
                         ));
                     }
                     GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
@@ -799,40 +799,6 @@ impl Widget for &mut Feed {
     }
 }
 
-#[derive(Clone, Debug)]
-enum Embed {
-    Images(Vec<Image>),
-    Video(Video),
-    External(External),
-    Record(Record),
-}
-
-impl Embed {
-    fn from(e: &Union<PostViewEmbedRefs>) -> Embed {
-        let Union::Refs(e) = e else {
-            panic!("Unknown embed type");
-        };
-        match e {
-            PostViewEmbedRefs::AppBskyEmbedImagesView(view) => {
-                Embed::Images(view.images.iter().map(Image::from).collect())
-            }
-            PostViewEmbedRefs::AppBskyEmbedVideoView(view) => {
-                Embed::Video(Video::from(view))
-            }
-            PostViewEmbedRefs::AppBskyEmbedExternalView(view) => {
-                Embed::External(External::from(view))
-            }
-            PostViewEmbedRefs::AppBskyEmbedRecordView(view) => {
-                Embed::Record(Record::from(&*view, None))
-            }
-            PostViewEmbedRefs::AppBskyEmbedRecordWithMediaView(view) => {
-                let media = Some(EmbededPostMedia::from(&view.media));
-                Embed::Record(Record::from(&view.record, media))
-            }
-        }
-    }
-}
-
 struct EmbedWidget {
     embed: Embed,
     style: Style,
@@ -905,65 +871,6 @@ impl Widget for EmbedWidget {
             let inner_area = borders.inner(area);
             borders.render(area, buf);
             self.non_record_paragraph().render(inner_area, buf);
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-enum Record {
-    Post(EmbededPost),
-    Blocked,
-    NotFound,
-    Detached,
-    // List(EmbededList),
-    // Generator(EmbededGenerator),
-    // Labler(EmbededLabler),
-    // StarterPack(EmbededStarterPack),
-    NotImplemented,
-}
-
-impl Record {
-    fn from(
-        view: &Object<atrium_api::app::bsky::embed::record::ViewData>,
-        media: Option<EmbededPostMedia>,
-    ) -> Record {
-        let Union::Refs(record) = &view.record else {
-            panic!("Unknown embeded record type");
-        };
-        match record {
-            ViewRecordRefs::ViewRecord(post) => {
-                let atrium_api::types::Unknown::Object(record) = &post.value
-                else {
-                    panic!("Unknown embeded post value type");
-                };
-                let ipld_core::ipld::Ipld::String(text) = &*record["text"]
-                else {
-                    panic!("embeded text is not a string");
-                };
-                let text = text.clone();
-
-                Record::Post(EmbededPost {
-                    uri: post.uri.clone(),
-                    author: post
-                        .author
-                        .display_name
-                        .clone()
-                        .unwrap_or_default(),
-                    handle: post.author.handle.to_string(),
-                    has_embed: post
-                        .embeds
-                        .as_ref()
-                        .map(|v| v.len() > 0)
-                        .unwrap_or(false),
-                    media,
-                    text,
-                })
-            }
-
-            ViewRecordRefs::ViewBlocked(_) => Record::Blocked,
-            ViewRecordRefs::ViewNotFound(_) => Record::NotFound,
-            ViewRecordRefs::ViewDetached(_) => Record::Detached,
-            _ => Record::NotImplemented,
         }
     }
 }
@@ -1099,246 +1006,5 @@ impl Widget for RecordWidget {
                 Line::from("[Not implemented]").render(area, buf);
             }
         }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct EmbededPost {
-    uri: String,
-    author: String,
-    handle: String,
-    has_embed: bool,
-    media: Option<EmbededPostMedia>,
-    text: String,
-    // label
-}
-
-#[derive(Clone, Debug)]
-enum EmbededPostMedia {
-    Images(Vec<Image>),
-    Video(Video),
-    External(External),
-}
-
-impl EmbededPostMedia {
-    fn from(
-        media: &Union<
-            atrium_api::app::bsky::embed::record_with_media::ViewMediaRefs,
-        >,
-    ) -> EmbededPostMedia {
-        let Union::Refs(media) = media else {
-            panic!("Unknown embed media type");
-        };
-        match media {
-            ViewMediaRefs::AppBskyEmbedImagesView(data) => {
-                EmbededPostMedia::Images(
-                    data.images
-                        .iter()
-                        .map(|image| Image {
-                            url: image.fullsize.clone(),
-                            alt: image.alt.clone(),
-                        })
-                        .collect(),
-                )
-            }
-            ViewMediaRefs::AppBskyEmbedVideoView(data) => {
-                EmbededPostMedia::Video(Video {
-                    m3u8: data.playlist.clone(),
-                    alt: data.alt.clone().unwrap_or_default(),
-                })
-            }
-            ViewMediaRefs::AppBskyEmbedExternalView(data) => {
-                EmbededPostMedia::External(External {
-                    url: data.external.uri.clone(),
-                    title: data.external.title.clone(),
-                    description: data.external.description.clone(),
-                })
-            }
-        }
-    }
-}
-
-impl Into<Embed> for EmbededPostMedia {
-    fn into(self) -> Embed {
-        match self {
-            Self::Images(images) => Embed::Images(images),
-            Self::Video(video) => Embed::Video(video),
-            Self::External(external) => Embed::External(external),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct Image {
-    alt: String,
-    url: String, // full size image
-}
-
-impl Image {
-    fn from(
-        image: &Object<atrium_api::app::bsky::embed::images::ViewImageData>,
-    ) -> Image {
-        Image { url: image.fullsize.clone(), alt: image.alt.clone() }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct Video {
-    alt: String,
-    m3u8: String,
-}
-
-impl Video {
-    fn from(
-        video: &Object<atrium_api::app::bsky::embed::video::ViewData>,
-    ) -> Video {
-        Video {
-            alt: video.alt.clone().unwrap_or_default(),
-            m3u8: video.playlist.clone(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct External {
-    url: String,
-    title: String,
-    description: String,
-}
-
-impl External {
-    fn from(
-        external: &Object<atrium_api::app::bsky::embed::external::ViewData>,
-    ) -> External {
-        External {
-            url: external.external.uri.clone(),
-            title: external.external.title.clone(),
-            description: external.external.description.clone(),
-        }
-    }
-}
-
-// #[derive(Clone)]
-// struct EmbededList {
-//     uri: String,
-//     name: String,
-//     description: String,
-//     author: String,
-//     handle: String,
-// }
-//
-// #[derive(Clone)]
-// struct EmbededGenerator {
-//     uri: String,
-//     name: String,
-//     description: String,
-//     author: String,
-//     handle: String,
-//     // label
-// }
-//
-// #[derive(Clone)]
-// struct EmbededLabler {
-//     // No name?
-//     uri: String,
-//     // name: String,
-//     // description: String,
-//     author: String,
-//     handle: String,
-// }
-//
-// #[derive(Clone)]
-// struct EmbededStarterPack {
-//     uri: String,
-//     author: String,
-//     handle: String,
-// }
-
-struct Thread {
-    post: Post,
-    replies: Vec<Post>,
-    state: ListState,
-}
-
-impl Thread {
-    fn new(post: Post, replies: Vec<Post>) -> Thread {
-        Thread { post, replies, state: ListState::default() }
-    }
-
-    async fn handle_input_events(
-        &mut self,
-    ) -> Result<AppEvent, Box<dyn std::error::Error>> {
-        let Event::Key(key) = event::read()? else {
-            return Ok(AppEvent::None);
-        };
-        if key.kind != event::KeyEventKind::Press {
-            return Ok(AppEvent::None);
-        }
-
-        match key.code {
-            KeyCode::Backspace => return Ok(AppEvent::ColumnPopLayer),
-
-            KeyCode::Char('j') => {
-                if let None = self.state.selected {
-                    self.state.select(Some(0));
-                } else {
-                    self.state.next();
-                }
-                return Ok(AppEvent::None);
-            }
-
-            KeyCode::Char('k') => {
-                if let Some(0) = self.state.selected {
-                    self.state.select(None)
-                } else {
-                    self.state.previous();
-                }
-                return Ok(AppEvent::None);
-            }
-
-            _ => return Ok(AppEvent::None),
-        }
-    }
-}
-
-impl Widget for &mut Thread {
-    fn render(
-        self,
-        area: ratatui::prelude::Rect,
-        buf: &mut ratatui::prelude::Buffer,
-    ) where
-        Self: Sized,
-    {
-        let post_widget =
-            PostWidget::new(self.post.clone(), self.state.selected.is_none());
-        let post_height = post_widget.line_count(area.width);
-
-        let [post_area, _, replies_area] = Layout::vertical([
-            Constraint::Length(post_height),
-            Constraint::Length(1),
-            Constraint::Fill(1),
-        ])
-        .areas(area);
-
-        post_widget.render(post_area, buf);
-
-        let replies_block =
-            Block::new().borders(Borders::TOP).padding(Padding::uniform(1));
-        let replies_block_inner = replies_block.inner(replies_area);
-        replies_block.render(replies_area, buf);
-
-        let replies = self.replies.clone();
-        List::new(
-            self.replies.len(),
-            Box::new(move |context: ListContext| {
-                let item = PostWidget::new(
-                    replies[context.index].clone(),
-                    context.is_selected,
-                );
-                let height = item.line_count(replies_block_inner.width) as u16;
-                return (item, height);
-            }),
-        )
-        .render(replies_block_inner, buf, &mut self.state);
     }
 }
