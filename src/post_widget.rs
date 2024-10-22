@@ -7,8 +7,8 @@ use ratatui::{
 };
 
 use crate::{
+    embed_widget::EmbedWidget,
     post::{Post, Reply},
-    EmbedWidget,
 };
 
 pub struct PostWidget {

@@ -4,6 +4,7 @@ mod list;
 mod logger;
 mod post;
 mod post_widget;
+mod record_widget;
 mod thread_view;
 
 use atrium_api::{
