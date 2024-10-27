@@ -223,7 +223,7 @@ impl App {
                 return feed.handle_input_events(agent).await
             }
             Some(Column::Thread(thread)) => {
-                return thread.handle_input_events().await
+                return thread.handle_input_events(agent).await
             }
         };
     }
