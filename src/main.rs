@@ -4,6 +4,7 @@ mod feed;
 mod list;
 mod logger;
 mod post;
+mod post_manager;
 mod post_widget;
 mod record_widget;
 mod thread_view;
@@ -14,7 +15,7 @@ use atrium_api::{
         defs::ThreadViewPostRepliesItem,
         get_post_thread::OutputThreadRefs as GetPostThreadOutput, get_timeline,
     },
-    types::{string::Cid, Union},
+    types::Union,
 };
 use bsky_sdk::{
     agent::config::{Config, FileStore},
@@ -22,9 +23,11 @@ use bsky_sdk::{
 };
 use crossterm::event::{self, Event, KeyCode};
 use feed::{Feed, FeedPost};
+use lazy_static::lazy_static;
 use list::ListState;
 use logger::{LOGGER, LOGSTORE};
 use post::Post;
+use post_manager::PostManager;
 use ratatui::{
     layout::{Constraint, Layout},
     prelude::CrosstermBackend,
@@ -35,7 +38,7 @@ use std::{
     io::Stdout,
     sync::{
         mpsc::{self, Receiver, Sender},
-        Arc,
+        Arc, RwLock,
     },
 };
 use thread_view::ThreadView;
@@ -43,6 +46,17 @@ use tokio::{
     process::Command,
     sync::{Mutex, MutexGuard},
 };
+
+lazy_static! {
+    static ref POST_MANAGER: RwLock<PostManager> =
+        RwLock::new(PostManager::new());
+}
+
+macro_rules! post_manager_tx {
+    () => {
+        POST_MANAGER.read().unwrap().tx.as_ref().unwrap()
+    };
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -61,6 +75,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let feed = UpdatingFeed::new(tx);
     feed.spawn_feed_autoupdate(agent.clone());
     feed.spawn_request_worker(agent.clone(), rx);
+
+    terminal
+        .draw(|f| f.render_widget("Starting post manager worker", f.area()))?;
+    {
+        POST_MANAGER.write().unwrap().spawn_worker(agent.clone());
+    }
 
     let mut app = App::new(ColumnStack::from(vec![Column::UpdatingFeed(feed)]));
 
@@ -92,6 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
     }
 
+    post_manager_tx!().send(post_manager::RequestMsg::Close)?;
     ratatui::restore();
     agent.to_config().await.save(&FileStore::new("session.json")).await?;
     return Ok(());
@@ -259,21 +280,7 @@ impl ColumnStack {
 
 enum RequestMsg {
     OldPost,
-    LikePost(CreateRecordData),
-    UnlikePost(DeleteRecordData),
-    RepostPost(CreateRecordData),
-    UnrepostPost(DeleteRecordData),
     Close,
-}
-
-struct CreateRecordData {
-    post_uri: String,
-    post_cid: Cid,
-}
-
-struct DeleteRecordData {
-    post_uri: String,
-    record_uri: String,
 }
 
 struct UpdatingFeed {
@@ -345,23 +352,29 @@ impl UpdatingFeed {
                     return Ok(AppEvent::None);
                 }
                 let post = &feed.posts[feed.state.selected.unwrap()];
-                if post.post.like.uri.is_some() {
-                    self.request_worker_tx
-                        .send(RequestMsg::UnlikePost(DeleteRecordData {
-                            post_uri: post.post.uri.clone(),
-                            record_uri: post.post.like.uri.clone().unwrap(),
-                        }))
+                let post =
+                    POST_MANAGER.read().unwrap().at(&post.post_uri).unwrap();
+                if post.like.uri.is_some() {
+                    post_manager_tx!()
+                        .send(post_manager::RequestMsg::UnlikePost(
+                            post_manager::DeleteRecordData {
+                                post_uri: post.uri.clone(),
+                                record_uri: post.like.uri.clone().unwrap(),
+                            },
+                        ))
                         .unwrap_or_else(|_| {
                             log::error!(
                                 "Cannot send message to worker unliking post"
                             );
                         });
                 } else {
-                    self.request_worker_tx
-                        .send(RequestMsg::LikePost(CreateRecordData {
-                            post_uri: post.post.uri.clone(),
-                            post_cid: post.post.cid.clone(),
-                        }))
+                    post_manager_tx!()
+                        .send(post_manager::RequestMsg::LikePost(
+                            post_manager::CreateRecordData {
+                                post_uri: post.uri.clone(),
+                                post_cid: post.cid.clone(),
+                            },
+                        ))
                         .unwrap_or_else(|_| {
                             log::error!(
                                 "Cannot send message to worker unliking post"
@@ -377,23 +390,29 @@ impl UpdatingFeed {
                     return Ok(AppEvent::None);
                 }
                 let post = &feed.posts[feed.state.selected.unwrap()];
-                if post.post.repost.uri.is_some() {
-                    self.request_worker_tx
-                        .send(RequestMsg::UnrepostPost(DeleteRecordData {
-                            post_uri: post.post.uri.clone(),
-                            record_uri: post.post.repost.uri.clone().unwrap(),
-                        }))
+                let post =
+                    POST_MANAGER.read().unwrap().at(&post.post_uri).unwrap();
+                if post.repost.uri.is_some() {
+                    post_manager_tx!()
+                        .send(post_manager::RequestMsg::UnrepostPost(
+                            post_manager::DeleteRecordData {
+                                post_uri: post.uri.clone(),
+                                record_uri: post.repost.uri.clone().unwrap(),
+                            },
+                        ))
                         .unwrap_or_else(|_| {
                             log::error!(
                                 "Cannot send message to worker repost post"
                             );
                         });
                 } else {
-                    self.request_worker_tx
-                        .send(RequestMsg::RepostPost(CreateRecordData {
-                            post_uri: post.post.uri.clone(),
-                            post_cid: post.post.cid.clone(),
-                        }))
+                    post_manager_tx!()
+                        .send(post_manager::RequestMsg::RepostPost(
+                            post_manager::CreateRecordData {
+                                post_uri: post.uri.clone(),
+                                post_cid: post.cid.clone(),
+                            },
+                        ))
                         .unwrap_or_else(|_| {
                             log::error!(
                                 "Cannot send message to worker unrepost post"
@@ -408,8 +427,7 @@ impl UpdatingFeed {
                     return Ok(AppEvent::None);
                 }
                 let post_uri = feed.posts[feed.state.selected.unwrap()]
-                    .post
-                    .uri
+                    .post_uri
                     .split('/')
                     .collect::<Vec<_>>();
                 let author = post_uri[2];
@@ -435,7 +453,7 @@ impl UpdatingFeed {
                     atrium_api::app::bsky::feed::get_post_thread::ParametersData {
                         depth: Some(1.try_into().unwrap()),
                         parent_height: None,
-                        uri: feed.posts[feed.state.selected.unwrap()].post.uri.clone(),
+                        uri: feed.posts[feed.state.selected.unwrap()].post_uri.clone(),
                     }.into()).await?;
                 let Union::Refs(thread) = out.data.thread else {
                     log::error!("Unknown thread response");
@@ -545,106 +563,6 @@ impl UpdatingFeed {
                             cursor.lock().await,
                         )
                         .await;
-                    }
-
-                    RequestMsg::LikePost(data) => {
-                        let Some(output) = request_retry!(3, {
-                            agent.create_record(
-                                atrium_api::app::bsky::feed::like::RecordData {
-                                    created_at: atrium_api::types::string::Datetime::now(),
-                                    subject: atrium_api::com::atproto::repo::strong_ref::MainData {
-                                        cid: data.post_cid.clone(),
-                                        uri: data.post_uri.clone(),
-                                    }.into()
-                                },
-                            ).await
-                        }) else {
-                            log::error!(
-                                "Could not post create record liking post"
-                            );
-                            continue;
-                        };
-
-                        let mut feed = feed.lock().await;
-                        let post = feed
-                            .posts
-                            .iter_mut()
-                            .find(|post| post.post.uri == data.post_uri)
-                            .unwrap();
-                        post.post.like.uri = Some(output.uri.clone());
-                        post.post.like.count += 1;
-                        tokio::spawn(async {}); // black magic, removing this causes feed autoupdating to stop
-                    }
-
-                    RequestMsg::UnlikePost(data) => {
-                        let Some(_) = request_retry!(3, {
-                            agent.delete_record(data.record_uri.clone()).await
-                        }) else {
-                            log::error!(
-                                "Could not post delete record unliking post"
-                            );
-                            continue;
-                        };
-
-                        let mut feed = feed.lock().await;
-                        let post = feed
-                            .posts
-                            .iter_mut()
-                            .find(|post| post.post.uri == data.post_uri)
-                            .unwrap();
-                        post.post.like.uri = None;
-                        post.post.like.count -= 1;
-                        tokio::spawn(async {});
-                    }
-
-                    RequestMsg::RepostPost(data) => {
-                        let Some(output) = request_retry!(3, {
-                            agent.create_record(
-                                atrium_api::app::bsky::feed::repost::RecordData {
-                                    created_at: atrium_api::types::string::Datetime::now(),
-                                    subject: atrium_api::com::atproto::repo::strong_ref::MainData {
-                                        cid: data.post_cid.clone(),
-                                        uri: data.post_uri.clone(),
-                                    }.into()
-                                }
-                            ).await
-                        }) else {
-                            log::error!(
-                                "Could not post create record reposting post"
-                            );
-                            continue;
-                        };
-
-                        let mut feed = feed.lock().await;
-                        let post = feed
-                            .posts
-                            .iter_mut()
-                            .find(|post| post.post.uri == data.post_uri)
-                            .unwrap();
-                        post.post.repost.uri = Some(output.uri.clone());
-                        post.post.repost.count += 1;
-                        tokio::spawn(async {});
-                    }
-
-                    RequestMsg::UnrepostPost(data) => {
-                        let Some(_) = request_retry!(3, {
-                            agent.delete_record(data.record_uri.clone()).await
-                        }) else {
-                            log::error!(
-                                "Could not post delete record unreposting post"
-                            );
-                            continue;
-                        };
-
-                        let mut feed = feed.lock().await;
-                        let post = feed
-                            .posts
-                            .iter_mut()
-                            .find(|post| post.post.uri == data.post_uri)
-                            .unwrap();
-                        post.post.repost.uri = None;
-                        post.post.repost.count -= 1;
-                        tokio::spawn(async {});
                     }
                 }
             }

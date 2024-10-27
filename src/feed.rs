@@ -17,6 +17,7 @@ use crate::{
     list::{List, ListContext, ListState},
     post::Post,
     post_widget::PostWidget,
+    POST_MANAGER,
 };
 
 pub struct Feed {
@@ -92,12 +93,12 @@ impl Feed {
         let new_view = self
             .posts
             .iter()
-            .unique_by(|p| &p.post.uri)
+            .unique_by(|p| &p.post_uri)
             .map(FeedPost::clone)
             .collect::<Vec<_>>();
 
         self.state.select(selected_post.map(|post| {
-            if let Some(i) = new_view.iter().position(|p| p.post.uri == post.post.uri) {
+            if let Some(i) = new_view.iter().position(|p| p.post_uri == post.post_uri) {
                 return i;
             }
             panic!("Cannot decide which post to select after removing duplications");
@@ -153,7 +154,7 @@ pub enum Reply {
 
 #[derive(Clone)]
 pub struct FeedPost {
-    pub post: Post,
+    pub post_uri: String,
     pub reason: Option<RepostBy>,
     pub reply_to: Option<Reply>,
 }
@@ -161,6 +162,8 @@ pub struct FeedPost {
 impl FeedPost {
     pub fn from(view: &FeedViewPost) -> FeedPost {
         let post = Post::from(&view.post);
+        let uri = post.uri.clone();
+        POST_MANAGER.read().unwrap().insert(post);
 
         let reason = view.reason.as_ref().map(|r| {
             let Union::Refs(r) = r else {
@@ -194,13 +197,13 @@ impl FeedPost {
             }
         });
 
-        return FeedPost { post, reason, reply_to };
+        return FeedPost { post_uri: uri, reason, reply_to };
     }
 }
 
 impl PartialEq for FeedPost {
     fn eq(&self, other: &Self) -> bool {
-        return self.post.uri == other.post.uri && self.reason == other.reason;
+        return self.post_uri == other.post_uri && self.reason == other.reason;
     }
 }
 
@@ -226,8 +229,9 @@ impl FeedPostWidget {
     }
 
     fn line_count(&self, width: u16) -> u16 {
-        PostWidget::new(self.feed_post.post.clone(), false, false)
-            .line_count(width)
+        let post =
+            POST_MANAGER.read().unwrap().at(&self.feed_post.post_uri).unwrap();
+        PostWidget::new(post, false, false).line_count(width)
             + self.feed_post.reply_to.is_some() as u16
             + self.feed_post.reason.is_some() as u16
             + 2 // borders
@@ -248,8 +252,9 @@ impl Widget for FeedPostWidget {
         let inner_area = borders.inner(area);
         borders.render(area, buf);
 
-        let post_widget =
-            PostWidget::new(self.feed_post.post, self.is_selected, false);
+        let post =
+            POST_MANAGER.read().unwrap().at(&self.feed_post.post_uri).unwrap();
+        let post_widget = PostWidget::new(post, self.is_selected, false);
 
         let [top_area, post_area] = Layout::vertical([
             Constraint::Length(
