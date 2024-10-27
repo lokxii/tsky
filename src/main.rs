@@ -229,24 +229,6 @@ impl App {
     }
 }
 
-macro_rules! request_retry {
-    ($retry:expr, $request:expr) => {{
-        let mut count = 0;
-        loop {
-            let r = $request;
-            match r {
-                Ok(output) => break Some(output),
-                Err(_) => {
-                    count += 1;
-                    if count == $retry {
-                        break None;
-                    }
-                }
-            }
-        }
-    }};
-}
-
 enum Column {
     UpdatingFeed(UpdatingFeed),
     Thread(ThreadView),
