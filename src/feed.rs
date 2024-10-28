@@ -45,10 +45,11 @@ impl Feed {
         let new_last = new_posts.last().unwrap();
         let Some(overlap_idx) = self.posts.iter().position(|p| p == new_last)
         else {
-            self.posts = new_posts;
-            self.state.select(Some(0));
-            self.remove_duplicate();
-            return true;
+            panic!("Why?");
+            // self.posts = new_posts;
+            // self.state.select(Some(0));
+            // self.remove_duplicate();
+            // return true;
         };
 
         let new_posts = new_posts
