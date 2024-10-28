@@ -15,6 +15,7 @@ use ratatui::{
 };
 
 use crate::{
+    embed::Embed,
     list::{List, ListContext, ListState},
     post::Post,
     post_manager, post_manager_tx,
@@ -183,15 +184,23 @@ impl ThreadView {
             }
 
             KeyCode::Enter => {
-                if self.state.selected.is_none() {
-                    return Ok(AppEvent::None);
-                }
+                let uri = if self.state.selected.is_none() {
+                    let post = post_manager!().at(&self.post_uri).unwrap();
+                    let Some(Embed::Record(crate::embed::Record::Post(post))) =
+                        post.embed
+                    else {
+                        return Ok(AppEvent::None);
+                    };
+                    post.uri
+                } else {
+                    self.replies[self.state.selected.unwrap()].clone()
+                };
 
                 let out = agent.api.app.bsky.feed.get_post_thread(
                     atrium_api::app::bsky::feed::get_post_thread::ParametersData {
                         depth: Some(1.try_into().unwrap()),
                         parent_height: None,
-                        uri: self.replies[self.state.selected.unwrap()].clone(),
+                        uri,
                     }.into()).await?;
                 let Union::Refs(thread) = out.data.thread else {
                     log::error!("Unknown thread response");
