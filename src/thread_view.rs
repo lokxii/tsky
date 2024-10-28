@@ -23,9 +23,9 @@ use crate::{
 };
 
 pub struct ThreadView {
-    pub post_uri: String,
-    pub replies: Vec<String>,
-    pub state: ListState,
+    post_uri: String,
+    replies: Vec<String>,
+    state: ListState,
 }
 
 impl ThreadView {

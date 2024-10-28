@@ -9,10 +9,10 @@ use ratatui::{
 use crate::{embed_widget::EmbedWidget, post::Post};
 
 pub struct PostWidget {
-    pub post: Post,
-    pub style: Style,
-    pub is_selected: bool,
-    pub has_border: bool,
+    post: Post,
+    style: Style,
+    is_selected: bool,
+    has_border: bool,
 }
 
 impl PostWidget {
@@ -37,7 +37,7 @@ impl PostWidget {
             + self.has_border as u16 * 2
     }
 
-    pub fn body_paragraph(&self) -> Paragraph {
+    fn body_paragraph(&self) -> Paragraph {
         Paragraph::new(
             self.post
                 .text

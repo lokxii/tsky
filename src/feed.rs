@@ -138,13 +138,13 @@ pub struct RepostBy {
     pub handle: String,
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Clone)]
 pub struct ReplyToAuthor {
     pub author: String,
     pub handle: String,
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Clone)]
 pub enum Reply {
     Author(ReplyToAuthor),
     DeletedPost,

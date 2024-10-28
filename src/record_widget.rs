@@ -9,9 +9,9 @@ use ratatui::{
 use crate::{embed::Record, embed_widget::EmbedWidget};
 
 pub struct RecordWidget {
-    pub record: Record,
-    pub style: Style,
-    pub is_selected: bool,
+    record: Record,
+    style: Style,
+    is_selected: bool,
 }
 
 impl RecordWidget {
