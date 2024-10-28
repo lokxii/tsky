@@ -1,3 +1,4 @@
+mod app;
 mod embed;
 mod embed_widget;
 mod feed;
@@ -9,6 +10,7 @@ mod post_widget;
 mod record_widget;
 mod thread_view;
 
+use app::{App, AppEvent};
 use atrium_api::{
     self,
     app::bsky::feed::{
@@ -25,17 +27,11 @@ use crossterm::event::{self, Event, KeyCode};
 use feed::{Feed, FeedPost};
 use lazy_static::lazy_static;
 use list::ListState;
-use logger::{LOGGER, LOGSTORE};
+use logger::LOGGER;
 use post::Post;
 use post_manager::PostManager;
-use ratatui::{
-    layout::{Constraint, Layout},
-    prelude::CrosstermBackend,
-    Terminal,
-};
 use std::{
     env,
-    io::Stdout,
     sync::{
         mpsc::{self, Receiver, Sender},
         Arc, RwLock,
@@ -136,91 +132,6 @@ async fn login() -> Result<BskyAgent, Box<dyn std::error::Error>> {
             return Ok(agent);
         }
     };
-}
-
-pub enum AppEvent {
-    None,
-    Quit,
-    ColumnNewThreadLayer(ThreadView),
-    ColumnPopLayer,
-}
-
-struct App {
-    column: ColumnStack,
-}
-
-impl App {
-    fn new(column: ColumnStack) -> App {
-        App { column }
-    }
-
-    async fn render(
-        &mut self,
-        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let logs = Arc::clone(&LOGSTORE.logs);
-        let logs = logs.lock().await;
-
-        match self.column.last_mut() {
-            None => {}
-            Some(Column::UpdatingFeed(feed)) => {
-                let feed = Arc::clone(&feed.feed);
-                let mut feed = feed.lock().await;
-
-                terminal.draw(|f| {
-                    let [main_area, log_area] = Layout::vertical([
-                        Constraint::Fill(1),
-                        Constraint::Length(1),
-                    ])
-                    .areas(f.area());
-                    f.render_widget(&mut *feed, main_area);
-
-                    f.render_widget(
-                        String::from("log: ")
-                            + logs.last().unwrap_or(&String::new()),
-                        log_area,
-                    );
-                })?;
-            }
-            Some(Column::Thread(thread)) => {
-                terminal.draw(|f| {
-                    let [main_area, log_area] = Layout::vertical([
-                        Constraint::Fill(1),
-                        Constraint::Length(1),
-                    ])
-                    .areas(f.area());
-                    f.render_widget(thread, main_area);
-
-                    f.render_widget(
-                        String::from("log: ")
-                            + logs.last().unwrap_or(&String::new()),
-                        log_area,
-                    );
-                })?;
-            }
-        }
-
-        return Ok(());
-    }
-
-    async fn handle_events(
-        &mut self,
-        agent: BskyAgent,
-    ) -> Result<AppEvent, Box<dyn std::error::Error>> {
-        if !event::poll(std::time::Duration::from_millis(500))? {
-            return Ok(AppEvent::None);
-        }
-
-        match self.column.last_mut() {
-            None => return Ok(AppEvent::None),
-            Some(Column::UpdatingFeed(feed)) => {
-                return feed.handle_input_events(agent).await
-            }
-            Some(Column::Thread(thread)) => {
-                return thread.handle_input_events(agent).await
-            }
-        };
-    }
 }
 
 enum Column {
