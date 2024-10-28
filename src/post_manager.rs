@@ -2,13 +2,14 @@ use atrium_api::types::string::Cid;
 use bsky_sdk::BskyAgent;
 use std::{
     collections::HashMap,
+    process::Command,
     sync::{
         mpsc::{self, Sender},
         Arc,
     },
 };
 
-use crate::post::Post;
+use crate::{embed::Embed, post::Post};
 
 pub struct DeleteRecordData {
     pub post_uri: String,
@@ -25,6 +26,7 @@ pub enum RequestMsg {
     UnlikePost(DeleteRecordData),
     RepostPost(CreateRecordData),
     UnrepostPost(DeleteRecordData),
+    OpenMedia(String),
     Close,
 }
 
@@ -183,6 +185,51 @@ impl PostManager {
                         post.repost.uri = None;
                         post.repost.count -= 1;
                         tokio::spawn(async {});
+                    }
+
+                    RequestMsg::OpenMedia(uri) => {
+                        let posts = posts.lock().unwrap();
+                        let Some(post) = posts.get(&uri) else {
+                            log::error!("Could not find post in post manager");
+                            continue;
+                        };
+
+                        if post.embed.is_none() {
+                            continue;
+                        }
+                        match post.embed.as_ref().unwrap() {
+                            Embed::Record(_) => continue,
+
+                            Embed::Images(images) => {
+                                images.iter().for_each(|image| {
+                                    if let Result::Err(e) =
+                                        Command::new("xdg-open")
+                                            .arg(image.url.clone())
+                                            .spawn()
+                                    {
+                                        log::error!("{:?}", e);
+                                    }
+                                });
+                            }
+
+                            Embed::Video(video) => {
+                                if let Result::Err(e) = Command::new("vlc")
+                                    .arg(video.m3u8.clone())
+                                    .spawn()
+                                {
+                                    log::error!("{:?}", e);
+                                }
+                            }
+
+                            Embed::External(external) => {
+                                if let Result::Err(e) = Command::new("xdg-open")
+                                    .arg(external.url.clone())
+                                    .spawn()
+                                {
+                                    log::error!("{:?}", e);
+                                }
+                            }
+                        }
                     }
                 }
             }

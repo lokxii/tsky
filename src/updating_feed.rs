@@ -189,6 +189,19 @@ impl UpdatingFeed {
                 return Ok(AppEvent::None);
             }
 
+            KeyCode::Char('m') => {
+                if feed.state.selected.is_none() {
+                    return Ok(AppEvent::None);
+                }
+
+                let uri =
+                    feed.posts[feed.state.selected.unwrap()].post_uri.clone();
+                post_manager_tx!()
+                    .send(post_manager::RequestMsg::OpenMedia(uri))?;
+
+                return Ok(AppEvent::None);
+            }
+
             KeyCode::Enter => {
                 if feed.state.selected.is_none() {
                     return Ok(AppEvent::None);

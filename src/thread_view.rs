@@ -170,6 +170,18 @@ impl ThreadView {
                 return Ok(AppEvent::None);
             }
 
+            KeyCode::Char('m') => {
+                let uri = self
+                    .state
+                    .selected
+                    .map(|i| self.replies[i].clone())
+                    .unwrap_or(self.post_uri.clone());
+                post_manager_tx!()
+                    .send(post_manager::RequestMsg::OpenMedia(uri))?;
+
+                return Ok(AppEvent::None);
+            }
+
             KeyCode::Enter => {
                 if self.state.selected.is_none() {
                     return Ok(AppEvent::None);
