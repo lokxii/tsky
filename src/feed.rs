@@ -138,7 +138,7 @@ pub struct RepostBy {
     pub handle: String,
 }
 
-#[derive(Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct ReplyToAuthor {
     pub author: String,
     pub handle: String,
