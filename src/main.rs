@@ -52,12 +52,6 @@ lazy_static! {
         RwLock::new(PostManager::new());
 }
 
-macro_rules! post_manager_tx {
-    () => {
-        POST_MANAGER.read().unwrap().tx.as_ref().unwrap()
-    };
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::set_logger(&LOGGER).unwrap();

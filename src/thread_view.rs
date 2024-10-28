@@ -17,9 +17,9 @@ use ratatui::{
 use crate::{
     list::{List, ListContext, ListState},
     post::Post,
-    post_manager,
+    post_manager, post_manager_tx,
     post_widget::PostWidget,
-    AppEvent, POST_MANAGER,
+    AppEvent,
 };
 
 pub struct ThreadView {
@@ -28,19 +28,13 @@ pub struct ThreadView {
     pub state: ListState,
 }
 
-macro_rules! post_manager_tx {
-    () => {
-        POST_MANAGER.read().unwrap().tx.as_ref().unwrap()
-    };
-}
-
 impl ThreadView {
     pub fn new(post: Post, replies: Vec<Post>) -> ThreadView {
         let post_uri = post.uri.clone();
-        POST_MANAGER.read().unwrap().insert(post);
+        post_manager!().insert(post);
 
         let reply_uri = replies.iter().map(|r| r.uri.clone()).collect();
-        POST_MANAGER.read().unwrap().append(replies);
+        post_manager!().append(replies);
         ThreadView { post_uri, replies: reply_uri, state: ListState::default() }
     }
 
@@ -78,9 +72,7 @@ impl ThreadView {
 
             // Like
             KeyCode::Char(' ') => {
-                let post = POST_MANAGER
-                    .read()
-                    .unwrap()
+                let post = post_manager!()
                     .at(self
                         .state
                         .selected
@@ -119,9 +111,7 @@ impl ThreadView {
 
             // Repost
             KeyCode::Char('o') => {
-                let post = POST_MANAGER
-                    .read()
-                    .unwrap()
+                let post = post_manager!()
                     .at(self
                         .state
                         .selected
@@ -242,7 +232,7 @@ impl Widget for &mut ThreadView {
     ) where
         Self: Sized,
     {
-        let post = POST_MANAGER.read().unwrap().at(&self.post_uri).unwrap();
+        let post = post_manager!().at(&self.post_uri).unwrap();
         let post_widget =
             PostWidget::new(post, self.state.selected.is_none(), true);
         let post_height = post_widget.line_count(area.width);
@@ -265,11 +255,7 @@ impl Widget for &mut ThreadView {
         List::new(
             self.replies.len(),
             Box::new(move |context: ListContext| {
-                let post = POST_MANAGER
-                    .read()
-                    .unwrap()
-                    .at(&replies[context.index])
-                    .unwrap();
+                let post = post_manager!().at(&replies[context.index]).unwrap();
                 let item = PostWidget::new(post, context.is_selected, true);
                 let height = item.line_count(replies_block_inner.width) as u16;
                 return (item, height);

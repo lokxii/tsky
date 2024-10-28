@@ -189,3 +189,17 @@ impl PostManager {
         });
     }
 }
+
+#[macro_export]
+macro_rules! post_manager {
+    () => {
+        crate::POST_MANAGER.read().unwrap()
+    };
+}
+
+#[macro_export]
+macro_rules! post_manager_tx {
+    () => {
+        crate::POST_MANAGER.read().unwrap().tx.as_ref().unwrap()
+    };
+}

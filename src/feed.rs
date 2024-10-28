@@ -16,8 +16,8 @@ use ratatui::{
 use crate::{
     list::{List, ListContext, ListState},
     post::Post,
+    post_manager,
     post_widget::PostWidget,
-    POST_MANAGER,
 };
 
 pub struct Feed {
@@ -163,7 +163,7 @@ impl FeedPost {
     pub fn from(view: &FeedViewPost) -> FeedPost {
         let post = Post::from(&view.post);
         let uri = post.uri.clone();
-        POST_MANAGER.read().unwrap().insert(post);
+        post_manager!().insert(post);
 
         let reason = view.reason.as_ref().map(|r| {
             let Union::Refs(r) = r else {
@@ -229,8 +229,7 @@ impl FeedPostWidget {
     }
 
     fn line_count(&self, width: u16) -> u16 {
-        let post =
-            POST_MANAGER.read().unwrap().at(&self.feed_post.post_uri).unwrap();
+        let post = post_manager!().at(&self.feed_post.post_uri).unwrap();
         PostWidget::new(post, false, false).line_count(width)
             + self.feed_post.reply_to.is_some() as u16
             + self.feed_post.reason.is_some() as u16
@@ -252,8 +251,7 @@ impl Widget for FeedPostWidget {
         let inner_area = borders.inner(area);
         borders.render(area, buf);
 
-        let post =
-            POST_MANAGER.read().unwrap().at(&self.feed_post.post_uri).unwrap();
+        let post = post_manager!().at(&self.feed_post.post_uri).unwrap();
         let post_widget = PostWidget::new(post, self.is_selected, false);
 
         let [top_area, post_area] = Layout::vertical([
