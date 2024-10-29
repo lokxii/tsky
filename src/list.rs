@@ -1,5 +1,6 @@
 use ratatui::{
     layout::Position,
+    text::Text,
     widgets::{StatefulWidget, Widget},
 };
 
@@ -146,6 +147,17 @@ where
                 area,
                 buf,
             );
+            if i != self.len as i32 - 1 {
+                Text::from("│").render(
+                    ratatui::layout::Rect {
+                        x: area.left() + 1,
+                        y: (area.top() as i32 + y + height as i32 - 1) as u16,
+                        width: 1,
+                        height: 1,
+                    },
+                    buf,
+                );
+            }
             i -= 1;
         }
 
@@ -167,6 +179,17 @@ where
                 area,
                 buf,
             );
+            if i != self.len as usize - 1 {
+                Text::from("│").render(
+                    ratatui::layout::Rect {
+                        x: area.left() + 1,
+                        y: area.top() + y + height - 1,
+                        width: 1,
+                        height: 1,
+                    },
+                    buf,
+                );
+            }
             i += 1;
             y += height;
         }

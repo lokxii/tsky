@@ -135,7 +135,6 @@ impl Widget for &mut Feed {
                 return (item, height);
             }),
         )
-        .connecting(true)
         .render(area, buf, &mut self.state);
     }
 }
