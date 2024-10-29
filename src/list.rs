@@ -60,6 +60,7 @@ where
 {
     len: usize,
     f: Box<dyn Fn(ListContext) -> (T, u16)>,
+    connected: bool,
 }
 
 impl<T> List<T>
@@ -67,7 +68,11 @@ where
     T: Widget,
 {
     pub fn new(len: usize, f: Box<dyn Fn(ListContext) -> (T, u16)>) -> Self {
-        List { len, f }
+        List { len, f, connected: false }
+    }
+
+    pub fn connecting(self, connected: bool) -> Self {
+        List { connected, ..self }
     }
 }
 
@@ -109,6 +114,7 @@ where
                     .map(|s| i == s as i32)
                     .unwrap_or(false),
             });
+            let height = height + self.connected as u16;
 
             if first {
                 state.height = height;
@@ -117,7 +123,7 @@ where
                         index: i as usize - 1,
                         is_selected: false,
                     });
-                    state.prev_height = h;
+                    state.prev_height = h + self.connected as u16;
                 }
                 bottom_y = y as u16 + height;
                 if bottom_y > area.height {
@@ -135,7 +141,7 @@ where
                     x: area.left() as i32,
                     y: area.top() as i32 + y,
                     width: area.width,
-                    height,
+                    height: height - self.connected as u16,
                 },
                 area,
                 buf,
@@ -148,6 +154,7 @@ where
         while i < self.len && y < area.height {
             let (item, height) =
                 (self.f)(ListContext { index: i as usize, is_selected: false });
+            let height = height + self.connected as u16;
 
             render_truncated(
                 item,
@@ -155,7 +162,7 @@ where
                     x: area.left() as i32,
                     y: (area.top() + y) as i32,
                     width: area.width,
-                    height,
+                    height: height - self.connected as u16,
                 },
                 area,
                 buf,
