@@ -9,6 +9,7 @@ mod post;
 mod post_manager;
 mod post_widget;
 mod record_widget;
+mod thread;
 mod thread_view;
 mod updating_feed;
 
