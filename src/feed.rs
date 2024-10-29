@@ -42,14 +42,21 @@ impl Feed {
             return true;
         }
 
-        let new_last = new_posts.last().unwrap();
-        let Some(overlap_idx) = self.posts.iter().position(|p| p == new_last)
-        else {
-            panic!("Why?");
-            // self.posts = new_posts;
-            // self.state.select(Some(0));
-            // self.remove_duplicate();
-            // return true;
+        let Some(overlap_idx) = ({
+            let mut i = None;
+            for np in new_posts.iter().rev() {
+                if let Some(overlap_idx) =
+                    self.posts.iter().position(|p| p == np)
+                {
+                    i = Some(overlap_idx)
+                }
+            }
+            i
+        }) else {
+            self.posts = new_posts;
+            self.state.select(Some(0));
+            self.remove_duplicate();
+            return true;
         };
 
         let new_posts = new_posts
@@ -66,8 +73,7 @@ impl Feed {
                     i += 1;
                 }
             }
-            panic!("Why?");
-            // return 0;
+            return 0;
         }));
         self.posts = new_posts;
         self.remove_duplicate();
