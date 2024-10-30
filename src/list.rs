@@ -115,7 +115,6 @@ where
                     .map(|s| i == s as i32)
                     .unwrap_or(false),
             });
-            let height = height + self.connected as u16;
 
             if first {
                 state.height = height;
@@ -124,7 +123,7 @@ where
                         index: i as usize - 1,
                         is_selected: false,
                     });
-                    state.prev_height = h + self.connected as u16;
+                    state.prev_height = h;
                 }
                 bottom_y = y as u16 + height;
                 if bottom_y > area.height {
@@ -142,16 +141,27 @@ where
                     x: area.left() as i32,
                     y: area.top() as i32 + y,
                     width: area.width,
-                    height: height - self.connected as u16,
+                    height,
                 },
                 area,
                 buf,
             );
-            if i != self.len as i32 - 1 {
-                Text::from("│").render(
+            if self.connected && i != self.len as i32 - 1 {
+                Text::from("┬").render(
                     ratatui::layout::Rect {
-                        x: area.left() + 1,
+                        x: area.left() + 2,
                         y: (area.top() as i32 + y + height as i32 - 1) as u16,
+                        width: 1,
+                        height: 1,
+                    },
+                    buf,
+                );
+            }
+            if self.connected && i != 0 {
+                Text::from("┴").render(
+                    ratatui::layout::Rect {
+                        x: area.left() + 2,
+                        y: (area.top() as i32 + y) as u16,
                         width: 1,
                         height: 1,
                     },
@@ -166,7 +176,6 @@ where
         while i < self.len && y < area.height {
             let (item, height) =
                 (self.f)(ListContext { index: i as usize, is_selected: false });
-            let height = height + self.connected as u16;
 
             render_truncated(
                 item,
@@ -174,21 +183,32 @@ where
                     x: area.left() as i32,
                     y: (area.top() + y) as i32,
                     width: area.width,
-                    height: height - self.connected as u16,
+                    height,
                 },
                 area,
                 buf,
             );
-            if i != self.len as usize - 1 {
-                Text::from("│").render(
+            if self.connected && i != self.len as usize - 1 {
+                Text::from("┬").render(
                     ratatui::layout::Rect {
-                        x: area.left() + 1,
+                        x: area.left() + 2,
                         y: area.top() + y + height - 1,
                         width: 1,
                         height: 1,
                     },
                     buf,
                 );
+                if self.connected {
+                    Text::from("┴").render(
+                        ratatui::layout::Rect {
+                            x: area.left() + 2,
+                            y: area.top() + y,
+                            width: 1,
+                            height: 1,
+                        },
+                        buf,
+                    );
+                }
             }
             i += 1;
             y += height;
