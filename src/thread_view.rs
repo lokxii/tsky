@@ -2,7 +2,10 @@ use std::process::Command;
 
 use atrium_api::{
     app::bsky::feed::{
-        defs::ThreadViewPostRepliesItem,
+        defs::{
+            ThreadViewPostData, ThreadViewPostParentRefs,
+            ThreadViewPostRepliesItem,
+        },
         get_post_thread::OutputThreadRefs as GetPostThreadOutput,
     },
     types::Union,
@@ -23,20 +26,107 @@ use crate::{
     AppEvent,
 };
 
+#[derive(Clone)]
+pub struct Thread {
+    post_uris: Vec<String>,
+    state: ListState,
+}
+
+fn parent_posts(
+    mut posts: Vec<String>,
+    parent: Option<Union<ThreadViewPostParentRefs>>,
+) -> Vec<String> {
+    let Some(Union::Refs(ThreadViewPostParentRefs::ThreadViewPost(parent))) =
+        parent
+    else {
+        return posts;
+    };
+    let ThreadViewPostData { parent, post, .. } = parent.data;
+    let post = Post::from(&post);
+    let post_uri = post.uri.clone();
+    post_manager!().insert(post);
+
+    posts.push(post_uri);
+    return parent_posts(posts, parent);
+}
+
+fn reply_posts(
+    mut posts: Vec<String>,
+    replies: Option<Vec<Union<ThreadViewPostRepliesItem>>>,
+) -> Vec<String> {
+    let Some(replies) = replies else {
+        return posts;
+    };
+    for reply in replies.into_iter().rev() {
+        let Union::Refs(ThreadViewPostRepliesItem::ThreadViewPost(reply)) =
+            reply
+        else {
+            continue;
+        };
+
+        let ThreadViewPostData { post, replies, .. } = reply.data;
+        let post = Post::from(&post);
+        let post_uri = post.uri.clone();
+        post_manager!().insert(post);
+
+        posts.push(post_uri);
+        posts = reply_posts(posts, replies);
+        break;
+    }
+
+    return posts;
+}
+
 pub struct ThreadView {
     post_uri: String,
+    parent: Thread,
     replies: Vec<String>,
     state: ListState,
 }
 
 impl ThreadView {
-    pub fn new(post: Post, replies: Vec<Post>) -> ThreadView {
+    pub fn from(thread: ThreadViewPostData) -> ThreadView {
+        let post = Post::from(&thread.post);
         let post_uri = post.uri.clone();
         post_manager!().insert(post);
 
-        let reply_uri = replies.iter().map(|r| r.uri.clone()).collect();
-        post_manager!().append(replies);
-        ThreadView { post_uri, replies: reply_uri, state: ListState::default() }
+        let parent_uris = parent_posts(vec![], thread.parent);
+        let parent =
+            Thread { post_uris: parent_uris, state: ListState::default() };
+        let replies = thread
+            .replies
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|reply| match reply {
+                Union::Refs(ThreadViewPostRepliesItem::ThreadViewPost(r)) => {
+                    Some(r)
+                }
+                _ => None,
+            })
+            .map(|reply| {
+                let post = Post::from(&reply.post);
+                let post_uri = post.uri.clone();
+                post_manager!().insert(post);
+                return post_uri;
+            })
+            .collect();
+
+        ThreadView { post_uri, parent, replies, state: ListState::default() }
+    }
+
+    pub fn selected(&self) -> &String {
+        if let Some(i) = self.state.selected {
+            return &self.replies[i];
+            // let thread = &self.replies[i];
+            // return &thread.post_uris[thread.state.selected.unwrap()];
+        } else {
+            let thread = &self.parent;
+            return thread
+                .state
+                .selected
+                .map(|i| &thread.post_uris[i])
+                .unwrap_or(&self.post_uri);
+        }
     }
 
     pub async fn handle_input_events(
@@ -73,13 +163,7 @@ impl ThreadView {
 
             // Like
             KeyCode::Char(' ') => {
-                let post = post_manager!()
-                    .at(self
-                        .state
-                        .selected
-                        .map(|i| &self.replies[i])
-                        .unwrap_or(&self.post_uri))
-                    .unwrap();
+                let post = post_manager!().at(self.selected()).unwrap();
                 if post.like.uri.is_some() {
                     post_manager_tx!()
                         .send(post_manager::RequestMsg::UnlikePost(
@@ -112,13 +196,7 @@ impl ThreadView {
 
             // Repost
             KeyCode::Char('o') => {
-                let post = post_manager!()
-                    .at(self
-                        .state
-                        .selected
-                        .map(|i| &self.replies[i])
-                        .unwrap_or(&self.post_uri))
-                    .unwrap();
+                let post = post_manager!().at(self.selected()).unwrap();
                 if post.repost.uri.is_some() {
                     post_manager_tx!()
                         .send(post_manager::RequestMsg::UnrepostPost(
@@ -150,13 +228,7 @@ impl ThreadView {
             }
 
             KeyCode::Char('p') => {
-                let post_uri = self
-                    .state
-                    .selected
-                    .map(|i| &self.replies[i])
-                    .unwrap_or(&self.post_uri)
-                    .split('/')
-                    .collect::<Vec<_>>();
+                let post_uri = self.selected().split('/').collect::<Vec<_>>();
                 let author = post_uri[2];
                 let post_id = post_uri[4];
                 let url = format!(
@@ -172,19 +244,19 @@ impl ThreadView {
             }
 
             KeyCode::Char('m') => {
-                let uri = self
-                    .state
-                    .selected
-                    .map(|i| self.replies[i].clone())
-                    .unwrap_or(self.post_uri.clone());
-                post_manager_tx!()
-                    .send(post_manager::RequestMsg::OpenMedia(uri))?;
+                post_manager_tx!().send(
+                    post_manager::RequestMsg::OpenMedia(
+                        self.selected().clone(),
+                    ),
+                )?;
 
                 return Ok(AppEvent::None);
             }
 
             KeyCode::Enter => {
-                let uri = if self.state.selected.is_none() {
+                let uri = if self.state.selected.is_none()
+                    && self.parent.state.selected.is_none()
+                {
                     let post = post_manager!().at(&self.post_uri).unwrap();
                     let Some(Embed::Record(crate::embed::Record::Post(post))) =
                         post.embed
@@ -193,7 +265,7 @@ impl ThreadView {
                     };
                     post.uri
                 } else {
-                    self.replies[self.state.selected.unwrap()].clone()
+                    self.selected().clone()
                 };
 
                 let out = agent.api.app.bsky.feed.get_post_thread(
@@ -211,22 +283,8 @@ impl ThreadView {
                     GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
                         thread,
                     ) => {
-                        let post = Post::from(&thread.post);
-                        let replies = thread.replies.as_ref().map(|replies| {
-                            replies.iter().filter_map(|reply| {
-                                let Union::Refs(reply) = reply else {
-                                    return None;
-                                };
-                                if let ThreadViewPostRepliesItem::ThreadViewPost(post) = reply {
-                                    Some(Post::from(&post.post))
-                                } else {
-                                    None
-                                }
-                            }).collect()
-                        })
-                        .unwrap_or_default();
                         return Ok(AppEvent::ColumnNewThreadLayer(
-                            ThreadView::new(post, replies),
+                            ThreadView::from(thread.data),
                         ));
                     }
                     GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {

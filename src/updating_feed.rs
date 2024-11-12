@@ -222,22 +222,8 @@ impl UpdatingFeed {
                     GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
                         thread,
                     ) => {
-                        let post = Post::from(&thread.post);
-                        let replies = thread.replies.as_ref().map(|replies| {
-                            replies.iter().filter_map(|reply| {
-                                let Union::Refs(reply) = reply else {
-                                    return None;
-                                };
-                                if let ThreadViewPostRepliesItem::ThreadViewPost(post) = reply {
-                                    Some(Post::from(&post.post))
-                                } else {
-                                    None
-                                }
-                            }).collect()
-                        })
-                        .unwrap_or_default();
                         return Ok(AppEvent::ColumnNewThreadLayer(
-                            ThreadView::new(post, replies),
+                            ThreadView::from(thread.data),
                         ));
                     }
                     GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
