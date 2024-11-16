@@ -1,28 +1,31 @@
+use std::ops::Range;
+
 use ratatui::{
     layout::Position,
+    text::Text,
     widgets::{StatefulWidget, Widget},
 };
 
 #[derive(Clone)]
-pub struct ListState {
+pub struct ConnectedListState {
     pub selected: Option<usize>,
     selected_y: Option<i32>,
     height: u16,
     prev_height: u16,
 }
 
-impl Default for ListState {
-    fn default() -> Self {
-        ListState {
-            selected: None,
-            selected_y: None,
+impl ConnectedListState {
+    pub fn new(selected: Option<usize>) -> Self {
+        ConnectedListState {
+            selected,
+            selected_y: Some(0),
             height: 0,
             prev_height: 0,
         }
     }
 }
 
-impl ListState {
+impl ConnectedListState {
     pub fn select(&mut self, i: Option<usize>) {
         self.selected = i;
         if let None = self.selected_y {
@@ -50,33 +53,41 @@ impl ListState {
     }
 }
 
-pub struct ListContext {
+pub struct ConnectedListContext {
     pub index: usize,
     pub is_selected: bool,
 }
 
-pub struct List<T>
+pub struct ConnectedList<T, F>
 where
     T: Widget,
+    F: Fn(ConnectedListContext) -> (T, u16),
 {
     len: usize,
-    f: Box<dyn Fn(ListContext) -> (T, u16)>,
+    f: F,
+    connected: Vec<Range<usize>>,
 }
 
-impl<T> List<T>
+impl<T, F> ConnectedList<T, F>
 where
     T: Widget,
+    F: Fn(ConnectedListContext) -> (T, u16),
 {
-    pub fn new(len: usize, f: Box<dyn Fn(ListContext) -> (T, u16)>) -> Self {
-        List { len, f }
+    pub fn new(len: usize, f: F) -> Self {
+        ConnectedList { len, f, connected: vec![] }
+    }
+
+    pub fn connecting(self, connected: Vec<Range<usize>>) -> Self {
+        ConnectedList { connected, ..self }
     }
 }
 
-impl<T> StatefulWidget for List<T>
+impl<T, F> StatefulWidget for ConnectedList<T, F>
 where
     T: Widget,
+    F: Fn(ConnectedListContext) -> (T, u16),
 {
-    type State = ListState;
+    type State = ConnectedListState;
 
     fn render(
         self,
@@ -103,7 +114,7 @@ where
         let mut first = true;
 
         while i >= 0 {
-            let (item, height) = (self.f)(ListContext {
+            let (item, height) = (self.f)(ConnectedListContext {
                 index: i as usize,
                 is_selected: state
                     .selected
@@ -114,7 +125,7 @@ where
             if first {
                 state.height = height;
                 if i > 0 {
-                    let (_, h) = (self.f)(ListContext {
+                    let (_, h) = (self.f)(ConnectedListContext {
                         index: i as usize - 1,
                         is_selected: false,
                     });
@@ -141,14 +152,43 @@ where
                 area,
                 buf,
             );
+            let connected = self
+                .connected
+                .iter()
+                .find(|r| i >= r.start as i32 && i < r.end as i32)
+                .is_some();
+            if connected && i != self.len as i32 - 1 {
+                Text::from("┬").render(
+                    ratatui::layout::Rect {
+                        x: area.left() + 2,
+                        y: (area.top() as i32 + y + height as i32 - 1) as u16,
+                        width: 1,
+                        height: 1,
+                    },
+                    buf,
+                );
+            }
+            if connected && i != 0 {
+                Text::from("┴").render(
+                    ratatui::layout::Rect {
+                        x: area.left() + 2,
+                        y: (area.top() as i32 + y) as u16,
+                        width: 1,
+                        height: 1,
+                    },
+                    buf,
+                );
+            }
             i -= 1;
         }
 
         let mut i = state.selected.map(|i| i + 1).unwrap_or(1);
         let mut y = bottom_y;
         while i < self.len && y < area.height {
-            let (item, height) =
-                (self.f)(ListContext { index: i as usize, is_selected: false });
+            let (item, height) = (self.f)(ConnectedListContext {
+                index: i as usize,
+                is_selected: false,
+            });
 
             render_truncated(
                 item,
@@ -161,6 +201,33 @@ where
                 area,
                 buf,
             );
+            let connected = self
+                .connected
+                .iter()
+                .find(|r| i >= r.start && i < r.end)
+                .is_some();
+            if connected && i != self.len as usize - 1 {
+                Text::from("┬").render(
+                    ratatui::layout::Rect {
+                        x: area.left() + 2,
+                        y: area.top() + y + height - 1,
+                        width: 1,
+                        height: 1,
+                    },
+                    buf,
+                );
+                if connected {
+                    Text::from("┴").render(
+                        ratatui::layout::Rect {
+                            x: area.left() + 2,
+                            y: area.top() + y,
+                            width: 1,
+                            height: 1,
+                        },
+                        buf,
+                    );
+                }
+            }
             i += 1;
             y += height;
         }

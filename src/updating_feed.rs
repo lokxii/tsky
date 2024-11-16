@@ -1,6 +1,5 @@
 use atrium_api::{
     app::bsky::feed::{
-        defs::ThreadViewPostRepliesItem,
         get_post_thread::OutputThreadRefs as GetPostThreadOutput, get_timeline,
     },
     types::Union,
@@ -20,7 +19,6 @@ use crate::{
     app::AppEvent,
     feed::{Feed, FeedPost},
     list::ListState,
-    post::Post,
     post_manager, post_manager_tx,
     thread_view::ThreadView,
 };

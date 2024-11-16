@@ -14,12 +14,14 @@ use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
     layout::{Constraint, Layout},
-    widgets::{Block, Borders, Padding, StatefulWidget, Widget},
+    style::Color,
+    text::Line,
+    widgets::{Block, BorderType, Borders, Padding, StatefulWidget, Widget},
 };
 
 use crate::{
+    connected_list::{ConnectedList, ConnectedListContext, ConnectedListState},
     embed::Embed,
-    list::{List, ListContext, ListState},
     post::Post,
     post_manager, post_manager_tx,
     post_widget::PostWidget,
@@ -29,7 +31,6 @@ use crate::{
 #[derive(Clone)]
 pub struct Thread {
     post_uris: Vec<String>,
-    state: ListState,
 }
 
 fn parent_posts(
@@ -79,9 +80,9 @@ fn reply_posts(
 
 pub struct ThreadView {
     post_uri: String,
-    parent: Thread,
+    parent: Vec<String>,
     replies: Vec<String>,
-    state: ListState,
+    state: ConnectedListState,
 }
 
 impl ThreadView {
@@ -90,9 +91,7 @@ impl ThreadView {
         let post_uri = post.uri.clone();
         post_manager!().insert(post);
 
-        let parent_uris = parent_posts(vec![], thread.parent);
-        let parent =
-            Thread { post_uris: parent_uris, state: ListState::default() };
+        let parent = parent_posts(vec![], thread.parent);
         let replies = thread
             .replies
             .unwrap_or_default()
@@ -111,22 +110,39 @@ impl ThreadView {
             })
             .collect();
 
-        ThreadView { post_uri, parent, replies, state: ListState::default() }
+        let l = parent.len();
+        ThreadView {
+            post_uri,
+            parent,
+            replies,
+            state: ConnectedListState::new(Some(l)),
+        }
     }
 
-    pub fn selected(&self) -> &String {
+    pub fn selected(&self) -> Option<&String> {
         if let Some(i) = self.state.selected {
-            return &self.replies[i];
-            // let thread = &self.replies[i];
-            // return &thread.post_uris[thread.state.selected.unwrap()];
-        } else {
-            let thread = &self.parent;
-            return thread
-                .state
-                .selected
-                .map(|i| &thread.post_uris[i])
-                .unwrap_or(&self.post_uri);
+            if i < self.parent.len() {
+                return Some(&self.parent[i]);
+            }
+            if i == self.parent.len() {
+                return Some(&self.post_uri);
+            }
+            if i == self.parent.len() + 1 {
+                return None;
+            }
+            if i > self.parent.len() + 1 {
+                return Some(&self.replies[i - self.parent.len() - 2]);
+            }
         }
+        return Some(&self.post_uri);
+    }
+
+    pub fn is_selecting_main_post(&self) -> bool {
+        return self
+            .state
+            .selected
+            .map(|i| i == self.parent.len())
+            .unwrap_or(false);
     }
 
     pub async fn handle_input_events(
@@ -163,7 +179,10 @@ impl ThreadView {
 
             // Like
             KeyCode::Char(' ') => {
-                let post = post_manager!().at(self.selected()).unwrap();
+                let Some(selected) = self.selected() else {
+                    return Ok(AppEvent::None);
+                };
+                let post = post_manager!().at(selected).unwrap();
                 if post.like.uri.is_some() {
                     post_manager_tx!()
                         .send(post_manager::RequestMsg::UnlikePost(
@@ -196,7 +215,10 @@ impl ThreadView {
 
             // Repost
             KeyCode::Char('o') => {
-                let post = post_manager!().at(self.selected()).unwrap();
+                let Some(selected) = self.selected() else {
+                    return Ok(AppEvent::None);
+                };
+                let post = post_manager!().at(selected).unwrap();
                 if post.repost.uri.is_some() {
                     post_manager_tx!()
                         .send(post_manager::RequestMsg::UnrepostPost(
@@ -228,7 +250,10 @@ impl ThreadView {
             }
 
             KeyCode::Char('p') => {
-                let post_uri = self.selected().split('/').collect::<Vec<_>>();
+                let Some(selected) = self.selected() else {
+                    return Ok(AppEvent::None);
+                };
+                let post_uri = selected.split('/').collect::<Vec<_>>();
                 let author = post_uri[2];
                 let post_id = post_uri[4];
                 let url = format!(
@@ -244,19 +269,21 @@ impl ThreadView {
             }
 
             KeyCode::Char('m') => {
+                let Some(selected) = self.selected() else {
+                    return Ok(AppEvent::None);
+                };
                 post_manager_tx!().send(
-                    post_manager::RequestMsg::OpenMedia(
-                        self.selected().clone(),
-                    ),
+                    post_manager::RequestMsg::OpenMedia(selected.clone()),
                 )?;
 
                 return Ok(AppEvent::None);
             }
 
             KeyCode::Enter => {
-                let uri = if self.state.selected.is_none()
-                    && self.parent.state.selected.is_none()
-                {
+                let Some(selected) = self.selected() else {
+                    return Ok(AppEvent::None);
+                };
+                let uri = if self.is_selecting_main_post() {
                     let post = post_manager!().at(&self.post_uri).unwrap();
                     let Some(Embed::Record(crate::embed::Record::Post(post))) =
                         post.embed
@@ -265,7 +292,7 @@ impl ThreadView {
                     };
                     post.uri
                 } else {
-                    self.selected().clone()
+                    selected.clone()
                 };
 
                 let out = agent.api.app.bsky.feed.get_post_thread(
@@ -311,35 +338,61 @@ impl Widget for &mut ThreadView {
     ) where
         Self: Sized,
     {
-        let post = post_manager!().at(&self.post_uri).unwrap();
-        let post_widget =
-            PostWidget::new(post, self.state.selected.is_none(), true);
-        let post_height = post_widget.line_count(area.width);
+        let parent_items =
+            self.parent.clone().into_iter().map(|p| ThreadViewItem::Post(p));
+        let reply_items =
+            self.replies.clone().into_iter().map(|p| ThreadViewItem::Post(p));
+        let items = parent_items
+            .chain(std::iter::once(ThreadViewItem::Post(self.post_uri.clone())))
+            .chain(std::iter::once(ThreadViewItem::Bar))
+            .chain(reply_items)
+            .collect::<Vec<_>>();
 
-        let [post_area, _, replies_area] = Layout::vertical([
-            Constraint::Length(post_height),
-            Constraint::Length(1),
-            Constraint::Fill(1),
-        ])
-        .areas(area);
-
-        post_widget.render(post_area, buf);
-
-        let replies_block =
-            Block::new().borders(Borders::TOP).padding(Padding::uniform(1));
-        let replies_block_inner = replies_block.inner(replies_area);
-        replies_block.render(replies_area, buf);
-
-        let replies = self.replies.clone();
-        List::new(
-            self.replies.len(),
-            Box::new(move |context: ListContext| {
-                let post = post_manager!().at(&replies[context.index]).unwrap();
-                let item = PostWidget::new(post, context.is_selected, true);
-                let height = item.line_count(replies_block_inner.width) as u16;
-                return (item, height);
-            }),
+        ConnectedList::new(
+            items.len(),
+            move |context: ConnectedListContext| match &items[context.index] {
+                ThreadViewItem::Post(uri) => {
+                    let post = post_manager!().at(&uri).unwrap();
+                    let item = PostWidget::new(post, context.is_selected, true);
+                    let height = item.line_count(area.width) as u16;
+                    return (ThreadViewItemWidget::Post(item), height);
+                }
+                ThreadViewItem::Bar => {
+                    let item = Block::new()
+                        .borders(Borders::TOP)
+                        .title(Line::from("Replies").style(Color::Green))
+                        .padding(Padding::uniform(1))
+                        .border_type(BorderType::Double);
+                    return (ThreadViewItemWidget::Bar(item), 1);
+                }
+            },
         )
-        .render(replies_block_inner, buf, &mut self.state);
+        .connecting(vec![0..self.parent.len()])
+        .render(area, buf, &mut self.state);
+    }
+}
+
+enum ThreadViewItem {
+    Post(String),
+    Bar,
+}
+
+enum ThreadViewItemWidget<'a> {
+    Post(PostWidget),
+    Bar(Block<'a>),
+}
+
+impl<'a> Widget for ThreadViewItemWidget<'a> {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+        match self {
+            ThreadViewItemWidget::Post(p) => p.render(area, buf),
+            ThreadViewItemWidget::Bar(b) => b.render(area, buf),
+        }
     }
 }

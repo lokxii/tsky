@@ -1,5 +1,6 @@
 mod app;
 mod column;
+mod connected_list;
 mod embed;
 mod embed_widget;
 mod feed;
