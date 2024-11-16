@@ -152,12 +152,13 @@ where
                 area,
                 buf,
             );
-            let connected = self
+            if self
                 .connected
                 .iter()
                 .find(|r| i >= r.start as i32 && i < r.end as i32)
-                .is_some();
-            if connected && i != self.len as i32 - 1 {
+                .is_some()
+                && i != self.len as i32 - 1
+            {
                 Text::from("┬").render(
                     ratatui::layout::Rect {
                         x: area.left() + 2,
@@ -168,7 +169,13 @@ where
                     buf,
                 );
             }
-            if connected && i != 0 {
+            if self
+                .connected
+                .iter()
+                .find(|r| i >= r.start as i32 && i <= r.end as i32)
+                .is_some()
+                && i != 0
+            {
                 Text::from("┴").render(
                     ratatui::layout::Rect {
                         x: area.left() + 2,
@@ -201,12 +208,13 @@ where
                 area,
                 buf,
             );
-            let connected = self
+            if self
                 .connected
                 .iter()
                 .find(|r| i >= r.start && i < r.end)
-                .is_some();
-            if connected && i != self.len as usize - 1 {
+                .is_some()
+                && i != self.len as usize - 1
+            {
                 Text::from("┬").render(
                     ratatui::layout::Rect {
                         x: area.left() + 2,
@@ -216,17 +224,22 @@ where
                     },
                     buf,
                 );
-                if connected {
-                    Text::from("┴").render(
-                        ratatui::layout::Rect {
-                            x: area.left() + 2,
-                            y: area.top() + y,
-                            width: 1,
-                            height: 1,
-                        },
-                        buf,
-                    );
-                }
+            }
+            if self
+                .connected
+                .iter()
+                .find(|r| i >= r.start && i <= r.end)
+                .is_some()
+            {
+                Text::from("┴").render(
+                    ratatui::layout::Rect {
+                        x: area.left() + 2,
+                        y: area.top() + y,
+                        width: 1,
+                        height: 1,
+                    },
+                    buf,
+                );
             }
             i += 1;
             y += height;
