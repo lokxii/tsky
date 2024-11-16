@@ -55,26 +55,29 @@ pub struct ListContext {
     pub is_selected: bool,
 }
 
-pub struct List<T>
+pub struct List<T, F>
 where
     T: Widget,
+    F: Fn(ListContext) -> (T, u16),
 {
     len: usize,
-    f: Box<dyn Fn(ListContext) -> (T, u16)>,
+    f: F,
 }
 
-impl<T> List<T>
+impl<T, F> List<T, F>
 where
     T: Widget,
+    F: Fn(ListContext) -> (T, u16),
 {
-    pub fn new(len: usize, f: Box<dyn Fn(ListContext) -> (T, u16)>) -> Self {
+    pub fn new(len: usize, f: F) -> Self {
         List { len, f }
     }
 }
 
-impl<T> StatefulWidget for List<T>
+impl<T, F> StatefulWidget for List<T, F>
 where
     T: Widget,
+    F: Fn(ListContext) -> (T, u16),
 {
     type State = ListState;
 

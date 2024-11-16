@@ -124,17 +124,14 @@ impl Widget for &mut Feed {
         let width = area.width;
         let posts = self.posts.clone();
 
-        List::new(
-            self.posts.len(),
-            Box::new(move |context: ListContext| {
-                let item = FeedPostWidget::new(
-                    posts[context.index].clone(),
-                    context.is_selected,
-                );
-                let height = item.line_count(width) as u16;
-                return (item, height);
-            }),
-        )
+        List::new(self.posts.len(), move |context: ListContext| {
+            let item = FeedPostWidget::new(
+                posts[context.index].clone(),
+                context.is_selected,
+            );
+            let height = item.line_count(width) as u16;
+            return (item, height);
+        })
         .render(area, buf, &mut self.state);
     }
 }
