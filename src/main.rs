@@ -20,6 +20,7 @@ use bsky_sdk::{
     BskyAgent,
 };
 use column::{Column, ColumnStack};
+use dotenvy::dotenv;
 use lazy_static::lazy_static;
 use logger::LOGGER;
 use post_manager::PostManager;
@@ -40,25 +41,27 @@ lazy_static! {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() {
     log::set_logger(&LOGGER).unwrap();
     log::set_max_level(log::LevelFilter::Debug);
 
+    eprintln!("Logging in");
+    let agent = login().await;
+
     let mut terminal = ratatui::init();
-
-    terminal.draw(|f| f.render_widget("Logging in", f.area()))?;
-    let agent = login().await.unwrap();
-
-    terminal.draw(|f| {
-        f.render_widget("Creating column (starting workers)", f.area())
-    })?;
+    terminal
+        .draw(|f| {
+            f.render_widget("Creating column (starting workers)", f.area())
+        })
+        .unwrap();
     let (tx, rx) = mpsc::channel();
     let feed = UpdatingFeed::new(tx);
     feed.spawn_feed_autoupdate(agent.clone());
     feed.spawn_request_worker(agent.clone(), rx);
 
     terminal
-        .draw(|f| f.render_widget("Starting post manager worker", f.area()))?;
+        .draw(|f| f.render_widget("Starting post manager worker", f.area()))
+        .unwrap();
     {
         POST_MANAGER.write().unwrap().spawn_worker(agent.clone());
     }
@@ -66,18 +69,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new(ColumnStack::from(vec![Column::UpdatingFeed(feed)]));
 
     loop {
-        app.render(&mut terminal).await?;
+        app.render(&mut terminal).await.expect("Cannot render to terminal");
 
-        match app.handle_events(agent.clone()).await? {
+        match app.handle_events(agent.clone()).await {
             AppEvent::None => {}
 
             AppEvent::Quit => {
                 for col in &app.column.stack {
                     match col {
-                        Column::UpdatingFeed(feed) => {
-                            feed.request_worker_tx
-                                .send(updating_feed::RequestMsg::Close)?;
-                        }
+                        Column::UpdatingFeed(feed) => feed
+                            .request_worker_tx
+                            .send(updating_feed::RequestMsg::Close)
+                            .expect("Cannot close worker"),
                         _ => {}
                     }
                 }
@@ -94,44 +97,77 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
     }
 
-    post_manager_tx!().send(post_manager::RequestMsg::Close)?;
+    post_manager_tx!()
+        .send(post_manager::RequestMsg::Close)
+        .expect("Cannot close worker");
     ratatui::restore();
     agent
         .to_config()
         .await
         .save(&FileStore::new(SESSION_FILE.as_str()))
-        .await?;
-    return Ok(());
+        .await
+        .expect(
+            format!("Cannot save session file {}", SESSION_FILE.as_str())
+                .as_str(),
+        );
 }
 
-async fn login() -> Result<BskyAgent, Box<dyn std::error::Error>> {
-    dotenvy::dotenv()?;
-
-    let handle = env::var("handle")?;
-    let password = env::var("password")?;
-
+async fn login() -> BskyAgent {
     match Config::load(&FileStore::new(SESSION_FILE.as_str())).await {
         Ok(config) => {
-            let agent = BskyAgent::builder().config(config).build().await?;
-            return Ok(agent);
+            let agent = BskyAgent::builder()
+                .config(config)
+                .build()
+                .await
+                .expect("Cannot create bsky agent from session file");
+            return agent;
         }
         Err(e) => {
-            eprintln!("{}\r", e);
-            eprintln!("Using env var to login\r");
-            let agent = BskyAgent::builder().build().await?;
-            agent.login(handle, password).await?;
+            eprintln!(
+                "Cannot load session file {}: {}\r",
+                SESSION_FILE.as_str(),
+                e
+            );
+            eprintln!("Using environment variables to login\r");
+
+            dotenv().unwrap_or_else(|e| {
+                eprintln!("Cannot load .env: {}\r", e);
+                PathBuf::new()
+            });
+
+            let handle = env::var("handle").expect("Cannot get $handle");
+            let password = env::var("password").expect("Cannot get $password");
+
+            let agent = BskyAgent::builder()
+                .build()
+                .await
+                .expect("Cannot create bsky agent");
+            agent.login(handle, password).await.expect("Cannot login to bsky");
 
             let path = PathBuf::from(SESSION_FILE.as_str());
             let dir = path.parent().unwrap();
             if !dir.exists() {
-                fs::create_dir_all(dir)?;
+                fs::create_dir_all(dir).expect(
+                    format!(
+                        "Cannot create directory {}",
+                        dir.to_str().unwrap()
+                    )
+                    .as_str(),
+                );
             }
             agent
                 .to_config()
                 .await
                 .save(&FileStore::new(SESSION_FILE.as_str()))
-                .await?;
-            return Ok(agent);
+                .await
+                .expect(
+                    format!(
+                        "Cannot save session file {}",
+                        SESSION_FILE.as_str()
+                    )
+                    .as_str(),
+                );
+            return agent;
         }
     };
 }

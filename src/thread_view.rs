@@ -140,22 +140,19 @@ impl ThreadView {
             .unwrap_or(false);
     }
 
-    pub async fn handle_input_events(
-        &mut self,
-        agent: BskyAgent,
-    ) -> Result<AppEvent, Box<dyn std::error::Error>> {
-        let Event::Key(key) = event::read()? else {
-            return Ok(AppEvent::None);
+    pub async fn handle_input_events(&mut self, agent: BskyAgent) -> AppEvent {
+        let Event::Key(key) = event::read().expect("Cannot read event") else {
+            return AppEvent::None;
         };
         if key.kind != event::KeyEventKind::Press {
-            return Ok(AppEvent::None);
+            return AppEvent::None;
         }
 
         match key.code {
-            KeyCode::Backspace => return Ok(AppEvent::ColumnPopLayer),
+            KeyCode::Backspace => return AppEvent::ColumnPopLayer,
 
             KeyCode::Char('q') => {
-                return Ok(AppEvent::Quit);
+                return AppEvent::Quit;
             }
 
             KeyCode::Char('j') => {
@@ -164,7 +161,7 @@ impl ThreadView {
                 } else {
                     self.state.next();
                 }
-                return Ok(AppEvent::None);
+                return AppEvent::None;
             }
 
             KeyCode::Char('k') => {
@@ -173,13 +170,13 @@ impl ThreadView {
                 } else {
                     self.state.previous();
                 }
-                return Ok(AppEvent::None);
+                return AppEvent::None;
             }
 
             // Like
             KeyCode::Char(' ') => {
                 let Some(selected) = self.selected() else {
-                    return Ok(AppEvent::None);
+                    return AppEvent::None;
                 };
                 let post = post_manager!().at(selected).unwrap();
                 if post.like.uri.is_some() {
@@ -209,13 +206,13 @@ impl ThreadView {
                             );
                         });
                 }
-                return Ok(AppEvent::None);
+                return AppEvent::None;
             }
 
             // Repost
             KeyCode::Char('o') => {
                 let Some(selected) = self.selected() else {
-                    return Ok(AppEvent::None);
+                    return AppEvent::None;
                 };
                 let post = post_manager!().at(selected).unwrap();
                 if post.repost.uri.is_some() {
@@ -245,12 +242,12 @@ impl ThreadView {
                             );
                         });
                 }
-                return Ok(AppEvent::None);
+                return AppEvent::None;
             }
 
             KeyCode::Char('p') => {
                 let Some(selected) = self.selected() else {
-                    return Ok(AppEvent::None);
+                    return AppEvent::None;
                 };
                 let post_uri = selected.split('/').collect::<Vec<_>>();
                 let author = post_uri[2];
@@ -264,67 +261,70 @@ impl ThreadView {
                 {
                     log::error!("{:?}", e);
                 }
-                return Ok(AppEvent::None);
+                return AppEvent::None;
             }
 
             KeyCode::Char('m') => {
                 let Some(selected) = self.selected() else {
-                    return Ok(AppEvent::None);
+                    return AppEvent::None;
                 };
-                post_manager_tx!().send(
+                let Ok(_) = post_manager_tx!().send(
                     post_manager::RequestMsg::OpenMedia(selected.clone()),
-                )?;
-
-                return Ok(AppEvent::None);
+                ) else {
+                    return AppEvent::None;
+                };
+                return AppEvent::None;
             }
 
             KeyCode::Enter => {
                 let Some(selected) = self.selected() else {
-                    return Ok(AppEvent::None);
+                    return AppEvent::None;
                 };
                 let uri = if self.is_selecting_main_post() {
                     let post = post_manager!().at(&self.post_uri).unwrap();
                     let Some(Embed::Record(crate::embed::Record::Post(post))) =
                         post.embed
                     else {
-                        return Ok(AppEvent::None);
+                        return AppEvent::None;
                     };
                     post.uri
                 } else {
                     selected.clone()
                 };
 
-                let out = agent.api.app.bsky.feed.get_post_thread(
+                let Ok(out) = agent.api.app.bsky.feed.get_post_thread(
                     atrium_api::app::bsky::feed::get_post_thread::ParametersData {
                         depth: Some(1.try_into().unwrap()),
                         parent_height: None,
                         uri,
-                    }.into()).await?;
+                    }.into()).await else {
+                    return AppEvent::None;
+                };
                 let Union::Refs(thread) = out.data.thread else {
                     log::error!("Unknown thread response");
-                    return Ok(AppEvent::None);
+                    return AppEvent::None;
                 };
 
                 match thread {
                     GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
                         thread,
                     ) => {
-                        return Ok(AppEvent::ColumnNewThreadLayer(
+                        return AppEvent::ColumnNewThreadLayer(
                             ThreadView::from(thread.data),
-                        ));
+                        );
                     }
                     GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
                         log::error!("Blocked thread");
-                        return Ok(AppEvent::None);
+                        return AppEvent::None;
                     }
                     GetPostThreadOutput::AppBskyFeedDefsNotFoundPost(_) => {
                         log::error!("Thread not found");
-                        return Ok(AppEvent::None);
+                        return AppEvent::None;
                     }
                 }
             }
 
-            _ => return Ok(AppEvent::None),
+            _ => return AppEvent::None,
         }
     }
 }

@@ -42,52 +42,55 @@ impl App {
                 let feed = Arc::clone(&feed.feed);
                 let mut feed = feed.lock().await;
 
-                terminal.draw(|f| {
-                    let [main_area, log_area] = Layout::vertical([
-                        Constraint::Fill(1),
-                        Constraint::Length(1),
-                    ])
-                    .areas(f.area());
-                    f.render_widget(&mut *feed, main_area);
+                terminal
+                    .draw(|f| {
+                        let [main_area, log_area] = Layout::vertical([
+                            Constraint::Fill(1),
+                            Constraint::Length(1),
+                        ])
+                        .areas(f.area());
+                        f.render_widget(&mut *feed, main_area);
 
-                    f.render_widget(
-                        String::from("log: ")
-                            + logs.last().unwrap_or(&String::new()),
-                        log_area,
-                    );
-                })?;
+                        f.render_widget(
+                            String::from("log: ")
+                                + logs.last().unwrap_or(&String::new()),
+                            log_area,
+                        );
+                    })
+                    .unwrap();
             }
             Some(Column::Thread(thread)) => {
-                terminal.draw(|f| {
-                    let [main_area, log_area] = Layout::vertical([
-                        Constraint::Fill(1),
-                        Constraint::Length(1),
-                    ])
-                    .areas(f.area());
-                    f.render_widget(thread, main_area);
+                terminal
+                    .draw(|f| {
+                        let [main_area, log_area] = Layout::vertical([
+                            Constraint::Fill(1),
+                            Constraint::Length(1),
+                        ])
+                        .areas(f.area());
+                        f.render_widget(thread, main_area);
 
-                    f.render_widget(
-                        String::from("log: ")
-                            + logs.last().unwrap_or(&String::new()),
-                        log_area,
-                    );
-                })?;
+                        f.render_widget(
+                            String::from("log: ")
+                                + logs.last().unwrap_or(&String::new()),
+                            log_area,
+                        );
+                    })
+                    .unwrap();
             }
         }
 
         return Ok(());
     }
 
-    pub async fn handle_events(
-        &mut self,
-        agent: BskyAgent,
-    ) -> Result<AppEvent, Box<dyn std::error::Error>> {
-        if !event::poll(std::time::Duration::from_millis(500))? {
-            return Ok(AppEvent::None);
+    pub async fn handle_events(&mut self, agent: BskyAgent) -> AppEvent {
+        if !event::poll(std::time::Duration::from_millis(500))
+            .expect("Error polling event")
+        {
+            return AppEvent::None;
         }
 
         match self.column.last_mut() {
-            None => return Ok(AppEvent::None),
+            None => return AppEvent::None,
             Some(Column::UpdatingFeed(feed)) => {
                 return feed.handle_input_events(agent).await
             }
