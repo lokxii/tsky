@@ -33,7 +33,7 @@ pub struct Thread {
     post_uris: Vec<String>,
 }
 
-fn parent_posts(
+fn parent_posts_rev(
     mut posts: Vec<String>,
     parent: Option<Union<ThreadViewPostParentRefs>>,
 ) -> Vec<String> {
@@ -48,7 +48,7 @@ fn parent_posts(
     post_manager!().insert(post);
 
     posts.push(post_uri);
-    return parent_posts(posts, parent);
+    return parent_posts_rev(posts, parent);
 }
 
 fn reply_posts(
@@ -91,7 +91,8 @@ impl ThreadView {
         let post_uri = post.uri.clone();
         post_manager!().insert(post);
 
-        let parent = parent_posts(vec![], thread.parent);
+        let mut parent = parent_posts_rev(vec![], thread.parent);
+        parent.reverse();
         let replies = thread
             .replies
             .unwrap_or_default()
