@@ -1,4 +1,7 @@
-use atrium_api::{app::bsky::feed::defs::PostView, types::string::Cid};
+use atrium_api::{
+    app::bsky::{actor::defs::ProfileViewBasicData, feed::defs::PostView},
+    types::string::Cid,
+};
 use chrono::{DateTime, FixedOffset, Local};
 
 use crate::embed::Embed;
@@ -16,11 +19,33 @@ impl LikeRepostViewer {
 }
 
 #[derive(Clone)]
+pub struct Author {
+    pub name: String,
+    pub handle: String,
+    pub labels: Vec<String>,
+}
+
+impl Author {
+    pub fn from(author: &ProfileViewBasicData) -> Self {
+        Author {
+            name: author.display_name.clone().unwrap_or("(None)".to_string()),
+            handle: author.handle.to_string(),
+            labels: author
+                .labels
+                .as_ref()
+                .unwrap_or(&vec![])
+                .iter()
+                .map(|label| label.val.clone())
+                .collect(),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Post {
     pub uri: String,
     pub cid: Cid,
-    pub author: String,
-    pub handle: String,
+    pub author: Author,
     pub created_at: DateTime<FixedOffset>,
     pub text: String,
     pub like: LikeRepostViewer,
@@ -28,7 +53,7 @@ pub struct Post {
     pub quote: u32,
     pub reply: u32,
     pub embed: Option<Embed>,
-    // label
+    pub labels: Vec<String>,
 }
 
 impl Post {
@@ -49,6 +74,8 @@ impl Post {
             panic!("text is not a string")
         };
         let text = text.clone();
+
+        let author = Author::from(author);
 
         let dt = Local::now();
         let created_at_utc =
@@ -72,11 +99,18 @@ impl Post {
 
         let embed = view.embed.as_ref().map(Embed::from);
 
+        let labels = view
+            .labels
+            .as_ref()
+            .unwrap_or(&vec![])
+            .iter()
+            .map(|label| label.val.clone())
+            .collect();
+
         return Post {
             uri: view.uri.clone(),
             cid: view.cid.clone(),
-            author: author.display_name.clone().unwrap_or("(None)".to_string()),
-            handle: author.handle.to_string(),
+            author,
             created_at,
             text,
             like,
@@ -84,6 +118,7 @@ impl Post {
             repost,
             reply: view.reply_count.unwrap_or(0) as u32,
             embed,
+            labels,
         };
     }
 }

@@ -110,14 +110,18 @@ impl Widget for RecordWidget {
                     ])
                     .areas(quote_inner_area);
 
-                Line::from(
-                    Span::styled(post.author.clone(), Color::Cyan)
-                        + Span::styled(
-                            format!(" @{}", post.handle),
-                            Color::Gray,
-                        ),
-                )
+                let author_labels =
+                    post.author.labels.iter().fold(String::new(), |acc, e| {
+                        format!("{} [{}]", acc, e)
+                    });
+                (Span::styled(post.author.name.clone(), Color::Cyan)
+                    + Span::styled(
+                        format!(" @{}", post.author.handle),
+                        Color::Gray,
+                    )
+                    + Span::styled(author_labels, Color::LightRed))
                 .render(author_area, buf);
+
                 text.render(text_area, buf);
                 if post.has_embed {
                     Line::from("[embed]")

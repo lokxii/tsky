@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::{Alignment, Constraint, Layout},
+    layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style},
     symbols,
     text::{Line, Span},
@@ -32,6 +32,7 @@ impl PostWidget {
     pub fn line_count(&self, width: u16) -> u16 {
         2 // author and date
             + self.body_paragraph().line_count(width) as u16
+            + self.post.labels.len() as u16
             + 1 // stats
             + self.post.embed.clone().map(|e| EmbedWidget::new(e, false).line_count(width) as u16).unwrap_or(0)
             + self.has_border as u16 * 2
@@ -75,12 +76,14 @@ impl Widget for PostWidget {
             .embed
             .clone()
             .map(|e| EmbedWidget::new(e.into(), self.is_selected));
+        let labels = &self.post.labels;
 
-        let [author_area, datetime_area, text_area, embed_area, stats_area] =
+        let [author_area, datetime_area, text_area, labels_area, embed_area, stats_area] =
             Layout::vertical([
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(text.line_count(area.width) as u16),
+                Constraint::Length(labels.len() as u16),
                 Constraint::Length(
                     embed
                         .as_ref()
@@ -91,10 +94,14 @@ impl Widget for PostWidget {
             ])
             .areas(area);
 
-        Line::from(
-            Span::styled(post.author.clone(), Color::Cyan)
-                + Span::styled(format!(" @{}", post.handle), Color::Gray),
-        )
+        let author_labels = post
+            .author
+            .labels
+            .iter()
+            .fold(String::new(), |acc, e| format!("{} [{}]", acc, e));
+        (Span::styled(post.author.name.clone(), Color::Cyan)
+            + Span::styled(format!(" @{}", post.author.handle), Color::Gray)
+            + Span::styled(author_labels, Color::LightRed))
         .render(author_area, buf);
 
         Line::from(post.created_at.to_string())
@@ -102,6 +109,17 @@ impl Widget for PostWidget {
             .render(datetime_area, buf);
 
         self.body_paragraph().render(text_area, buf);
+
+        let labels_subareas = (0..labels.len() as u16).map(|i| Rect {
+            y: labels_area.y + i,
+            height: 1,
+            ..labels_area
+        });
+        labels.iter().zip(labels_subareas).for_each(|t| {
+            Line::from(format!("[{}]", t.0))
+                .style(Color::LightRed)
+                .render(t.1, buf)
+        });
 
         let [reply_area, quote_area, repost_area, like_area, bsky_area] =
             Layout::horizontal([

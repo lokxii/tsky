@@ -6,7 +6,9 @@ use atrium_api::{
     types::{Object, Union},
 };
 
-#[derive(Clone, Debug)]
+use crate::post::Author;
+
+#[derive(Clone)]
 pub enum Embed {
     Images(Vec<Image>),
     Video(Video),
@@ -40,7 +42,7 @@ impl Embed {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Record {
     Post(EmbededPost),
     Blocked,
@@ -73,14 +75,11 @@ impl Record {
                 };
                 let text = text.clone();
 
+                let author = Author::from(&post.author);
+
                 Record::Post(EmbededPost {
                     uri: post.uri.clone(),
-                    author: post
-                        .author
-                        .display_name
-                        .clone()
-                        .unwrap_or_default(),
-                    handle: post.author.handle.to_string(),
+                    author,
                     has_embed: post
                         .embeds
                         .as_ref()
@@ -99,11 +98,10 @@ impl Record {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct EmbededPost {
     pub uri: String,
-    pub author: String,
-    pub handle: String,
+    pub author: Author,
     pub has_embed: bool,
     pub media: Option<EmbededPostMedia>,
     pub text: String,
