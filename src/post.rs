@@ -73,7 +73,7 @@ impl Post {
         let ipld_core::ipld::Ipld::String(text) = &*record["text"] else {
             panic!("text is not a string")
         };
-        let text = text.clone();
+        let text = text.replace("\t", "    ");
 
         let author = Author::from(author);
 
