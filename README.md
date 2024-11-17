@@ -20,13 +20,12 @@ don't use.
 
 ## Login
 
-For first time login, set `handle` and `password` for enviornment variable. I
-don't have my own PDS so I don't know if loggin in with PDS other than official
-one will work or not.
+For first time login, set `handle` and `password` for enviornment variable. You
+may want to put the variables in `$PWD/.env`. I don't have my own PDS so I
+don't know if logging in with PDS other than official one will work or not.
 
-On exit, `session.json` will be created in directory
-`$HOME/.local/share/tsky/`. I don't care `XDG_CONFIG_HOME`. Necessary
-directories will be created automatically.
+`session.json` will be created in directory `$HOME/.local/share/tsky/`. I don't
+care `XDG_CONFIG_HOME`. Necessary directories will be created automatically.
 
 From now on, log in will be using `session.json` so _supposedly_ no environment
 variables will need to be set.
