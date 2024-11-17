@@ -169,8 +169,11 @@ impl FeedPost {
         post_manager!().insert(post);
 
         let reason = view.reason.as_ref().map(|r| {
-            let Union::Refs(r) = r else {
-                panic!("Unknown reason type");
+            let r = match r {
+                Union::Refs(r) => r,
+                Union::Unknown(u) => {
+                    panic!("Unknown reason type: {}", u.r#type)
+                }
             };
             let FeedViewPostReasonRefs::ReasonRepost(r) = r;
             RepostBy {
@@ -180,8 +183,11 @@ impl FeedPost {
         });
 
         let reply_to = view.reply.as_ref().map(|r| {
-            let Union::Refs(parent) = &r.data.parent else {
-                panic!("Unknown parent type");
+            let parent = match &r.parent {
+                Union::Refs(e) => e,
+                Union::Unknown(u) => {
+                    panic!("Unknown parent type: {}", u.r#type)
+                }
             };
             match parent {
                 ReplyRefParentRefs::PostView(view) => {

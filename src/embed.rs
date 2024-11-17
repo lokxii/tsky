@@ -18,8 +18,9 @@ pub enum Embed {
 
 impl Embed {
     pub fn from(e: &Union<PostViewEmbedRefs>) -> Embed {
-        let Union::Refs(e) = e else {
-            panic!("Unknown embed type");
+        let e = match e {
+            Union::Refs(e) => e,
+            Union::Unknown(u) => panic!("Unknown embed type: {}", u.r#type),
         };
         match e {
             PostViewEmbedRefs::AppBskyEmbedImagesView(view) => {
@@ -60,8 +61,11 @@ impl Record {
         view: &Object<atrium_api::app::bsky::embed::record::ViewData>,
         media: Option<EmbededPostMedia>,
     ) -> Record {
-        let Union::Refs(record) = &view.record else {
-            panic!("Unknown embeded record type");
+        let record = match &view.record {
+            Union::Refs(e) => e,
+            Union::Unknown(u) => {
+                panic!("Unknown embed record type: {}", u.r#type)
+            }
         };
         match record {
             ViewRecordRefs::ViewRecord(post) => {
@@ -121,8 +125,11 @@ impl EmbededPostMedia {
             atrium_api::app::bsky::embed::record_with_media::ViewMediaRefs,
         >,
     ) -> EmbededPostMedia {
-        let Union::Refs(media) = media else {
-            panic!("Unknown embed media type");
+        let media = match media {
+            Union::Refs(e) => e,
+            Union::Unknown(u) => {
+                panic!("Unknown embed media type: {}", u.r#type)
+            }
         };
         match media {
             ViewMediaRefs::AppBskyEmbedImagesView(data) => {
