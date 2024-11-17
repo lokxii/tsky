@@ -24,7 +24,8 @@ use lazy_static::lazy_static;
 use logger::LOGGER;
 use post_manager::PostManager;
 use std::{
-    env,
+    env, fs,
+    path::PathBuf,
     sync::{mpsc, RwLock},
 };
 use updating_feed::UpdatingFeed;
@@ -32,6 +33,10 @@ use updating_feed::UpdatingFeed;
 lazy_static! {
     static ref POST_MANAGER: RwLock<PostManager> =
         RwLock::new(PostManager::new());
+    static ref SESSION_FILE: String = {
+        let home = env::var("HOME").unwrap();
+        format!("{}/.local/share/tsky/session.json", home)
+    };
 }
 
 #[tokio::main]
@@ -91,7 +96,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     post_manager_tx!().send(post_manager::RequestMsg::Close)?;
     ratatui::restore();
-    agent.to_config().await.save(&FileStore::new("session.json")).await?;
+    agent
+        .to_config()
+        .await
+        .save(&FileStore::new(SESSION_FILE.as_str()))
+        .await?;
     return Ok(());
 }
 
@@ -101,20 +110,26 @@ async fn login() -> Result<BskyAgent, Box<dyn std::error::Error>> {
     let handle = env::var("handle")?;
     let password = env::var("password")?;
 
-    match Config::load(&FileStore::new("session.json")).await {
+    match Config::load(&FileStore::new(SESSION_FILE.as_str())).await {
         Ok(config) => {
             let agent = BskyAgent::builder().config(config).build().await?;
             return Ok(agent);
         }
         Err(e) => {
-            eprintln!("{}", e);
-            eprintln!("Using env var to login");
+            eprintln!("{}\r", e);
+            eprintln!("Using env var to login\r");
             let agent = BskyAgent::builder().build().await?;
             agent.login(handle, password).await?;
+
+            let path = PathBuf::from(SESSION_FILE.as_str());
+            let dir = path.parent().unwrap();
+            if !dir.exists() {
+                fs::create_dir_all(dir)?;
+            }
             agent
                 .to_config()
                 .await
-                .save(&FileStore::new("session.json"))
+                .save(&FileStore::new(SESSION_FILE.as_str()))
                 .await?;
             return Ok(agent);
         }
