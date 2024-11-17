@@ -46,7 +46,7 @@ impl PostWidget {
                 .map(|line| Line::from(line).style(Color::White))
                 .collect::<Vec<Line>>(),
         )
-        .wrap(ratatui::widgets::Wrap { trim: true })
+        .wrap(ratatui::widgets::Wrap { trim: false })
     }
 }
 

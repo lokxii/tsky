@@ -36,7 +36,7 @@ impl RecordWidget {
                         .map(|line| Line::from(line).style(Color::White))
                         .collect::<Vec<Line>>(),
                 )
-                .wrap(ratatui::widgets::Wrap { trim: true })
+                .wrap(ratatui::widgets::Wrap { trim: false })
                 .line_count(width - 2) as u16;
 
                 let media_lines = post
@@ -70,7 +70,7 @@ impl Widget for RecordWidget {
                         .map(|line| Line::from(line).style(Color::White))
                         .collect::<Vec<Line>>(),
                 )
-                .wrap(ratatui::widgets::Wrap { trim: true });
+                .wrap(ratatui::widgets::Wrap { trim: false });
 
                 let media = post
                     .media
