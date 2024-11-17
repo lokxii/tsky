@@ -168,19 +168,18 @@ impl FeedPost {
         let uri = post.uri.clone();
         post_manager!().insert(post);
 
-        let reason = view.reason.as_ref().map(|r| {
-            let r = match r {
-                Union::Refs(r) => r,
-                Union::Unknown(u) => {
-                    panic!("Unknown reason type: {}", u.r#type)
-                }
-            };
-            let FeedViewPostReasonRefs::ReasonRepost(r) = r;
-            RepostBy {
-                author: r.by.display_name.clone().unwrap_or(String::new()),
-                handle: r.by.handle.to_string(),
+        let reason = match view.reason.as_ref() {
+            Some(Union::Refs(FeedViewPostReasonRefs::ReasonRepost(r))) => {
+                Some(RepostBy {
+                    author: r.by.display_name.clone().unwrap_or(String::new()),
+                    handle: r.by.handle.to_string(),
+                })
             }
-        });
+            Some(Union::Unknown(u)) => {
+                panic!("Unknown reason type: {}", u.r#type)
+            }
+            _ => None,
+        };
 
         let reply_to = view.reply.as_ref().map(|r| {
             let parent = match &r.parent {
