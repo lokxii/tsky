@@ -13,7 +13,6 @@ use atrium_api::{
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
-    layout::{Constraint, Layout},
     style::Color,
     text::Line,
     widgets::{Block, BorderType, Borders, Padding, StatefulWidget, Widget},
@@ -27,11 +26,6 @@ use crate::{
     post_widget::PostWidget,
     AppEvent,
 };
-
-#[derive(Clone)]
-pub struct Thread {
-    post_uris: Vec<String>,
-}
 
 fn parent_posts_rev(
     mut posts: Vec<String>,
