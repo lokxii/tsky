@@ -160,6 +160,10 @@ impl ThreadView {
         match key.code {
             KeyCode::Backspace => return Ok(AppEvent::ColumnPopLayer),
 
+            KeyCode::Char('q') => {
+                return Ok(AppEvent::Quit);
+            }
+
             KeyCode::Char('j') => {
                 if let None = self.state.selected {
                     self.state.select(Some(0));
