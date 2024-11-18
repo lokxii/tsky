@@ -19,6 +19,7 @@ use ratatui::{
 };
 
 use crate::{
+    column::Column,
     connected_list::{ConnectedList, ConnectedListContext, ConnectedListState},
     embed::Embed,
     post::Post,
@@ -309,9 +310,9 @@ impl ThreadView {
                     GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
                         thread,
                     ) => {
-                        return AppEvent::ColumnNewThreadLayer(
+                        return AppEvent::ColumnNewLayer(Column::Thread(
                             ThreadView::from(thread.data),
-                        );
+                        ));
                     }
                     GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
                         log::error!("Blocked thread");

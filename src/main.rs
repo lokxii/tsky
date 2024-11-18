@@ -1,9 +1,11 @@
 mod app;
 mod column;
+mod composer_view;
 mod connected_list;
 mod embed;
 mod embed_widget;
 mod feed;
+mod langs;
 mod list;
 mod logger;
 mod post;
@@ -69,7 +71,7 @@ async fn main() {
     let mut app = App::new(ColumnStack::from(vec![Column::UpdatingFeed(feed)]));
 
     loop {
-        app.render(&mut terminal).await.expect("Cannot render to terminal");
+        app.render(&mut terminal).await;
 
         match app.handle_events(agent.clone()).await {
             AppEvent::None => {}
@@ -87,8 +89,8 @@ async fn main() {
                 break;
             }
 
-            AppEvent::ColumnNewThreadLayer(thread) => {
-                app.column.push(Column::Thread(thread));
+            AppEvent::ColumnNewLayer(view) => {
+                app.column.push(view);
             }
 
             AppEvent::ColumnPopLayer => {

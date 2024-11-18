@@ -8,15 +8,12 @@ use ratatui::{
     Terminal,
 };
 
-use crate::{
-    column::Column, column::ColumnStack, logger::LOGSTORE,
-    thread_view::ThreadView,
-};
+use crate::{column::Column, column::ColumnStack, logger::LOGSTORE};
 
 pub enum AppEvent {
     None,
     Quit,
-    ColumnNewThreadLayer(ThreadView),
+    ColumnNewLayer(Column),
     ColumnPopLayer,
 }
 
@@ -32,7 +29,7 @@ impl App {
     pub async fn render(
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) {
         let logs = Arc::clone(&LOGSTORE.logs);
         let logs = logs.lock().await;
 
@@ -77,9 +74,25 @@ impl App {
                     })
                     .unwrap();
             }
-        }
+            Some(Column::Composer(composer)) => {
+                terminal
+                    .draw(|f| {
+                        let [main_area, log_area] = Layout::vertical([
+                            Constraint::Fill(1),
+                            Constraint::Length(1),
+                        ])
+                        .areas(f.area());
+                        f.render_widget(composer, main_area);
 
-        return Ok(());
+                        f.render_widget(
+                            String::from("log: ")
+                                + logs.last().unwrap_or(&String::new()),
+                            log_area,
+                        );
+                    })
+                    .unwrap();
+            }
+        }
     }
 
     pub async fn handle_events(&mut self, agent: BskyAgent) -> AppEvent {
@@ -96,6 +109,9 @@ impl App {
             }
             Some(Column::Thread(thread)) => {
                 return thread.handle_input_events(agent).await
+            }
+            Some(Column::Composer(composer)) => {
+                return composer.handle_input_events(agent).await
             }
         };
     }

@@ -1,8 +1,12 @@
-use crate::{thread_view::ThreadView, UpdatingFeed};
+use crate::{
+    composer_view::ComposerView, thread_view::ThreadView,
+    updating_feed::UpdatingFeed,
+};
 
 pub enum Column {
     UpdatingFeed(UpdatingFeed),
     Thread(ThreadView),
+    Composer(ComposerView),
 }
 
 pub struct ColumnStack {
@@ -18,8 +22,8 @@ impl ColumnStack {
         self.stack.push(column);
     }
 
-    pub fn pop(&mut self) {
-        self.stack.pop();
+    pub fn pop(&mut self) -> Option<Column> {
+        self.stack.pop()
     }
 
     pub fn last(&self) -> Option<&Column> {

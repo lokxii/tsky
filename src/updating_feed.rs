@@ -17,6 +17,8 @@ use tokio::sync::{Mutex, MutexGuard};
 
 use crate::{
     app::AppEvent,
+    column::Column,
+    composer_view::ComposerView,
     feed::{Feed, FeedPost},
     list::ListState,
     post_manager, post_manager_tx,
@@ -221,9 +223,9 @@ impl UpdatingFeed {
                     GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
                         thread,
                     ) => {
-                        return AppEvent::ColumnNewThreadLayer(
+                        return AppEvent::ColumnNewLayer(Column::Thread(
                             ThreadView::from(thread.data),
-                        );
+                        ));
                     }
                     GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
                         log::error!("Blocked thread");
@@ -234,6 +236,12 @@ impl UpdatingFeed {
                         return AppEvent::None;
                     }
                 }
+            }
+
+            KeyCode::Char('n') => {
+                return AppEvent::ColumnNewLayer(Column::Composer(
+                    ComposerView::new(),
+                ))
             }
 
             _ => {
