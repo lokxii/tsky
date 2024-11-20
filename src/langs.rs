@@ -1,6 +1,6 @@
 pub struct Lang {
-    code: &'static str,
-    name: &'static str,
+    pub code: &'static str,
+    pub name: &'static str,
 }
 
 pub const LANGS: [Lang; 204] = [

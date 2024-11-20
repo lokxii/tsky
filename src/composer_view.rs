@@ -2,13 +2,13 @@ use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event};
 use ratatui::{
     layout::Rect,
-    style::Style,
+    style::{self, Style},
     text::Line,
     widgets::{Block, BorderType, Widget},
 };
 use tui_textarea::{CursorMove, Input, Key, TextArea};
 
-use crate::app::AppEvent;
+use crate::{app::AppEvent, langs::LANGS};
 
 enum InputMode {
     Normal,
@@ -17,24 +17,30 @@ enum InputMode {
 }
 
 enum Focus {
-    Textarea,
-    Langlist,
+    TextField,
+    LangField,
 }
 
 pub struct ComposerView {
-    textarea: TextArea<'static>,
+    text_field: TextArea<'static>,
     inputmode: InputMode,
     focus: Focus,
-    lang: Vec<String>,
+    langs_field: TextArea<'static>,
 }
 
 impl ComposerView {
     pub fn new() -> Self {
+        let mut textarea = TextArea::from(Vec::<String>::new());
+        textarea.set_cursor_line_style(Style::default());
+
+        let mut lang = TextArea::from(Vec::<String>::new());
+        lang.set_cursor_line_style(Style::default());
+
         ComposerView {
-            textarea: TextArea::from(Vec::<String>::new()),
+            text_field: textarea,
             inputmode: InputMode::Normal,
-            focus: Focus::Textarea,
-            lang: vec!["en".to_string()],
+            focus: Focus::TextField,
+            langs_field: lang,
         }
     }
     pub async fn handle_input_events(&mut self, agent: BskyAgent) -> AppEvent {
@@ -52,42 +58,95 @@ impl ComposerView {
                     return AppEvent::None;
                 }
                 input => {
-                    self.textarea.input(input);
+                    match self.focus {
+                        Focus::TextField => {
+                            self.text_field.input(input);
+                        }
+                        Focus::LangField => {
+                            if matches!(input, Input { key: Key::Enter, .. }) {
+                                return post(
+                                    agent,
+                                    self.text_field.lines().join("\n"),
+                                    &self.langs_field.lines()[0],
+                                )
+                                .await;
+                            }
+                            if matches!(input, Input { key: Key::Char(c), .. } if ('a'..='z').contains(&c) || c == ',')
+                                || matches!(input, Input { key: Key::Esc, .. })
+                                || matches!(
+                                    input,
+                                    Input { key: Key::Backspace, .. }
+                                )
+                            {
+                                self.langs_field.input(input);
+                            }
+                        }
+                    };
                     return AppEvent::None;
                 }
             },
-            InputMode::Normal => {
-                match event.clone().into() {
-                    Input { key: Key::Enter, .. } => {
-                        let r = agent.create_record(
-                            atrium_api::app::bsky::feed::post::RecordData {
-                                created_at: atrium_api::types::string::Datetime::now(),
-                                embed: None,
-                                entities: None,
-                                facets: None,
-                                labels: None,
-                                langs: None,
-                                reply: None,
-                                tags: None,
-                                text: self.textarea.lines().join("\n")
-                            },
-                        ).await;
-                        match r {
-                            Ok(_) => {
-                                return AppEvent::ColumnPopLayer;
-                            }
-                            Err(e) => {
-                                log::error!("Cannot post: {}", e);
-                            }
-                        }
-                    }
-                    _ => (),
+            InputMode::Normal => match event.clone().into() {
+                Input { key: Key::Enter, .. } => {
+                    return post(
+                        agent,
+                        self.text_field.lines().join("\n"),
+                        &self.langs_field.lines()[0],
+                    )
+                    .await
                 }
-            }
+                Input { key: Key::Tab, .. } => match self.focus {
+                    Focus::TextField => self.focus = Focus::LangField,
+                    Focus::LangField => self.focus = Focus::TextField,
+                },
+                _ => (),
+            },
             _ => (),
         };
-        return vim_keys(event, &mut self.textarea, &mut self.inputmode);
+        return match self.focus {
+            Focus::TextField => {
+                vim_keys(event, &mut self.text_field, &mut self.inputmode)
+            }
+            Focus::LangField => {
+                vim_keys(event, &mut self.langs_field, &mut self.inputmode)
+            }
+        };
     }
+}
+
+async fn post(agent: BskyAgent, text: String, langs: &String) -> AppEvent {
+    let langs = langs.split(',').collect::<Vec<_>>();
+    let invalid_langs = langs
+        .iter()
+        .filter_map(|c| match LANGS.iter().find(|l| l.code == *c) {
+            Some(_) => None,
+            None => Some(c),
+        })
+        .collect::<Vec<_>>();
+    if invalid_langs.len() != 0 {
+        log::error!("Langs {:?} are invalid", invalid_langs);
+        return AppEvent::None;
+    }
+
+    let r = agent
+        .create_record(atrium_api::app::bsky::feed::post::RecordData {
+            created_at: atrium_api::types::string::Datetime::now(),
+            embed: None,
+            entities: None,
+            facets: None,
+            labels: None,
+            langs: None,
+            reply: None,
+            tags: None,
+            text,
+        })
+        .await;
+    match r {
+        Ok(_) => {}
+        Err(e) => {
+            log::error!("Cannot post: {}", e);
+        }
+    }
+    return AppEvent::ColumnPopLayer;
 }
 
 fn vim_keys(
@@ -289,13 +348,19 @@ impl Widget for &mut ComposerView {
         let x = if width == area.width { 0 } else { (area.width - width) / 2 };
         let y = 2;
         let upper_area = Rect { x, y, width, height };
-
-        let title = match self.inputmode {
-            InputMode::Normal => "New Note (Normal)",
-            InputMode::Insert => "New Note (Insert)",
-            InputMode::View => "New Note (View)",
+        let lower_area = Rect {
+            y: upper_area.y + upper_area.height + 1,
+            height: 3,
+            ..upper_area
         };
-        let text_lines = self.textarea.lines();
+
+        let title = match (&self.focus, &self.inputmode) {
+            (Focus::LangField, _) => "New Note",
+            (_, InputMode::Normal) => "New Note (Normal)",
+            (_, InputMode::Insert) => "New Note (Insert)",
+            (_, InputMode::View) => "New Note (View)",
+        };
+        let text_lines = self.text_field.lines();
         let word_remaining = if text_lines.len() == 0 {
             0
         } else {
@@ -306,24 +371,37 @@ impl Widget for &mut ComposerView {
                 - text_lines.len()
                 + 1
         };
-        self.textarea.set_block(
+        self.text_field.set_block(
             Block::bordered()
                 .border_type(BorderType::Rounded)
                 .title(Line::from(title).left_aligned())
                 .title(Line::from(word_remaining.to_string()).right_aligned()),
         );
-        self.textarea.set_cursor_line_style(Style::default());
-        self.textarea.render(upper_area, buf);
+        self.text_field.set_cursor_style(
+            if matches!(self.focus, Focus::TextField) {
+                Style::default().add_modifier(style::Modifier::REVERSED)
+            } else {
+                Style::default()
+            },
+        );
+        self.text_field.render(upper_area, buf);
 
-        let lower_area = Rect {
-            y: upper_area.y + upper_area.height + 1,
-            height: 3,
-            ..upper_area
+        let title = match (&self.focus, &self.inputmode) {
+            (Focus::TextField, _) => "Langs",
+            (_, InputMode::Normal) => "Langs (Normal)",
+            (_, InputMode::Insert) => "Langs (Insert)",
+            (_, InputMode::View) => "Langs (View)",
         };
-        let chosen_langs_box =
-            Block::bordered().border_type(BorderType::Rounded).title("Langs");
-        let langs_inner_area = chosen_langs_box.inner(lower_area);
-        chosen_langs_box.render(lower_area, buf);
-        Line::from(self.lang.join(",").as_str()).render(langs_inner_area, buf);
+        self.langs_field.set_block(
+            Block::bordered().border_type(BorderType::Rounded).title(title),
+        );
+        self.langs_field.set_cursor_style(
+            if matches!(self.focus, Focus::LangField) {
+                Style::default().add_modifier(style::Modifier::REVERSED)
+            } else {
+                Style::default()
+            },
+        );
+        self.langs_field.render(lower_area, buf);
     }
 }
