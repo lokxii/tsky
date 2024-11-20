@@ -290,14 +290,27 @@ impl Widget for &mut ComposerView {
         let y = 2;
         let upper_area = Rect { x, y, width, height };
 
+        let title = match self.inputmode {
+            InputMode::Normal => "New Note (Normal)",
+            InputMode::Insert => "New Note (Insert)",
+            InputMode::View => "New Note (View)",
+        };
+        let text_lines = self.textarea.lines();
+        let word_remaining = if text_lines.len() == 0 {
+            0
+        } else {
+            300 - text_lines
+                .into_iter()
+                .map(|l| l.chars().count())
+                .sum::<usize>()
+                - text_lines.len()
+                + 1
+        };
         self.textarea.set_block(
-            Block::bordered().border_type(BorderType::Rounded).title(
-                match self.inputmode {
-                    InputMode::Normal => "New Note (Normal)",
-                    InputMode::Insert => "New Note (Insert)",
-                    InputMode::View => "New Note (View)",
-                },
-            ),
+            Block::bordered()
+                .border_type(BorderType::Rounded)
+                .title(Line::from(title).left_aligned())
+                .title(Line::from(word_remaining.to_string()).right_aligned()),
         );
         self.textarea.set_cursor_line_style(Style::default());
         self.textarea.render(upper_area, buf);
