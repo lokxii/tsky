@@ -38,7 +38,7 @@ impl ComposerView {
 
         ComposerView {
             text_field: textarea,
-            inputmode: InputMode::Normal,
+            inputmode: InputMode::Insert,
             focus: Focus::TextField,
             langs_field: lang,
         }
@@ -55,6 +55,13 @@ impl ComposerView {
             InputMode::Insert => match event.into() {
                 Input { key: Key::Esc, .. } => {
                     self.inputmode = InputMode::Normal;
+                    return AppEvent::None;
+                }
+                Input { key: Key::Tab, .. } => {
+                    match self.focus {
+                        Focus::TextField => self.focus = Focus::LangField,
+                        Focus::LangField => self.focus = Focus::TextField,
+                    };
                     return AppEvent::None;
                 }
                 input => {
