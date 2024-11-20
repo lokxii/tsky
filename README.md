@@ -1,6 +1,6 @@
 # Tsky - Bluesky in Terminal
 
-## IMPORTANT: This is an application rewritten for myself.
+## IMPORTANT: This is an application written for myself.
 
 I will prioritize features I use daily, and most likely ignoring features I
 don't use.
@@ -17,6 +17,7 @@ don't use.
 - Labels
     - labels attached to user and post
 - Auto updating feed every second
+- Posting (no rich text and embeds yet)
 
 ## Login
 
@@ -40,6 +41,8 @@ Obviously the code is not optimized anyways.
 
 ## Controls
 
+Feed / Thread view
+
 | key | function |
 | - | - |
 | `q` | quit |
@@ -51,4 +54,13 @@ Obviously the code is not optimized anyways.
 | `m` | open media (VLC is required to watch video) |
 | `enter` | open post thread view |
 | `enter (in thread view)` | open embeded post (if any) |
+| `backspace` | go back to previous view |
+| `n (in feed view)` | new post |
+
+Composer view
+
+| key | function |
+| - | - |
+| `tab` | switch between focusing text field and langs field |
+| `enter` | post |
 | `backspace` | go back to previous view |
