@@ -130,7 +130,7 @@ impl ThreadView {
                 return Some(&self.replies[i - self.parent.len() - 2]);
             }
         }
-        return Some(&self.post_uri);
+        return None;
     }
 
     pub fn is_selecting_main_post(&self) -> bool {
@@ -166,11 +166,7 @@ impl ThreadView {
             }
 
             KeyCode::Char('k') => {
-                if let Some(0) = self.state.selected {
-                    self.state.select(None)
-                } else {
-                    self.state.previous();
-                }
+                self.state.previous();
                 return AppEvent::None;
             }
 
