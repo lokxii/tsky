@@ -1,12 +1,11 @@
+use crate::textarea::{CursorMove, Input, Key, TextArea};
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event};
 use ratatui::{
     layout::Rect,
-    style::{self, Style},
     text::Line,
     widgets::{Block, BorderType, Widget},
 };
-use tui_textarea::{CursorMove, Input, Key, TextArea};
 
 use crate::{app::AppEvent, langs::LANGS};
 
@@ -22,19 +21,16 @@ enum Focus {
 }
 
 pub struct ComposerView {
-    text_field: TextArea<'static>,
+    text_field: TextArea,
     inputmode: InputMode,
     focus: Focus,
-    langs_field: TextArea<'static>,
+    langs_field: TextArea,
 }
 
 impl ComposerView {
     pub fn new() -> Self {
-        let mut textarea = TextArea::from(Vec::<String>::new());
-        textarea.set_cursor_line_style(Style::default());
-
-        let mut lang = TextArea::from(Vec::<String>::new());
-        lang.set_cursor_line_style(Style::default());
+        let textarea = TextArea::from(String::new());
+        let lang = TextArea::from(String::new());
 
         ComposerView {
             text_field: textarea,
@@ -210,7 +206,7 @@ fn vim_keys(
             }
         }
         Input { key: Key::Char('x'), .. } => {
-            textarea.delete_next_char();
+            textarea.delete_char();
         }
         Input { key: Key::Char('>'), .. } => {
             if matches!(*inputmode, InputMode::Normal)
@@ -220,12 +216,12 @@ fn vim_keys(
                 )
             {
                 let (y, x) = textarea.cursor();
-                let mut lines = textarea.clone().into_lines();
+                let mut lines = textarea.into_lines();
                 let mut new_line = String::from("    ");
                 new_line += &lines[y];
                 lines[y] = new_line;
                 *textarea = TextArea::new(lines);
-                textarea.move_cursor(CursorMove::Jump(y as u16, x as u16));
+                textarea.move_cursor(CursorMove::Jump(y, x));
             }
         }
         Input { key: Key::Char('<'), .. } => {
@@ -236,7 +232,7 @@ fn vim_keys(
                 )
             {
                 let (y, x) = textarea.cursor();
-                let mut lines = textarea.clone().into_lines();
+                let mut lines = textarea.into_lines();
                 let mut count = 0;
                 lines[y] = lines[y]
                     .chars()
@@ -246,7 +242,7 @@ fn vim_keys(
                     })
                     .collect();
                 *textarea = TextArea::new(lines);
-                textarea.move_cursor(CursorMove::Jump(y as u16, x as u16));
+                textarea.move_cursor(CursorMove::Jump(y, x));
             }
         }
 
@@ -295,22 +291,22 @@ fn vim_keys(
                 let e = event::read().unwrap().into();
                 match e {
                     Input { key: Key::Char('d'), .. } => {
-                        textarea.move_cursor(CursorMove::Head);
-                        textarea.delete_line_by_end();
-                        textarea.delete_newline();
-                        textarea.move_cursor(CursorMove::Down);
+                        textarea.delete_line();
                     }
                     Input { key: Key::Char('w'), .. } => {
                         textarea.start_selection();
                         textarea.move_cursor(CursorMove::WordForward);
                         textarea.cut();
-                        textarea.cancel_selection();
                     }
                     Input { key: Key::Char('e'), .. } => {
-                        textarea.delete_next_word();
+                        textarea.start_selection();
+                        textarea.move_cursor(CursorMove::WordEnd);
+                        textarea.cut();
                     }
                     Input { key: Key::Char('b'), .. } => {
-                        textarea.delete_word();
+                        textarea.start_selection();
+                        textarea.move_cursor(CursorMove::WordBack);
+                        textarea.cut();
                     }
                     _ => {}
                 }
@@ -384,13 +380,7 @@ impl Widget for &mut ComposerView {
                 .title(Line::from(title).left_aligned())
                 .title(Line::from(word_remaining.to_string()).right_aligned()),
         );
-        self.text_field.set_cursor_style(
-            if matches!(self.focus, Focus::TextField) {
-                Style::default().add_modifier(style::Modifier::REVERSED)
-            } else {
-                Style::default()
-            },
-        );
+        self.text_field.set_focus(matches!(self.focus, Focus::TextField));
         self.text_field.render(upper_area, buf);
 
         let title = match (&self.focus, &self.inputmode) {
@@ -402,13 +392,7 @@ impl Widget for &mut ComposerView {
         self.langs_field.set_block(
             Block::bordered().border_type(BorderType::Rounded).title(title),
         );
-        self.langs_field.set_cursor_style(
-            if matches!(self.focus, Focus::LangField) {
-                Style::default().add_modifier(style::Modifier::REVERSED)
-            } else {
-                Style::default()
-            },
-        );
+        self.langs_field.set_focus(matches!(self.focus, Focus::LangField));
         self.langs_field.render(lower_area, buf);
     }
 }

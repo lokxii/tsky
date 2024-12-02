@@ -12,6 +12,7 @@ mod post;
 mod post_manager;
 mod post_widget;
 mod record_widget;
+mod textarea;
 mod thread_view;
 mod updating_feed;
 

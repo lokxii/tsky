@@ -1,5 +1,3 @@
-use std::process::Command;
-
 use atrium_api::{
     app::bsky::feed::{
         defs::{
@@ -17,6 +15,7 @@ use ratatui::{
     text::Line,
     widgets::{Block, BorderType, Borders, Padding, StatefulWidget, Widget},
 };
+use std::process::Command;
 
 use crate::{
     column::Column,
