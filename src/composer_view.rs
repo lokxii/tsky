@@ -187,16 +187,16 @@ fn vim_keys(
         }
         Input { key: Key::Char('o'), .. } => {
             if matches!(inputmode, InputMode::Normal) {
-                textarea.move_cursor(CursorMove::End);
-                textarea.insert_newline();
+                textarea.insert_newline_after();
+                textarea.move_cursor(CursorMove::Down);
+                textarea.snap_cursor();
                 *inputmode = InputMode::Insert;
             }
         }
         Input { key: Key::Char('O'), .. } => {
             if matches!(inputmode, InputMode::Normal) {
-                textarea.move_cursor(CursorMove::Head);
-                textarea.insert_newline();
-                textarea.move_cursor(CursorMove::Up);
+                textarea.insert_newline_before();
+                textarea.snap_cursor();
                 *inputmode = InputMode::Insert;
             }
         }

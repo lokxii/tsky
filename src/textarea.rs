@@ -187,7 +187,7 @@ impl TextArea {
 
     pub fn snap_cursor(&mut self) {
         let line_count = self.lines[self.cursor.0].chars().count();
-        if self.cursor.1 > 0 && self.cursor.1 >= line_count {
+        if line_count > 0 && self.cursor.1 >= line_count {
             self.cursor.1 = line_count - 1;
         }
     }
@@ -509,10 +509,21 @@ impl TextArea {
         self.update_select_range();
     }
 
-    pub fn insert_newline(&mut self) {
+    pub fn insert_newline_before(&mut self) {
         self.history.changed = true;
         self.history.push(self.lines.clone());
         self.lines.insert(self.cursor.0, String::new());
+    }
+
+    pub fn insert_newline_after(&mut self) {
+        self.history.changed = true;
+        self.history.push(self.lines.clone());
+        let i = if self.lines.len() > 0 {
+            self.cursor.0 + 1
+        } else {
+            self.cursor.0
+        };
+        self.lines.insert(i, String::new());
     }
 
     pub fn delete_line(&mut self) {
