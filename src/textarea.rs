@@ -245,79 +245,99 @@ impl TextArea {
                 if self.lines.is_empty() {
                     return;
                 }
-                let mut whitespace_pos = None;
-                'outer: for i in self.cursor.0..self.lines.len() {
-                    let line = &self.lines[i];
-                    for j in self.cursor.1..line.len() {
-                        if line.chars().nth(j).unwrap().is_whitespace() {
-                            whitespace_pos = Some((i, j));
-                            break 'outer;
-                        }
-                    }
-                    self.cursor.1 = 0;
-                }
-                if whitespace_pos.is_none() {
-                    self.cursor = (
-                        self.lines.len() - 1,
-                        self.lines.last().unwrap().len() - 1,
-                    );
+                let (_, t) = self.lines[self.cursor.0].split_at(self.cursor.1);
+                let mut words = t.split(' ');
+                let mut dx = words.next().unwrap().chars().count() + 1;
+                let mut words = words.skip_while(|w| {
+                    dx += w.is_empty() as usize;
+                    w.is_empty()
+                });
+
+                if let Some(_) = words.next() {
+                    self.cursor.1 += dx;
                     return;
                 }
-                let mut whitespace_pos = whitespace_pos.unwrap();
-                for i in whitespace_pos.0..self.lines.len() {
-                    let line = &self.lines[i];
-                    for j in whitespace_pos.1..line.len() {
-                        if !line.chars().nth(j).unwrap().is_whitespace() {
-                            self.cursor = (i, j);
-                            return;
-                        }
+
+                for i in self.cursor.0 + 1..self.lines.len() {
+                    let mut dx = 0;
+                    let mut words = self.lines[i].split(' ').skip_while(|w| {
+                        dx += w.is_empty() as usize;
+                        w.is_empty()
+                    });
+                    if let Some(_) = words.next() {
+                        self.cursor = (i, dx);
+                        return;
                     }
-                    whitespace_pos.1 = 0;
                 }
-                self.cursor =
-                    (self.lines.len() - 1, self.lines.last().unwrap().len());
+                self.cursor = (
+                    self.lines.len() - 1,
+                    self.lines.last().unwrap().chars().count() - 1,
+                );
             }
             CursorMove::WordEnd => {
                 if self.lines.is_empty() {
                     return;
                 }
-                let char = self.lines[self.cursor.0].chars().nth(self.cursor.1);
-                if char.is_some_and(char::is_whitespace) || char.is_none() {
-                    self.move_cursor(CursorMove::WordForward);
-                }
-            }
-            CursorMove::WordBack => {
-                self.move_cursor(CursorMove::Back);
-                if self.lines.is_empty() || self.cursor == (0, 0) {
-                    return;
-                }
-                let mut line = &self.lines[self.cursor.0];
-                loop {
-                    if let None = line.chars().nth(self.cursor.1) {
-                        if self.cursor.0 == 0 {
-                            return;
-                        }
-                        self.cursor.0 -= 1;
-                        line = &self.lines[self.cursor.0];
-                        self.cursor.1 = line.len() - 1;
-                    } else {
-                        break;
+
+                for i in self.cursor.0..self.lines.len() {
+                    let s = &self.lines[self.cursor.0];
+                    let (_, t) = s.split_at(self.cursor.1);
+                    let mut words = t.split(' ').peekable();
+                    let mut dx = 0;
+                    if (i == 0 || self.cursor.1 > 0)
+                        && words.peek().unwrap().chars().count() == 1
+                    {
+                        words.next();
+                        dx += 2;
                     }
+                    let word = words
+                        .skip_while(|w| {
+                            dx += w.is_empty() as usize;
+                            w.is_empty()
+                        })
+                        .next();
+                    if let Some(word) = word {
+                        self.cursor.1 += dx + word.chars().count() - 1;
+                        return;
+                    }
+                    self.cursor.0 += 1;
+                    self.cursor.1 = 0;
                 }
 
-                let mut first_time = true;
-                for i in (0..=self.cursor.0).rev() {
-                    let line = &self.lines[i];
-                    if first_time {
-                        self.cursor.1 = line.len() - 1;
+                self.cursor = (
+                    self.lines.len() - 1,
+                    self.lines.last().unwrap().chars().count() - 1,
+                );
+            }
+            CursorMove::WordBack => {
+                if self.lines.is_empty() {
+                    return;
+                }
+                for i in 0..=self.cursor.0 {
+                    let s = &self.lines[self.cursor.0];
+                    let (h, _) = s.split_at(self.cursor.1 + 1);
+                    let mut words = h.split(' ').rev().peekable();
+                    let mut dx = 0;
+                    if i == 0 && words.peek().unwrap().chars().count() == 1 {
+                        words.next();
+                        dx += 2;
                     }
-                    for j in (0..=self.cursor.1).rev() {
-                        let curr = line.chars().nth(j).unwrap();
-                        if curr.is_ascii_alphanumeric() == false {
-                            self.cursor = (i, j);
-                        }
+                    let word = words
+                        .skip_while(|w| {
+                            dx += w.is_empty() as usize;
+                            w.is_empty()
+                        })
+                        .next();
+                    if let Some(word) = word {
+                        self.cursor.1 =
+                            self.cursor.1 + 1 - dx - word.chars().count();
+                        return;
                     }
-                    first_time = false;
+                    if self.cursor.0 > 0 {
+                        self.cursor.0 -= 1;
+                        self.cursor.1 =
+                            self.lines[self.cursor.0].chars().count() - 1;
+                    }
                 }
             }
             CursorMove::ParagraphForward => {

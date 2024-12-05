@@ -51,6 +51,14 @@ impl ComposerView {
             InputMode::Insert => match event.into() {
                 Input { key: Key::Esc, .. } => {
                     self.inputmode = InputMode::Normal;
+                    match self.focus {
+                        Focus::TextField => {
+                            self.text_field.move_cursor(CursorMove::Back);
+                        }
+                        Focus::LangField => {
+                            self.langs_field.move_cursor(CursorMove::Back);
+                        }
+                    }
                     return AppEvent::None;
                 }
                 Input { key: Key::Tab, .. } => {
