@@ -280,7 +280,8 @@ fn vim_keys(
             textarea.move_cursor(CursorMove::Head)
         }
         Input { key: Key::Char('$'), .. } => {
-            textarea.move_cursor(CursorMove::End)
+            textarea.move_cursor(CursorMove::End);
+            textarea.move_cursor(CursorMove::Back)
         }
         Input { key: Key::Char('g'), .. } => {
             if matches!(
