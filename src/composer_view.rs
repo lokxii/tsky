@@ -53,10 +53,10 @@ impl ComposerView {
                     self.inputmode = InputMode::Normal;
                     match self.focus {
                         Focus::TextField => {
-                            self.text_field.move_cursor(CursorMove::Back);
+                            self.text_field.snap_cursor();
                         }
                         Focus::LangField => {
-                            self.langs_field.move_cursor(CursorMove::Back);
+                            self.langs_field.snap_cursor();
                         }
                     }
                     return AppEvent::None;
@@ -229,7 +229,7 @@ fn vim_keys(
                 new_line += &lines[y];
                 lines[y] = new_line;
                 *textarea = TextArea::new(lines);
-                textarea.move_cursor(CursorMove::Jump(y, x));
+                textarea.move_cursor(CursorMove::Jump((y, x)));
             }
         }
         Input { key: Key::Char('<'), .. } => {
@@ -250,7 +250,7 @@ fn vim_keys(
                     })
                     .collect();
                 *textarea = TextArea::new(lines);
-                textarea.move_cursor(CursorMove::Jump(y, x));
+                textarea.move_cursor(CursorMove::Jump((y, x)));
             }
         }
 
@@ -281,7 +281,7 @@ fn vim_keys(
         }
         Input { key: Key::Char('$'), .. } => {
             textarea.move_cursor(CursorMove::End);
-            textarea.move_cursor(CursorMove::Back)
+            textarea.snap_cursor();
         }
         Input { key: Key::Char('g'), .. } => {
             if matches!(
@@ -305,6 +305,7 @@ fn vim_keys(
                     Input { key: Key::Char('w'), .. } => {
                         textarea.start_selection();
                         textarea.move_cursor(CursorMove::WordForward);
+                        textarea.move_cursor(CursorMove::Back);
                         textarea.cut();
                     }
                     Input { key: Key::Char('e'), .. } => {
@@ -321,7 +322,6 @@ fn vim_keys(
                 }
             }
             InputMode::View => {
-                textarea.move_cursor(CursorMove::Forward);
                 textarea.cut();
                 *inputmode = InputMode::Normal;
             }
@@ -338,7 +338,9 @@ fn vim_keys(
 
         Input { key: Key::Esc, .. } => {
             if matches!(inputmode, InputMode::View) {
+                let cursor = textarea.cursor();
                 textarea.cancel_selection();
+                textarea.move_cursor(CursorMove::Jump(cursor));
                 *inputmode = InputMode::Normal;
             }
         }

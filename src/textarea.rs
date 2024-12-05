@@ -7,6 +7,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Paragraph, Widget, Wrap},
 };
+use std::cmp::Ordering;
 
 struct History {
     data: Vec<Vec<String>>,
@@ -45,11 +46,57 @@ impl History {
     }
 }
 
+#[derive(Clone, Copy)]
+enum SelectRangeMode {
+    Left,
+    Right,
+}
+
 // inclusive
 #[derive(Clone, Copy)]
 struct SelectRange {
     start: (usize, usize),
     end: (usize, usize),
+    mode: SelectRangeMode,
+}
+
+impl SelectRange {
+    fn in_range(self, (i, j): (usize, usize)) -> bool {
+        if !(self.start.0 <= i && i <= self.end.0) {
+            return false;
+        }
+        if self.start.0 == i {
+            if i < self.end.0 {
+                return self.start.1 <= j;
+            } else {
+                return self.start.1 <= j && j <= self.end.1;
+            }
+        }
+        if self.end.0 == i {
+            return j <= self.end.1;
+        }
+        return true;
+    }
+}
+
+fn cell_cmp(left: (usize, usize), right: (usize, usize)) -> Ordering {
+    if left == right {
+        return Ordering::Equal;
+    } else if left.0 > right.0 {
+        return Ordering::Greater;
+    } else if left.0 == right.0 && left.1 > right.1 {
+        return Ordering::Greater;
+    } else {
+        return Ordering::Less;
+    }
+}
+
+fn cell_lt(left: (usize, usize), right: (usize, usize)) -> bool {
+    matches!(cell_cmp(left, right), Ordering::Less)
+}
+
+fn cell_le(left: (usize, usize), right: (usize, usize)) -> bool {
+    matches!(cell_cmp(left, right), Ordering::Less | Ordering::Equal)
 }
 
 pub struct TextArea {
@@ -133,6 +180,13 @@ impl TextArea {
         self.focused = focus;
     }
 
+    pub fn snap_cursor(&mut self) {
+        let line_count = self.lines[self.cursor.0].chars().count();
+        if self.cursor.1 > 0 && self.cursor.1 >= line_count {
+            self.cursor.1 = line_count - 1;
+        }
+    }
+
     pub fn input(&mut self, input: Input) {
         if input.ctrl || input.alt {
             return;
@@ -192,27 +246,79 @@ impl TextArea {
         };
     }
 
+    fn update_select_range(&mut self) {
+        let Some(range) = self.select.as_mut() else {
+            return;
+        };
+
+        match range.mode {
+            SelectRangeMode::Left => {
+                let cursor_start_end = cell_lt(self.cursor, range.start)
+                    && cell_le(range.start, range.end);
+                let start_cursor_end = cell_lt(range.start, self.cursor)
+                    && cell_le(self.cursor, range.end);
+                let start_end_cursor = cell_le(range.start, range.end)
+                    && cell_lt(range.end, self.cursor);
+
+                if cursor_start_end || start_cursor_end {
+                    range.start = self.cursor;
+                    return;
+                }
+                if start_end_cursor {
+                    range.mode = SelectRangeMode::Right;
+                    range.start = range.end;
+                    range.end = self.cursor;
+                    return;
+                }
+            }
+            SelectRangeMode::Right => {
+                let cursor_start_end = cell_lt(self.cursor, range.start)
+                    && cell_le(range.start, range.end);
+                let start_cursor_end = cell_lt(range.start, self.cursor)
+                    && cell_le(self.cursor, range.end);
+                let start_end_cursor = cell_le(range.start, range.end)
+                    && cell_lt(range.end, self.cursor);
+
+                if start_end_cursor || start_cursor_end {
+                    range.end = self.cursor;
+                    return;
+                }
+                if cursor_start_end {
+                    range.mode = SelectRangeMode::Left;
+                    range.end = range.start;
+                    range.start = self.cursor;
+                    return;
+                }
+            }
+        }
+    }
+
     pub fn move_cursor(&mut self, cursor_move: CursorMove) {
         match cursor_move {
             CursorMove::Forward => {
                 if self.lines.is_empty() {
                     return;
                 }
-                if self.cursor.1
-                    == self.lines[self.cursor.0].chars().count() - 1
+                if self.cursor.1 < self.lines[self.cursor.0].chars().count() - 1
                 {
-                    return;
+                    self.cursor.1 += 1;
+                } else if self.cursor.0 < self.lines.len() - 1 {
+                    self.move_cursor(CursorMove::Down);
+                    self.move_cursor(CursorMove::Head);
                 }
-                self.cursor.1 += 1;
             }
             CursorMove::Back => {
                 if self.cursor.1 > 0 {
                     self.cursor.1 -= 1;
+                } else if self.cursor.0 > 0 {
+                    self.move_cursor(CursorMove::Up);
+                    self.move_cursor(CursorMove::End);
                 }
             }
             CursorMove::Up => {
                 if self.cursor.0 > 0 {
                     self.cursor.0 -= 1;
+                    self.snap_cursor();
                 }
             }
             CursorMove::Down => {
@@ -221,6 +327,7 @@ impl TextArea {
                 }
                 if self.cursor.0 < self.lines.len() - 1 {
                     self.cursor.0 += 1;
+                    self.snap_cursor();
                 }
             }
             CursorMove::Head => {
@@ -234,12 +341,14 @@ impl TextArea {
             }
             CursorMove::Top => {
                 self.cursor.0 = 0;
+                self.snap_cursor();
             }
             CursorMove::Bottom => {
                 if self.lines.is_empty() {
                     return;
                 }
                 self.cursor.0 = self.lines.len() - 1;
+                self.snap_cursor();
             }
             CursorMove::WordForward => {
                 if self.lines.is_empty() {
@@ -255,6 +364,7 @@ impl TextArea {
 
                 if let Some(_) = words.next() {
                     self.cursor.1 += dx;
+                    self.update_select_range();
                     return;
                 }
 
@@ -266,6 +376,7 @@ impl TextArea {
                     });
                     if let Some(_) = words.next() {
                         self.cursor = (i, dx);
+                        self.update_select_range();
                         return;
                     }
                 }
@@ -298,6 +409,7 @@ impl TextArea {
                         .next();
                     if let Some(word) = word {
                         self.cursor.1 += dx + word.chars().count() - 1;
+                        self.update_select_range();
                         return;
                     }
                     self.cursor.0 += 1;
@@ -331,6 +443,7 @@ impl TextArea {
                     if let Some(word) = word {
                         self.cursor.1 =
                             self.cursor.1 + 1 - dx - word.chars().count();
+                        self.update_select_range();
                         return;
                     }
                     if self.cursor.0 > 0 {
@@ -372,7 +485,7 @@ impl TextArea {
                 }
                 self.cursor = (0, 0)
             }
-            CursorMove::Jump(mut y, mut x) => {
+            CursorMove::Jump((mut y, mut x)) => {
                 y = if y >= self.lines.len() {
                     self.lines.len() - 1
                 } else {
@@ -383,6 +496,7 @@ impl TextArea {
                 self.cursor = (y, x);
             }
         }
+        self.update_select_range();
     }
 
     pub fn insert_newline(&mut self) {
@@ -491,6 +605,7 @@ impl TextArea {
             let head = self.lines[range.start.0].chars().take(range.start.1);
             let tail = self.lines[range.start.0].chars().skip(range.end.1 + 1);
             self.lines[range.start.0] = head.chain(tail).collect::<String>();
+            self.cancel_selection();
             return;
         }
 
@@ -517,16 +632,19 @@ impl TextArea {
             range.start.0,
             first_line_left.to_string() + last_line_left,
         );
-        self.cursor = range.start;
         self.cancel_selection();
     }
 
     pub fn start_selection(&mut self) {
-        self.select =
-            Some(SelectRange { start: self.cursor, end: self.cursor });
+        self.select = Some(SelectRange {
+            start: self.cursor,
+            end: self.cursor,
+            mode: SelectRangeMode::Right,
+        });
     }
 
     pub fn cancel_selection(&mut self) {
+        self.cursor = self.select.unwrap().start;
         self.select = None;
     }
 }
@@ -545,27 +663,35 @@ impl Widget for &mut TextArea {
             .into_iter()
             .enumerate()
             .map(|(i, l)| {
-                if i != self.cursor.0 {
-                    return Line::from(l);
+                let mut count = 0;
+                let mut line = l
+                    .chars()
+                    .enumerate()
+                    .map(|(j, c)| {
+                        count += 1;
+                        let s = if self.cursor == (i, j) {
+                            Style::default().reversed()
+                        } else if self
+                            .select
+                            .is_some_and(|r| r.in_range((i, j)))
+                        {
+                            Style::default().bg(Color::Rgb(100, 100, 100))
+                        } else if i == self.cursor.0 && self.focused {
+                            Style::default().bg(Color::Rgb(45, 50, 55))
+                        } else {
+                            Style::default()
+                        };
+                        Span::styled(c.to_string(), s)
+                    })
+                    .fold(Line::from(""), |acc, s| acc + s);
+
+                let show_cursor = self.focused
+                    && i == self.cursor.0
+                    && self.cursor.1 >= count;
+                if show_cursor {
+                    line += Span::from("█");
                 }
-                let focus_style = if self.focused {
-                    Style::default().bg(Color::Rgb(45, 50, 55))
-                } else {
-                    Style::default()
-                };
-                Span::styled(
-                    l.chars().take(self.cursor.1).collect::<String>(),
-                    focus_style,
-                ) + match l.chars().nth(self.cursor.1) {
-                    _ if !self.focused => Span::from(""),
-                    Some(c) => {
-                        Span::styled(c.to_string(), Style::default().reversed())
-                    }
-                    None => Span::from("█"),
-                } + Span::styled(
-                    l.chars().skip(self.cursor.1 + 1).collect::<String>(),
-                    focus_style,
-                )
+                line
             })
             .collect::<Vec<_>>();
         let mut para = Paragraph::new(lines).wrap(Wrap { trim: false });
@@ -683,5 +809,5 @@ pub enum CursorMove {
     WordBack,
     ParagraphForward,
     ParagraphBack,
-    Jump(usize, usize),
+    Jump((usize, usize)),
 }
