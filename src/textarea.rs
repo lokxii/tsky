@@ -12,21 +12,26 @@ use std::cmp::Ordering;
 struct History {
     data: Vec<Vec<String>>,
     ptr: usize,
+    changed: bool,
 }
 
 impl History {
     fn new() -> Self {
-        History { data: vec![vec![]], ptr: 0 }
+        History { data: vec![vec![]], ptr: 0, changed: true }
     }
 
-    fn from_base(base: Vec<String>) -> Self {
-        History { data: vec![base], ptr: 0 }
+    fn from(base: Vec<String>) -> Self {
+        History { data: vec![base], ptr: 0, changed: true }
     }
 
     fn push(&mut self, lines: Vec<String>) {
+        if self.changed == false {
+            return;
+        }
         self.data = self.data.drain(0..=self.ptr).collect();
         self.data.push(lines);
         self.ptr += 1;
+        self.changed = false;
     }
 
     fn move_backward(&mut self) {
@@ -153,7 +158,7 @@ impl TextArea {
             lines: lines.clone(),
             cursor: (0, 0),
             clipboard: vec![],
-            history: History::from_base(lines),
+            history: History::from(lines),
             select: None,
             block: None,
             focused: true,
@@ -194,6 +199,7 @@ impl TextArea {
 
         match input.key {
             Key::Char(char) => {
+                self.history.changed = true;
                 if self.lines.is_empty() {
                     self.lines.push(String::from(char));
                     return;
@@ -205,6 +211,8 @@ impl TextArea {
                 if self.lines.is_empty() || self.cursor == (0, 0) {
                     return;
                 }
+                self.history.changed = true;
+
                 if self.cursor.1 == 0 {
                     let line = self.lines.remove(self.cursor.0);
                     self.cursor.0 -= 1;
@@ -219,6 +227,7 @@ impl TextArea {
                 self.cursor.1 -= 1;
             }
             Key::Enter => {
+                self.history.changed = true;
                 self.lines.insert(self.cursor.0 + 1, String::new());
                 self.cursor.0 += 1;
                 self.cursor.1 = 0;
@@ -236,6 +245,7 @@ impl TextArea {
                 self.move_cursor(CursorMove::Down);
             }
             Key::Tab => {
+                self.history.changed = true;
                 if self.lines.is_empty() {
                     self.lines.push(String::new());
                 }
@@ -500,6 +510,7 @@ impl TextArea {
     }
 
     pub fn insert_newline(&mut self) {
+        self.history.changed = true;
         self.history.push(self.lines.clone());
         self.lines.insert(self.cursor.0, String::new());
     }
@@ -541,6 +552,7 @@ impl TextArea {
         if self.clipboard.len() == 0 {
             return;
         }
+        self.history.changed = true;
         self.history.push(self.lines.clone());
         let mut clipboard = vec![];
         std::mem::swap(&mut self.clipboard, &mut clipboard);
@@ -598,6 +610,7 @@ impl TextArea {
         if self.select.is_none() {
             return;
         }
+        self.history.changed = true;
         self.history.push(self.lines.clone());
 
         let range = self.select.unwrap();
@@ -646,6 +659,10 @@ impl TextArea {
     pub fn cancel_selection(&mut self) {
         self.cursor = self.select.unwrap().start;
         self.select = None;
+    }
+
+    pub fn push_history(&mut self) {
+        self.history.push(self.lines.clone());
     }
 }
 

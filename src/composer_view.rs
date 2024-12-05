@@ -53,9 +53,11 @@ impl ComposerView {
                     self.inputmode = InputMode::Normal;
                     match self.focus {
                         Focus::TextField => {
+                            self.text_field.push_history();
                             self.text_field.snap_cursor();
                         }
                         Focus::LangField => {
+                            self.text_field.push_history();
                             self.langs_field.snap_cursor();
                         }
                     }
