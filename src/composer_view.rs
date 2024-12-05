@@ -225,13 +225,7 @@ fn vim_keys(
                     Input { key: Key::Char('>'), .. }
                 )
             {
-                let (y, x) = textarea.cursor();
-                let mut lines = textarea.into_lines();
-                let mut new_line = String::from("    ");
-                new_line += &lines[y];
-                lines[y] = new_line;
-                *textarea = TextArea::new(lines);
-                textarea.move_cursor(CursorMove::Jump((y, x)));
+                textarea.indent_right();
             }
         }
         Input { key: Key::Char('<'), .. } => {
@@ -241,18 +235,7 @@ fn vim_keys(
                     Input { key: Key::Char('<'), .. }
                 )
             {
-                let (y, x) = textarea.cursor();
-                let mut lines = textarea.into_lines();
-                let mut count = 0;
-                lines[y] = lines[y]
-                    .chars()
-                    .skip_while(|c| {
-                        count += 1;
-                        *c == ' ' && count <= 4
-                    })
-                    .collect();
-                *textarea = TextArea::new(lines);
-                textarea.move_cursor(CursorMove::Jump((y, x)));
+                textarea.indent_left();
             }
         }
 

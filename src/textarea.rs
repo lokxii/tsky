@@ -550,6 +550,33 @@ impl TextArea {
         }
     }
 
+    pub fn indent_right(&mut self) {
+        if self.lines.is_empty()
+            || self.lines[self.cursor.0].chars().count() == 0
+        {
+            return;
+        }
+        self.lines[self.cursor.0] =
+            String::from("    ") + &self.lines[self.cursor.0];
+    }
+
+    pub fn indent_left(&mut self) {
+        if self.lines.is_empty()
+            || self.lines[self.cursor.0].chars().count() == 0
+        {
+            return;
+        }
+        let mut count = 0;
+        self.lines[self.cursor.0] = self.lines[self.cursor.0]
+            .chars()
+            .skip_while(|c| {
+                count += 1;
+                c.is_whitespace() && count <= 4
+            })
+            .collect::<String>();
+        self.snap_cursor();
+    }
+
     pub fn undo(&mut self) {
         self.history.move_backward();
         let (lines, cursor) = self.history.current();
