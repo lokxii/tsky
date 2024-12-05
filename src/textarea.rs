@@ -10,26 +10,26 @@ use ratatui::{
 use std::cmp::Ordering;
 
 struct History {
-    data: Vec<Vec<String>>,
+    data: Vec<(Vec<String>, (usize, usize))>,
     ptr: usize,
     changed: bool,
 }
 
 impl History {
     fn new() -> Self {
-        History { data: vec![vec![]], ptr: 0, changed: true }
+        History { data: vec![(vec![], (0, 0))], ptr: 0, changed: true }
     }
 
     fn from(base: Vec<String>) -> Self {
-        History { data: vec![base], ptr: 0, changed: true }
+        History { data: vec![(base, (0, 0))], ptr: 0, changed: true }
     }
 
-    fn push(&mut self, lines: Vec<String>) {
+    fn push(&mut self, lines: Vec<String>, cursor: (usize, usize)) {
         if self.changed == false {
             return;
         }
         self.data = self.data.drain(0..=self.ptr).collect();
-        self.data.push(lines);
+        self.data.push((lines, cursor));
         self.ptr += 1;
         self.changed = false;
     }
@@ -46,7 +46,7 @@ impl History {
         }
     }
 
-    fn current(&self) -> Vec<String> {
+    fn current(&self) -> (Vec<String>, (usize, usize)) {
         return self.data[self.ptr].clone();
     }
 }
@@ -511,13 +511,13 @@ impl TextArea {
 
     pub fn insert_newline_before(&mut self) {
         self.history.changed = true;
-        self.history.push(self.lines.clone());
+        self.push_history();
         self.lines.insert(self.cursor.0, String::new());
     }
 
     pub fn insert_newline_after(&mut self) {
         self.history.changed = true;
-        self.history.push(self.lines.clone());
+        self.push_history();
         let i = if self.lines.len() > 0 {
             self.cursor.0 + 1
         } else {
@@ -551,12 +551,18 @@ impl TextArea {
 
     pub fn undo(&mut self) {
         self.history.move_backward();
-        self.lines = self.history.current();
+        let (lines, cursor) = self.history.current();
+        self.lines = lines;
+        self.cursor = cursor;
+        self.snap_cursor();
     }
 
     pub fn redo(&mut self) {
         self.history.move_forward();
-        self.lines = self.history.current();
+        let (lines, cursor) = self.history.current();
+        self.lines = lines;
+        self.cursor = cursor;
+        self.snap_cursor();
     }
 
     pub fn paste(&mut self) {
@@ -564,65 +570,66 @@ impl TextArea {
             return;
         }
         self.history.changed = true;
-        self.history.push(self.lines.clone());
-        let mut clipboard = vec![];
-        std::mem::swap(&mut self.clipboard, &mut clipboard);
+        self.push_history();
+        let clipboard = self.clipboard.clone();
         if clipboard.len() == 0 {
             return;
         }
 
-        let lines_len = clipboard.len();
-        let mut lines = clipboard.into_iter().peekable();
-        let first_line = lines.next().unwrap();
-        let (head, tail) = self.lines[self.cursor.0].split_at(self.cursor.1);
+        let clipboard_len = clipboard.len();
+        let mut clipboard = clipboard.into_iter().peekable();
+        let first_line = clipboard.next().unwrap();
+        let (head, tail) =
+            self.lines[self.cursor.0].split_at(self.cursor.1 + 1);
         let head = head.to_string();
         let tail = tail.to_string();
 
-        if lines.peek().is_none() {
-            self.lines[self.cursor.0].insert_str(self.cursor.1, &first_line);
+        if clipboard_len == 1 {
+            self.lines[self.cursor.0] = head.to_string() + &first_line + &tail;
+            self.cursor.1 += first_line.chars().count();
             return;
-        } else {
-            self.lines[self.cursor.0] = head + &first_line;
         }
-        self.cursor.0 += 1;
-        for _ in 1..lines_len - 1 {
-            self.lines.insert(self.cursor.0, lines.next().unwrap());
+
+        self.lines[self.cursor.0] = head.to_string() + &first_line;
+        for _ in 1..clipboard_len {
             self.cursor.0 += 1;
+            self.lines.insert(self.cursor.0, clipboard.next().unwrap());
         }
-        self.lines[self.cursor.0] = tail + &self.lines[self.cursor.0];
+        self.cursor.1 = self.lines[self.cursor.0].chars().count() - 1;
+        self.lines[self.cursor.0] += &tail;
     }
 
     pub fn copy(&mut self) {
-        if self.select.is_none() {
+        if self.select.is_none() || self.lines.len() == 0 {
             return;
         }
         let range = self.select.unwrap();
         if range.start.0 == range.end.0 {
             let clipboard_content =
-                &self.clipboard[range.start.0][range.start.1..=range.start.1];
+                &self.lines[range.start.0][range.start.1..=range.end.1];
             self.clipboard = vec![clipboard_content.to_string()];
             return;
         }
 
         let first_line = std::iter::once(
-            self.clipboard[range.start.0][range.start.1..].to_string(),
+            self.lines[range.start.0][range.start.1..].to_string(),
         );
-        let middle_lines = self.clipboard[range.start.0 + 1..range.end.0]
+        let middle_lines = self.lines[range.start.0 + 1..range.end.0]
             .iter()
             .map(String::clone);
         let last_line = std::iter::once(
-            self.clipboard[range.end.0][..=range.end.1].to_string(),
+            self.lines[range.end.0][..=range.end.1].to_string(),
         );
         self.clipboard =
             first_line.chain(middle_lines).chain(last_line).collect();
     }
 
     pub fn cut(&mut self) {
-        if self.select.is_none() {
+        if self.select.is_none() || self.lines.len() == 0 {
             return;
         }
         self.history.changed = true;
-        self.history.push(self.lines.clone());
+        self.push_history();
 
         let range = self.select.unwrap();
         if range.start.0 == range.end.0 {
@@ -673,7 +680,7 @@ impl TextArea {
     }
 
     pub fn push_history(&mut self) {
-        self.history.push(self.lines.clone());
+        self.history.push(self.lines.clone(), self.cursor);
     }
 }
 

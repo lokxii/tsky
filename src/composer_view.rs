@@ -331,7 +331,6 @@ fn vim_keys(
         },
         Input { key: Key::Char('y'), .. } => {
             if matches!(inputmode, InputMode::View) {
-                textarea.move_cursor(CursorMove::Forward);
                 textarea.copy();
                 textarea.cancel_selection();
                 *inputmode = InputMode::Normal;
