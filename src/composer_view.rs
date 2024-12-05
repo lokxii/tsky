@@ -276,7 +276,7 @@ fn vim_keys(
         Input { key: Key::Char('e'), .. } => {
             textarea.move_cursor(CursorMove::WordEnd)
         }
-        Input { key: Key::Char('^'), .. } => {
+        Input { key: Key::Char('0'), .. } => {
             textarea.move_cursor(CursorMove::Head)
         }
         Input { key: Key::Char('$'), .. } => {
