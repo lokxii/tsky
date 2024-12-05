@@ -201,7 +201,10 @@ fn vim_keys(
             }
         }
         Input { key: Key::Char('p'), .. } => {
-            textarea.paste();
+            textarea.paste_after();
+        }
+        Input { key: Key::Char('P'), .. } => {
+            textarea.paste_before();
         }
         Input { key: Key::Char('u'), .. } => {
             textarea.undo();

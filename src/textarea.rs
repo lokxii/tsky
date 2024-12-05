@@ -510,20 +510,22 @@ impl TextArea {
     }
 
     pub fn insert_newline_before(&mut self) {
+        self.lines.insert(self.cursor.0, String::new());
+
         self.history.changed = true;
         self.push_history();
-        self.lines.insert(self.cursor.0, String::new());
     }
 
     pub fn insert_newline_after(&mut self) {
-        self.history.changed = true;
-        self.push_history();
         let i = if self.lines.len() > 0 {
             self.cursor.0 + 1
         } else {
             self.cursor.0
         };
         self.lines.insert(i, String::new());
+
+        self.history.changed = true;
+        self.push_history();
     }
 
     pub fn delete_line(&mut self) {
@@ -593,12 +595,10 @@ impl TextArea {
         self.snap_cursor();
     }
 
-    pub fn paste(&mut self) {
+    pub fn paste_before(&mut self) {
         if self.clipboard.len() == 0 {
             return;
         }
-        self.history.changed = true;
-        self.push_history();
         let clipboard = self.clipboard.clone();
         if clipboard.len() == 0 {
             return;
@@ -607,14 +607,16 @@ impl TextArea {
         let clipboard_len = clipboard.len();
         let mut clipboard = clipboard.into_iter().peekable();
         let first_line = clipboard.next().unwrap();
-        let (head, tail) =
-            self.lines[self.cursor.0].split_at(self.cursor.1 + 1);
+        let (head, tail) = self.lines[self.cursor.0].split_at(self.cursor.1);
         let head = head.to_string();
         let tail = tail.to_string();
 
         if clipboard_len == 1 {
             self.lines[self.cursor.0] = head.to_string() + &first_line + &tail;
             self.cursor.1 += first_line.chars().count();
+
+            self.history.changed = true;
+            self.push_history();
             return;
         }
 
@@ -625,6 +627,20 @@ impl TextArea {
         }
         self.cursor.1 = self.lines[self.cursor.0].chars().count() - 1;
         self.lines[self.cursor.0] += &tail;
+
+        self.history.changed = true;
+        self.push_history();
+    }
+
+    pub fn paste_after(&mut self) {
+        if self.clipboard.len() == 0 {
+            return;
+        }
+        self.cursor.1 += 1;
+        if self.cursor.1 > self.lines[self.cursor.0].chars().count() {
+            self.cursor.1 = self.lines[self.cursor.0].chars().count()
+        }
+        self.paste_before();
     }
 
     pub fn copy(&mut self) {
@@ -656,26 +672,34 @@ impl TextArea {
         if self.select.is_none() || self.lines.len() == 0 {
             return;
         }
-        self.history.changed = true;
-        self.push_history();
 
         let range = self.select.unwrap();
         if range.start.0 == range.end.0 {
+            self.clipboard = vec![self.lines[range.start.0]
+                .chars()
+                .skip(range.start.1)
+                .take(range.end.1 - range.start.1)
+                .collect::<String>()];
             let head = self.lines[range.start.0].chars().take(range.start.1);
             let tail = self.lines[range.start.0].chars().skip(range.end.1 + 1);
             self.lines[range.start.0] = head.chain(tail).collect::<String>();
             self.cancel_selection();
+            self.snap_cursor();
+
+            self.history.changed = true;
+            self.push_history();
             return;
         }
 
         let removed_lines =
-            self.lines.drain(range.start.0..=range.end.1).collect::<Vec<_>>();
+            self.lines.drain(range.start.0..=range.end.0).collect::<Vec<_>>();
         let first_line = removed_lines.first().unwrap().clone();
         let last_line = removed_lines.last().unwrap().clone();
 
         let (first_line_left, first_line_cut) =
             first_line.split_at(range.start.1);
-        let (last_line_cut, last_line_left) = last_line.split_at(range.end.1);
+        let (last_line_cut, last_line_left) =
+            last_line.split_at(range.end.1 + 1);
 
         self.clipboard = std::iter::once(first_line_cut.to_string())
             .chain(
@@ -692,6 +716,10 @@ impl TextArea {
             first_line_left.to_string() + last_line_left,
         );
         self.cancel_selection();
+        self.snap_cursor();
+
+        self.history.changed = true;
+        self.push_history();
     }
 
     pub fn start_selection(&mut self) {
