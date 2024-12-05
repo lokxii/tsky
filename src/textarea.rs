@@ -544,7 +544,8 @@ impl TextArea {
             return;
         }
         string_remove_index!(self.lines[self.cursor.0], self.cursor.1);
-        if self.cursor.1 == self.lines[self.cursor.0].len() {
+        if self.cursor.1 > 0 && self.cursor.1 == self.lines[self.cursor.0].len()
+        {
             self.cursor.1 -= 1;
         }
     }
