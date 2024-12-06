@@ -1,12 +1,15 @@
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Style, Stylize},
     symbols,
     text::{Line, Span},
     widgets::{Block, Paragraph, Widget},
 };
 
-use crate::{embed_widget::EmbedWidget, post::Post};
+use crate::{
+    embed_widget::EmbedWidget,
+    post::{FacetType, Post},
+};
 
 pub struct PostWidget {
     post: Post,
@@ -39,13 +42,29 @@ impl PostWidget {
     }
 
     fn body_paragraph(&self) -> Paragraph {
-        Paragraph::new(
-            self.post
-                .text
-                .split('\n')
-                .map(|line| Line::from(line).style(Color::White))
-                .collect::<Vec<Line>>(),
-        )
+        let mut last_segment = self.post.text.as_str();
+        let mut last_offset = 0;
+        let mut spans = vec![];
+        for facet in &self.post.facets {
+            let (left, middle) =
+                last_segment.split_at(facet.range.start - last_offset);
+            let (middle, right) =
+                middle.split_at(facet.range.end - facet.range.start);
+            spans.push(Span::styled(left, Style::default()));
+            let facet_style = match facet.r#type {
+                FacetType::Mention => Style::default().italic(),
+                FacetType::Link => Style::default().underlined(),
+                FacetType::Tag => Style::default().bold(),
+            };
+            spans.push(Span::styled(middle, facet_style));
+            last_segment = right;
+            last_offset = facet.range.end;
+        }
+        spans.push(Span::from(last_segment));
+
+        Paragraph::new(vec![spans
+            .into_iter()
+            .fold(Line::from(""), |acc, s| acc + s)])
         .wrap(ratatui::widgets::Wrap { trim: false })
     }
 }

@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use atrium_api::{
     app::bsky::{actor::defs::ProfileViewBasicData, feed::defs::PostView},
     types::string::Cid,
@@ -43,10 +45,16 @@ impl Author {
 }
 
 #[derive(Clone)]
-pub enum Facet {
-    Mention(usize, usize),
-    Link(usize, usize),
-    Tag(usize, usize),
+pub enum FacetType {
+    Mention,
+    Link,
+    Tag,
+}
+
+#[derive(Clone)]
+pub struct Facet {
+    pub r#type: FacetType,
+    pub range: Range<usize>,
 }
 
 #[derive(Clone)]
@@ -117,7 +125,7 @@ impl Post {
             .map(|label| label.val.clone())
             .collect();
 
-        let facets = if !record.contains_key("facets") {
+        let mut facets = if !record.contains_key("facets") {
             vec![]
         } else {
             match &*record["facets"] {
@@ -147,20 +155,21 @@ impl Post {
                             panic!("Unknown index map");
                         };
                         match r#type.as_str() {
-                            "app.bsky.richtext.facet#mention" => {
-                                Facet::Mention(
-                                    byte_start.try_into().unwrap(),
-                                    byte_end.try_into().unwrap(),
-                                )
-                            }
-                            "app.bsky.richtext.facet#link" => Facet::Link(
-                                byte_start.try_into().unwrap(),
-                                byte_end.try_into().unwrap(),
-                            ),
-                            "app.bsky.richtext.facet#tag" => Facet::Tag(
-                                byte_start.try_into().unwrap(),
-                                byte_end.try_into().unwrap(),
-                            ),
+                            "app.bsky.richtext.facet#mention" => Facet {
+                                r#type: FacetType::Mention,
+                                range: byte_start.try_into().unwrap()
+                                    ..byte_end.try_into().unwrap(),
+                            },
+                            "app.bsky.richtext.facet#link" => Facet {
+                                r#type: FacetType::Link,
+                                range: byte_start.try_into().unwrap()
+                                    ..byte_end.try_into().unwrap(),
+                            },
+                            "app.bsky.richtext.facet#tag" => Facet {
+                                r#type: FacetType::Tag,
+                                range: byte_start.try_into().unwrap()
+                                    ..byte_end.try_into().unwrap(),
+                            },
                             _ => panic!("Unknown feature type {}", r#type),
                         }
                     })
@@ -168,6 +177,7 @@ impl Post {
                 _ => panic!("facets is not a list"),
             }
         };
+        facets.sort_by(|l, r| l.range.start.cmp(&r.range.start));
 
         return Post {
             uri: view.uri.clone(),
