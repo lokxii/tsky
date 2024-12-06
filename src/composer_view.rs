@@ -4,7 +4,7 @@ use crate::{
     textarea::{CursorMove, Input, Key, TextArea, TextStyle},
 };
 use atrium_api::types::string::Language;
-use bsky_sdk::BskyAgent;
+use bsky_sdk::{rich_text::RichText, BskyAgent};
 use crossterm::event::{self, Event};
 use ratatui::{
     layout::Rect,
@@ -151,14 +151,23 @@ async fn post(agent: BskyAgent, text: String, langs: &String) -> AppEvent {
         return AppEvent::None;
     }
 
+    let created_at = atrium_api::types::string::Datetime::now();
+    let facets = match RichText::new_with_detect_facets(&text).await {
+        Ok(richtext) => richtext.facets,
+        Err(e) => {
+            log::error!("Cannot parse richtext: {}", e);
+            return AppEvent::None;
+        }
+    };
+    let langs = if langs.is_empty() { None } else { Some(langs) };
     let r = agent
         .create_record(atrium_api::app::bsky::feed::post::RecordData {
-            created_at: atrium_api::types::string::Datetime::now(),
+            created_at,
             embed: None,
             entities: None,
-            facets: None,
+            facets,
             labels: None,
-            langs: if langs.is_empty() { None } else { Some(langs) },
+            langs,
             reply: None,
             tags: None,
             text,
