@@ -19,6 +19,15 @@ don't use.
 - Posting (no rich text and embeds yet)
     - subset of vim keybindings
 
+## TODO List
+
+- Reply
+- Quote
+- Different sources of feed
+- Multicolumn
+- Notification
+- View profile
+
 ## Login
 
 For first time login, set `handle` and `password` for enviornment variable. You
