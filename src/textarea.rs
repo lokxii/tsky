@@ -343,8 +343,8 @@ impl TextArea {
                 if self.lines.is_empty() {
                     return;
                 }
-                if self.cursor.1 < self.lines[self.cursor.0].chars().count() - 1
-                {
+                let char_count = self.lines[self.cursor.0].chars().count();
+                if char_count > 0 && self.cursor.1 < char_count - 1 {
                     self.cursor.1 += 1;
                 } else if self.cursor.0 < self.lines.len() - 1 {
                     self.move_cursor(CursorMove::Down);
@@ -641,9 +641,14 @@ impl TextArea {
         let clipboard_len = clipboard.len();
         let mut clipboard = clipboard.into_iter().peekable();
         let first_line = clipboard.next().unwrap();
-        let (head, tail) = self.lines[self.cursor.0].split_at(self.cursor.1);
-        let head = head.to_string();
-        let tail = tail.to_string();
+        let head = self.lines[self.cursor.0]
+            .chars()
+            .take(self.cursor.1)
+            .collect::<String>();
+        let tail = self.lines[self.cursor.0]
+            .chars()
+            .skip(self.cursor.1)
+            .collect::<String>();
 
         if clipboard_len == 1 {
             self.lines[self.cursor.0] = head.to_string() + &first_line + &tail;
@@ -683,20 +688,29 @@ impl TextArea {
         }
         let range = self.select.unwrap();
         if range.start.0 == range.end.0 {
-            let clipboard_content =
-                &self.lines[range.start.0][range.start.1..=range.end.1];
-            self.clipboard = vec![clipboard_content.to_string()];
+            let clipboard_content = self.lines[range.start.0]
+                .chars()
+                .skip(range.start.1)
+                .take(range.end.1 - range.start.1 + 1)
+                .collect::<String>();
+            self.clipboard = vec![clipboard_content];
             return;
         }
 
         let first_line = std::iter::once(
-            self.lines[range.start.0][range.start.1..].to_string(),
+            self.lines[range.start.0]
+                .chars()
+                .skip(range.start.1)
+                .collect::<String>(),
         );
         let middle_lines = self.lines[range.start.0 + 1..range.end.0]
             .iter()
             .map(String::clone);
         let last_line = std::iter::once(
-            self.lines[range.end.0][..=range.end.1].to_string(),
+            self.lines[range.end.0]
+                .chars()
+                .take(range.end.1 + 1)
+                .collect::<String>(),
         );
         self.clipboard =
             first_line.chain(middle_lines).chain(last_line).collect();
@@ -712,7 +726,7 @@ impl TextArea {
             self.clipboard = vec![self.lines[range.start.0]
                 .chars()
                 .skip(range.start.1)
-                .take(range.end.1 - range.start.1)
+                .take(range.end.1 - range.start.1 + 1)
                 .collect::<String>()];
             let head = self.lines[range.start.0].chars().take(range.start.1);
             let tail = self.lines[range.start.0].chars().skip(range.end.1 + 1);
@@ -730,12 +744,16 @@ impl TextArea {
         let first_line = removed_lines.first().unwrap().clone();
         let last_line = removed_lines.last().unwrap().clone();
 
-        let (first_line_left, first_line_cut) =
-            first_line.split_at(range.start.1);
-        let (last_line_cut, last_line_left) =
-            last_line.split_at(range.end.1 + 1);
+        let first_line_left =
+            first_line.chars().take(range.start.1).collect::<String>();
+        let first_line_cut =
+            first_line.chars().skip(range.start.1).collect::<String>();
 
-        self.clipboard = std::iter::once(first_line_cut.to_string())
+        let end_1 = if last_line.is_empty() { 0 } else { range.end.1 + 1 };
+        let last_line_cut = last_line.chars().take(end_1).collect::<String>();
+        let last_line_left = last_line.chars().skip(end_1).collect::<String>();
+
+        self.clipboard = std::iter::once(first_line_cut)
             .chain(
                 removed_lines
                     .into_iter()
@@ -745,10 +763,7 @@ impl TextArea {
             .chain(std::iter::once(last_line_cut.to_string()))
             .collect();
 
-        self.lines.insert(
-            range.start.0,
-            first_line_left.to_string() + last_line_left,
-        );
+        self.lines.insert(range.start.0, first_line_left + &last_line_left);
         self.cancel_selection();
         self.snap_cursor();
 
