@@ -23,8 +23,10 @@ don't use.
 
 - Reply
 - Quote
+- Post embed
 - Different sources of feed
 - Multicolumn
+- Config file (default layout, post languages, how to open media, feed update frequency)
 - Notification
 - View profile
 
