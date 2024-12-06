@@ -3,6 +3,7 @@ use atrium_api::{
     types::string::Cid,
 };
 use chrono::{DateTime, FixedOffset, Local};
+use ipld_core::ipld::Ipld;
 
 use crate::embed::Embed;
 
@@ -42,6 +43,13 @@ impl Author {
 }
 
 #[derive(Clone)]
+pub enum Facet {
+    Mention(usize, usize),
+    Link(usize, usize),
+    Tag(usize, usize),
+}
+
+#[derive(Clone)]
 pub struct Post {
     pub uri: String,
     pub cid: Cid,
@@ -54,6 +62,7 @@ pub struct Post {
     pub reply: u32,
     pub embed: Option<Embed>,
     pub labels: Vec<String>,
+    pub facets: Vec<Facet>,
 }
 
 impl Post {
@@ -65,23 +74,24 @@ impl Post {
             panic!("Invalid content type");
         };
 
-        let ipld_core::ipld::Ipld::String(created_at) = &*record["createdAt"]
-        else {
-            panic!("createdAt is not a string")
+        let created_at = {
+            let Ipld::String(created_at) = &*record["createdAt"] else {
+                panic!("createdAt is not a string")
+            };
+            let dt = Local::now();
+            let created_at_utc =
+                DateTime::parse_from_rfc3339(created_at).unwrap().naive_local();
+            DateTime::from_naive_utc_and_offset(created_at_utc, *dt.offset())
         };
 
-        let ipld_core::ipld::Ipld::String(text) = &*record["text"] else {
-            panic!("text is not a string")
+        let text = {
+            let Ipld::String(text) = &*record["text"] else {
+                panic!("text is not a string")
+            };
+            text.replace("\t", "    ")
         };
-        let text = text.replace("\t", "    ");
 
         let author = Author::from(author);
-
-        let dt = Local::now();
-        let created_at_utc =
-            DateTime::parse_from_rfc3339(created_at).unwrap().naive_local();
-        let created_at =
-            DateTime::from_naive_utc_and_offset(created_at_utc, *dt.offset());
 
         let like = match &view.viewer {
             Some(viewer) => {
@@ -107,6 +117,58 @@ impl Post {
             .map(|label| label.val.clone())
             .collect();
 
+        let facets = if !record.contains_key("facets") {
+            vec![]
+        } else {
+            match &*record["facets"] {
+                Ipld::List(facets) => facets
+                    .iter()
+                    .map(|facet| {
+                        let Ipld::Map(facet) = facet else {
+                            panic!("Unknown facet");
+                        };
+                        let Ipld::List(feature) = &facet["features"] else {
+                            panic!("Unknown facet map");
+                        };
+                        let Ipld::Map(feature) = &feature[0] else {
+                            panic!("Unknown facet map");
+                        };
+                        let Ipld::String(r#type) = &feature["$type"] else {
+                            panic!("Unknown feature map");
+                        };
+                        let Ipld::Map(index) = &facet["index"] else {
+                            panic!("Unknown facet map");
+                        };
+                        let Ipld::Integer(byte_start) = index["byteStart"]
+                        else {
+                            panic!("Unknown index map");
+                        };
+                        let Ipld::Integer(byte_end) = index["byteEnd"] else {
+                            panic!("Unknown index map");
+                        };
+                        match r#type.as_str() {
+                            "app.bsky.richtext.facet#mention" => {
+                                Facet::Mention(
+                                    byte_start.try_into().unwrap(),
+                                    byte_end.try_into().unwrap(),
+                                )
+                            }
+                            "app.bsky.richtext.facet#link" => Facet::Link(
+                                byte_start.try_into().unwrap(),
+                                byte_end.try_into().unwrap(),
+                            ),
+                            "app.bsky.richtext.facet#tag" => Facet::Tag(
+                                byte_start.try_into().unwrap(),
+                                byte_end.try_into().unwrap(),
+                            ),
+                            _ => panic!("Unknown feature type {}", r#type),
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+                _ => panic!("facets is not a list"),
+            }
+        };
+
         return Post {
             uri: view.uri.clone(),
             cid: view.cid.clone(),
@@ -119,6 +181,7 @@ impl Post {
             reply: view.reply_count.unwrap_or(0) as u32,
             embed,
             labels,
+            facets,
         };
     }
 }
