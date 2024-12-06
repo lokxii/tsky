@@ -2,7 +2,7 @@
 
 ## IMPORTANT: This is an application written for myself.
 
-I will prioritize features I use daily, and most likely ignoring features I
+I will prioritize features I use daily, and most likely ignore features I
 don't use.
 
 ## Features implemented
@@ -15,9 +15,9 @@ don't use.
     - watch video using VLC
 - Viewing post threads
 - Labels
-    - labels attached to user and post
 - Auto updating feed every second
 - Posting (no rich text and embeds yet)
+    - subset of vim keybindings
 
 ## Login
 
