@@ -2,7 +2,7 @@ use atrium_api::types::string::Cid;
 use bsky_sdk::BskyAgent;
 use std::{
     collections::HashMap,
-    process::Command,
+    process::{Command, Stdio},
     sync::{
         mpsc::{self, Sender},
         Arc,
@@ -203,8 +203,10 @@ impl PostManager {
                             Embed::Images(images) => {
                                 images.iter().for_each(|image| {
                                     if let Result::Err(e) =
-                                        Command::new("xdg-open")
+                                        Command::new("loupe")
                                             .arg(image.url.clone())
+                                            .stderr(Stdio::null())
+                                            .stdout(Stdio::null())
                                             .spawn()
                                     {
                                         log::error!("{:?}", e);
@@ -215,6 +217,8 @@ impl PostManager {
                             Embed::Video(video) => {
                                 if let Result::Err(e) = Command::new("vlc")
                                     .arg(video.m3u8.clone())
+                                    .stderr(Stdio::null())
+                                    .stdout(Stdio::null())
                                     .spawn()
                                 {
                                     log::error!("{:?}", e);
@@ -224,6 +228,8 @@ impl PostManager {
                             Embed::External(external) => {
                                 if let Result::Err(e) = Command::new("xdg-open")
                                     .arg(external.url.clone())
+                                    .stderr(Stdio::null())
+                                    .stdout(Stdio::null())
                                     .spawn()
                                 {
                                     log::error!("{:?}", e);
