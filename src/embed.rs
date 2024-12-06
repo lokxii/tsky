@@ -1,3 +1,5 @@
+use std::process::{Command, Stdio};
+
 use atrium_api::{
     app::bsky::{
         embed::{record::ViewRecordRefs, record_with_media::ViewMediaRefs},
@@ -170,6 +172,10 @@ impl Into<Embed> for EmbededPostMedia {
     }
 }
 
+pub trait OpenMedia {
+    fn open_media(&self);
+}
+
 #[derive(Clone, Debug)]
 pub struct Image {
     pub alt: String,
@@ -181,6 +187,19 @@ impl Image {
         image: &Object<atrium_api::app::bsky::embed::images::ViewImageData>,
     ) -> Image {
         Image { url: image.fullsize.clone(), alt: image.alt.clone() }
+    }
+}
+
+impl OpenMedia for Image {
+    fn open_media(&self) {
+        if let Result::Err(e) = Command::new("loupe")
+            .arg(self.url.clone())
+            .stderr(Stdio::null())
+            .stdout(Stdio::null())
+            .spawn()
+        {
+            log::error!("{:?}", e);
+        }
     }
 }
 
@@ -201,6 +220,19 @@ impl Video {
     }
 }
 
+impl OpenMedia for Video {
+    fn open_media(&self) {
+        if let Result::Err(e) = Command::new("vlc")
+            .arg(self.m3u8.clone())
+            .stderr(Stdio::null())
+            .stdout(Stdio::null())
+            .spawn()
+        {
+            log::error!("{:?}", e);
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct External {
     pub url: String,
@@ -216,6 +248,19 @@ impl External {
             url: external.external.uri.clone(),
             title: external.external.title.clone(),
             description: external.external.description.clone(),
+        }
+    }
+}
+
+impl OpenMedia for External {
+    fn open_media(&self) {
+        if let Result::Err(e) = Command::new("xdg-open")
+            .arg(self.url.clone())
+            .stderr(Stdio::null())
+            .stdout(Stdio::null())
+            .spawn()
+        {
+            log::error!("{:?}", e);
         }
     }
 }

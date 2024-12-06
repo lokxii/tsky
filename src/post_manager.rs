@@ -9,7 +9,10 @@ use std::{
     },
 };
 
-use crate::{embed::Embed, post::Post};
+use crate::{
+    embed::{self, Embed, Image, OpenMedia},
+    post::Post,
+};
 
 pub struct DeleteRecordData {
     pub post_uri: String,
@@ -198,43 +201,30 @@ impl PostManager {
                             continue;
                         }
                         match post.embed.as_ref().unwrap() {
-                            Embed::Record(_) => continue,
-
-                            Embed::Images(images) => {
-                                images.iter().for_each(|image| {
-                                    if let Result::Err(e) =
-                                        Command::new("loupe")
-                                            .arg(image.url.clone())
-                                            .stderr(Stdio::null())
-                                            .stdout(Stdio::null())
-                                            .spawn()
-                                    {
-                                        log::error!("{:?}", e);
+                            Embed::Record(embed::Record::Post(post)) => {
+                                let Some(media) = &post.media else {
+                                    continue;
+                                };
+                                match media {
+                                    embed::EmbededPostMedia::Images(images) => {
+                                        images
+                                            .iter()
+                                            .for_each(Image::open_media);
                                     }
-                                });
-                            }
-
-                            Embed::Video(video) => {
-                                if let Result::Err(e) = Command::new("vlc")
-                                    .arg(video.m3u8.clone())
-                                    .stderr(Stdio::null())
-                                    .stdout(Stdio::null())
-                                    .spawn()
-                                {
-                                    log::error!("{:?}", e);
+                                    embed::EmbededPostMedia::Video(video) => {
+                                        video.open_media();
+                                    }
+                                    embed::EmbededPostMedia::External(e) => {
+                                        e.open_media()
+                                    }
                                 }
                             }
-
-                            Embed::External(external) => {
-                                if let Result::Err(e) = Command::new("xdg-open")
-                                    .arg(external.url.clone())
-                                    .stderr(Stdio::null())
-                                    .stdout(Stdio::null())
-                                    .spawn()
-                                {
-                                    log::error!("{:?}", e);
-                                }
+                            Embed::Images(images) => {
+                                images.iter().for_each(Image::open_media);
                             }
+                            Embed::Video(video) => video.open_media(),
+                            Embed::External(external) => external.open_media(),
+                            _ => continue,
                         }
                     }
                 }
