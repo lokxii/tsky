@@ -6,7 +6,6 @@ mod embed;
 mod embed_widget;
 mod facets;
 mod feed;
-mod langs;
 mod list;
 mod logger;
 mod post;

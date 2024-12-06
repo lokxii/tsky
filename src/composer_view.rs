@@ -1,9 +1,9 @@
 use crate::{
     app::AppEvent,
     facets::{detect_facets, CharSlice, FacetFeature},
-    langs::LANGS,
     textarea::{CursorMove, Input, Key, TextArea, TextStyle},
 };
+use atrium_api::types::string::Language;
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event};
 use ratatui::{
@@ -131,12 +131,19 @@ impl ComposerView {
 }
 
 async fn post(agent: BskyAgent, text: String, langs: &String) -> AppEvent {
-    let langs = langs.split(',').collect::<Vec<_>>();
-    let invalid_langs = langs
-        .iter()
-        .filter_map(|c| match LANGS.iter().find(|l| l.code == *c) {
-            Some(_) => None,
-            None => Some(c),
+    let mut invalid_langs = vec![];
+    let langs = langs
+        .split(',')
+        .filter_map(|lang| {
+            if lang.is_empty() {
+                return None;
+            }
+            if let Ok(lang) = Language::new(lang.to_string()) {
+                return Some(lang);
+            } else {
+                invalid_langs.push(lang);
+                return None;
+            }
         })
         .collect::<Vec<_>>();
     if invalid_langs.len() != 0 {
@@ -151,7 +158,7 @@ async fn post(agent: BskyAgent, text: String, langs: &String) -> AppEvent {
             entities: None,
             facets: None,
             labels: None,
-            langs: None,
+            langs: if langs.is_empty() { None } else { Some(langs) },
             reply: None,
             tags: None,
             text,
