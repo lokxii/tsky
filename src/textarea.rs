@@ -104,6 +104,33 @@ fn cell_le(left: (usize, usize), right: (usize, usize)) -> bool {
     matches!(cell_cmp(left, right), Ordering::Less | Ordering::Equal)
 }
 
+// inclusive
+#[derive(Clone, Copy, Debug)]
+pub struct TextStyle {
+    pub start: (usize, usize),
+    pub end: (usize, usize),
+    pub style: Style,
+}
+
+impl TextStyle {
+    fn in_range(self, (i, j): (usize, usize)) -> bool {
+        if !(self.start.0 <= i && i <= self.end.0) {
+            return false;
+        }
+        if self.start.0 == i {
+            if i < self.end.0 {
+                return self.start.1 <= j;
+            } else {
+                return self.start.1 <= j && j <= self.end.1;
+            }
+        }
+        if self.end.0 == i {
+            return j <= self.end.1;
+        }
+        return true;
+    }
+}
+
 pub struct TextArea {
     lines: Vec<String>,
     cursor: (usize, usize),
@@ -112,6 +139,7 @@ pub struct TextArea {
     select: Option<SelectRange>,
     block: Option<Block<'static>>,
     focused: bool,
+    text_styles: Vec<TextStyle>,
 }
 
 macro_rules! string_remove_index {
@@ -149,6 +177,7 @@ impl TextArea {
             select: None,
             block: None,
             focused: true,
+            text_styles: vec![],
         }
     }
 
@@ -162,6 +191,7 @@ impl TextArea {
             select: None,
             block: None,
             focused: true,
+            text_styles: vec![],
         }
     }
 
@@ -183,6 +213,10 @@ impl TextArea {
 
     pub fn set_focus(&mut self, focus: bool) {
         self.focused = focus;
+    }
+
+    pub fn set_text_styles(&mut self, text_styles: Vec<TextStyle>) {
+        self.text_styles = text_styles;
     }
 
     pub fn snap_cursor(&mut self) {
@@ -740,6 +774,31 @@ impl TextArea {
     }
 }
 
+fn style_char<'a>(
+    c: char,
+    cell: (usize, usize),
+    cursor: (usize, usize),
+    select: Option<SelectRange>,
+    focused: bool,
+    styles: &[TextStyle],
+) -> Span<'a> {
+    let mut style = styles
+        .into_iter()
+        .find(|s| s.in_range(cell))
+        .map(|t| &t.style)
+        .unwrap_or(&Style::default())
+        .clone();
+    if cursor == cell && focused {
+        style = style.reversed();
+    } else if select.is_some_and(|r| r.in_range(cell)) {
+        style = style.bg(Color::Rgb(100, 100, 100));
+    } else if cell.0 == cursor.0 && focused {
+        style = style.bg(Color::Rgb(45, 50, 55));
+    }
+
+    return Span::styled(c.to_string(), style);
+}
+
 impl Widget for &mut TextArea {
     fn render(
         self,
@@ -760,19 +819,14 @@ impl Widget for &mut TextArea {
                     .enumerate()
                     .map(|(j, c)| {
                         count += 1;
-                        let s = if self.cursor == (i, j) {
-                            Style::default().reversed()
-                        } else if self
-                            .select
-                            .is_some_and(|r| r.in_range((i, j)))
-                        {
-                            Style::default().bg(Color::Rgb(100, 100, 100))
-                        } else if i == self.cursor.0 && self.focused {
-                            Style::default().bg(Color::Rgb(45, 50, 55))
-                        } else {
-                            Style::default()
-                        };
-                        Span::styled(c.to_string(), s)
+                        style_char(
+                            c,
+                            (i, j),
+                            self.cursor,
+                            self.select,
+                            self.focused,
+                            &self.text_styles,
+                        )
                     })
                     .fold(Line::from(""), |acc, s| acc + s);
 

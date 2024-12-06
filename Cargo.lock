@@ -1144,9 +1144,9 @@ dependencies = [
 
 [[package]]
 name = "psl"
-version = "2.1.56"
+version = "2.1.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "537e413a86aacc7596a65c7b98d83f71bfc03a7b8f7aa4f4bfb855c003dcb502"
+checksum = "59bbcf24d16c12896265cdc98f2b98afb1e62223bc0c396565eaf1c2b6278170"
 dependencies = [
  "psl-types",
 ]
@@ -1700,7 +1700,9 @@ dependencies = [
  "itertools",
  "lazy_static",
  "log",
+ "psl",
  "ratatui",
+ "regex",
  "tokio",
  "tui-textarea",
 ]

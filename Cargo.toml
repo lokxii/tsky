@@ -13,6 +13,8 @@ ipld-core = "0.4.1"
 itertools = "0.13.0"
 lazy_static = "1.5.0"
 log = "0.4.22"
+psl = "2.1.66"
 ratatui = { version = "0.28.1", features = ["unstable-rendered-line-info"] }
+regex = "1.11.1"
 tokio = { version = "1.40.0", features = ["full"] }
 tui-textarea = "0.6.1"

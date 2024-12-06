@@ -1,13 +1,17 @@
-use crate::textarea::{CursorMove, Input, Key, TextArea};
+use crate::{
+    app::AppEvent,
+    facets::{detect_facets, CharSlice, FacetFeature},
+    langs::LANGS,
+    textarea::{CursorMove, Input, Key, TextArea, TextStyle},
+};
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event};
 use ratatui::{
     layout::Rect,
+    style::{Style, Stylize},
     text::Line,
     widgets::{Block, BorderType, Widget},
 };
-
-use crate::{app::AppEvent, langs::LANGS};
 
 enum InputMode {
     Normal,
@@ -336,6 +340,29 @@ fn vim_keys(
     return AppEvent::None;
 }
 
+fn parse_text_styles(lines: &[String]) -> Vec<TextStyle> {
+    return lines
+        .iter()
+        .enumerate()
+        .map(|(i, line)| {
+            detect_facets(&line).into_iter().map(move |f| {
+                let slice = CharSlice::from(line, f.index);
+                let style = match f.feature {
+                    FacetFeature::Mention => Style::default().italic(),
+                    FacetFeature::Link => Style::default().underlined(),
+                    FacetFeature::Tag => Style::default().bold(),
+                };
+                TextStyle {
+                    start: (i, slice.char_start),
+                    end: (i, slice.char_end - 1),
+                    style,
+                }
+            })
+        })
+        .flatten()
+        .collect();
+}
+
 impl Widget for &mut ComposerView {
     fn render(
         self,
@@ -379,6 +406,8 @@ impl Widget for &mut ComposerView {
                 .title(Line::from(word_remaining.to_string()).right_aligned()),
         );
         self.text_field.set_focus(matches!(self.focus, Focus::TextField));
+        let text_styles = parse_text_styles(self.text_field.lines());
+        self.text_field.set_text_styles(text_styles);
         self.text_field.render(upper_area, buf);
 
         let title = match (&self.focus, &self.inputmode) {

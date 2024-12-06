@@ -4,6 +4,7 @@ mod composer_view;
 mod connected_list;
 mod embed;
 mod embed_widget;
+mod facets;
 mod feed;
 mod langs;
 mod list;
