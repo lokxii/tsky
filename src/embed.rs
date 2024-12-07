@@ -49,6 +49,7 @@ impl Embed {
             Self::Images(images) => {
                 let Result::Err(e) = Command::new("feh")
                     .args(["--output-dir", "/tmp"])
+                    .args(["--zoom", "50%"])
                     .arg("--")
                     .args(images.iter().map(|i| i.url.clone()))
                     .stderr(Stdio::null())
