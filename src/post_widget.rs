@@ -44,28 +44,45 @@ impl PostWidget {
     fn body_paragraph(&self) -> Paragraph {
         let mut last_segment = self.post.text.as_str();
         let mut last_offset = 0;
-        let mut spans = vec![];
+        let mut lines = vec![Line::from("")];
         for facet in &self.post.facets {
             let (left, middle) =
                 last_segment.split_at(facet.range.start - last_offset);
             let (middle, right) =
                 middle.split_at(facet.range.end - facet.range.start);
-            spans.push(Span::styled(left, Style::default()));
+
+            let mut left_lines = left.split('\n');
+            lines.last_mut().unwrap().push_span(Span::styled(
+                left_lines.next().unwrap(),
+                Style::default(),
+            ));
+            left_lines.for_each(|line| {
+                lines.push(Line::from(line));
+            });
+
             let facet_style = match facet.r#type {
                 FacetType::Mention => Style::default().italic(),
                 FacetType::Link => Style::default().underlined(),
                 FacetType::Tag => Style::default().bold(),
             };
-            spans.push(Span::styled(middle, facet_style));
+            lines
+                .last_mut()
+                .unwrap()
+                .push_span(Span::styled(middle, facet_style));
             last_segment = right;
             last_offset = facet.range.end;
         }
-        spans.push(Span::from(last_segment));
 
-        Paragraph::new(vec![spans
-            .into_iter()
-            .fold(Line::from(""), |acc, s| acc + s)])
-        .wrap(ratatui::widgets::Wrap { trim: false })
+        let mut last_segment_lines = last_segment.split('\n');
+        lines.last_mut().unwrap().push_span(Span::styled(
+            last_segment_lines.next().unwrap(),
+            Style::default(),
+        ));
+        last_segment_lines.for_each(|line| {
+            lines.push(Line::from(line));
+        });
+
+        Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: false })
     }
 }
 
