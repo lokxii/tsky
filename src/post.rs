@@ -125,17 +125,21 @@ impl Post {
             .facets
             .unwrap_or_default()
             .iter()
-            .map(|facet| {
+            .filter_map(|facet| {
                 let range = facet.index.byte_start..facet.index.byte_end;
                 let Union::Refs(feature) = &facet.features[0] else {
-                    panic!("Unknown feature type");
+                    log::warn!(
+                        "Ignoring unknown feature found in post {}",
+                        view.uri
+                    );
+                    return None;
                 };
                 let r#type = match feature {
                     MainFeaturesItem::Mention(_) => FacetType::Mention,
                     MainFeaturesItem::Link(_) => FacetType::Link,
                     MainFeaturesItem::Tag(_) => FacetType::Tag,
                 };
-                Facet { r#type, range }
+                Some(Facet { r#type, range })
             })
             .collect::<Vec<_>>();
 

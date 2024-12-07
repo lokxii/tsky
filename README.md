@@ -11,7 +11,7 @@ don't use.
     - Like
     - repost
     - open post in bsky.app
-    - view image with [loupe](https://gitlab.gnome.org/GNOME/loupe)
+    - view image with feh
     - open links in browser
     - watch video using VLC
 - Viewing post threads

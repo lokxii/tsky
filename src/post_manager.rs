@@ -1,17 +1,12 @@
+use crate::post::Post;
 use atrium_api::types::string::Cid;
 use bsky_sdk::BskyAgent;
 use std::{
     collections::HashMap,
-    process::{Command, Stdio},
     sync::{
         mpsc::{self, Sender},
         Arc,
     },
-};
-
-use crate::{
-    embed::{self, Embed, Image, OpenMedia},
-    post::Post,
 };
 
 pub struct DeleteRecordData {
@@ -200,32 +195,7 @@ impl PostManager {
                         if post.embed.is_none() {
                             continue;
                         }
-                        match post.embed.as_ref().unwrap() {
-                            Embed::Record(embed::Record::Post(post)) => {
-                                let Some(media) = &post.media else {
-                                    continue;
-                                };
-                                match media {
-                                    embed::EmbededPostMedia::Images(images) => {
-                                        images
-                                            .iter()
-                                            .for_each(Image::open_media);
-                                    }
-                                    embed::EmbededPostMedia::Video(video) => {
-                                        video.open_media();
-                                    }
-                                    embed::EmbededPostMedia::External(e) => {
-                                        e.open_media()
-                                    }
-                                }
-                            }
-                            Embed::Images(images) => {
-                                images.iter().for_each(Image::open_media);
-                            }
-                            Embed::Video(video) => video.open_media(),
-                            Embed::External(external) => external.open_media(),
-                            _ => continue,
-                        }
+                        post.embed.as_ref().unwrap().open_media();
                     }
                 }
             }

@@ -43,6 +43,65 @@ impl Embed {
             }
         }
     }
+
+    pub fn open_media(&self) {
+        match self {
+            Self::Images(images) => {
+                let Result::Err(e) = Command::new("feh")
+                    .args(["--output-dir", "/tmp"])
+                    .arg("--")
+                    .args(images.iter().map(|i| i.url.clone()))
+                    .stderr(Stdio::null())
+                    .stdout(Stdio::null())
+                    .spawn()
+                else {
+                    return;
+                };
+                log::error!("{:?}", e);
+            }
+            Self::Video(video) => {
+                let Result::Err(e) = Command::new("vlc")
+                    .arg(video.m3u8.clone())
+                    .stderr(Stdio::null())
+                    .stdout(Stdio::null())
+                    .spawn()
+                else {
+                    return;
+                };
+                log::error!("{:?}", e);
+            }
+            Self::External(external) => {
+                let Result::Err(e) = Command::new("xdg-open")
+                    .arg(external.url.clone())
+                    .stderr(Stdio::null())
+                    .stdout(Stdio::null())
+                    .spawn()
+                else {
+                    return;
+                };
+                log::error!("{:?}", e);
+            }
+            Self::Record(record) => {
+                let Record::Post(post) = record else {
+                    return;
+                };
+                let Some(media) = &post.media else {
+                    return;
+                };
+                match media {
+                    EmbededPostMedia::Images(images) => {
+                        Embed::Images(images.clone()).open_media();
+                    }
+                    EmbededPostMedia::Video(video) => {
+                        Embed::Video(video.clone()).open_media();
+                    }
+                    EmbededPostMedia::External(external) => {
+                        Embed::External(external.clone()).open_media();
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -172,10 +231,6 @@ impl Into<Embed> for EmbededPostMedia {
     }
 }
 
-pub trait OpenMedia {
-    fn open_media(&self);
-}
-
 #[derive(Clone, Debug)]
 pub struct Image {
     pub alt: String,
@@ -187,19 +242,6 @@ impl Image {
         image: &Object<atrium_api::app::bsky::embed::images::ViewImageData>,
     ) -> Image {
         Image { url: image.fullsize.clone(), alt: image.alt.clone() }
-    }
-}
-
-impl OpenMedia for Image {
-    fn open_media(&self) {
-        if let Result::Err(e) = Command::new("loupe")
-            .arg(self.url.clone())
-            .stderr(Stdio::null())
-            .stdout(Stdio::null())
-            .spawn()
-        {
-            log::error!("{:?}", e);
-        }
     }
 }
 
@@ -220,19 +262,6 @@ impl Video {
     }
 }
 
-impl OpenMedia for Video {
-    fn open_media(&self) {
-        if let Result::Err(e) = Command::new("vlc")
-            .arg(self.m3u8.clone())
-            .stderr(Stdio::null())
-            .stdout(Stdio::null())
-            .spawn()
-        {
-            log::error!("{:?}", e);
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct External {
     pub url: String,
@@ -248,19 +277,6 @@ impl External {
             url: external.external.uri.clone(),
             title: external.external.title.clone(),
             description: external.external.description.clone(),
-        }
-    }
-}
-
-impl OpenMedia for External {
-    fn open_media(&self) {
-        if let Result::Err(e) = Command::new("xdg-open")
-            .arg(self.url.clone())
-            .stderr(Stdio::null())
-            .stdout(Stdio::null())
-            .spawn()
-        {
-            log::error!("{:?}", e);
         }
     }
 }
