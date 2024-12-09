@@ -398,7 +398,10 @@ impl TextArea {
                 if self.lines.is_empty() {
                     return;
                 }
-                let (_, t) = self.lines[self.cursor.0].split_at(self.cursor.1);
+                let t = self.lines[self.cursor.0]
+                    .chars()
+                    .skip(self.cursor.1)
+                    .collect::<String>();
                 let mut words = t.split(' ');
                 let mut dx = words.next().unwrap().chars().count() + 1;
                 let mut words = words.skip_while(|w| {
@@ -435,8 +438,10 @@ impl TextArea {
                 }
 
                 for i in self.cursor.0..self.lines.len() {
-                    let s = &self.lines[self.cursor.0];
-                    let (_, t) = s.split_at(self.cursor.1);
+                    let t = &self.lines[self.cursor.0]
+                        .chars()
+                        .skip(self.cursor.1)
+                        .collect::<String>();
                     let mut words = t.split(' ').peekable();
                     let mut dx = 0;
                     if (i == 0 || self.cursor.1 > 0)
@@ -470,8 +475,10 @@ impl TextArea {
                     return;
                 }
                 for i in 0..=self.cursor.0 {
-                    let s = &self.lines[self.cursor.0];
-                    let (h, _) = s.split_at(self.cursor.1 + 1);
+                    let h = &self.lines[self.cursor.0]
+                        .chars()
+                        .take(self.cursor.1 + 1)
+                        .collect::<String>();
                     let mut words = h.split(' ').rev().peekable();
                     let mut dx = 0;
                     if i == 0 && words.peek().unwrap().chars().count() == 1 {
