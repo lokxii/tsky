@@ -140,6 +140,7 @@ pub struct TextArea {
     block: Option<Block<'static>>,
     focused: bool,
     text_styles: Vec<TextStyle>,
+    viewport: usize,
 }
 
 macro_rules! string_remove_index {
@@ -178,6 +179,7 @@ impl TextArea {
             block: None,
             focused: true,
             text_styles: vec![],
+            viewport: 0,
         }
     }
 
@@ -192,6 +194,7 @@ impl TextArea {
             block: None,
             focused: true,
             text_styles: vec![],
+            viewport: 0,
         }
     }
 
@@ -865,6 +868,16 @@ impl Widget for &mut TextArea {
         if let Some(block) = &self.block {
             para = para.block(block.clone())
         }
+
+        let viewport_height =
+            area.height as usize - self.block.is_some() as usize * 2;
+        if self.cursor.0 < self.viewport {
+            self.viewport = self.cursor.0;
+        } else if self.cursor.0 >= self.viewport + viewport_height - 1 {
+            self.viewport = self.cursor.0 - (viewport_height - 1);
+        }
+
+        para = para.scroll((self.viewport as u16, 0));
         para.render(area, buf);
     }
 }
