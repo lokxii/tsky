@@ -68,6 +68,7 @@ Feed / Thread view
 | `enter (in thread view)` | open embeded post (if any) |
 | `backspace` | go back to previous view |
 | `n (in feed view)` | new post |
+| `f (in thread view)` | show list of link facets |
 
 Composer view
 

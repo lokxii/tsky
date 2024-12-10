@@ -355,7 +355,7 @@ impl ThreadView {
         }
 
         match key.code {
-            KeyCode::Backspace => self.facet_modal = None,
+            KeyCode::Esc => self.facet_modal = None,
             KeyCode::Char('j') => {
                 let facet_modal = self.facet_modal.as_mut().unwrap();
                 facet_modal.state.next();
@@ -431,7 +431,7 @@ impl Widget for &mut ThreadView {
             .areas(area);
 
             let [_, area, _] = Layout::vertical([
-                Constraint::Fill(1),
+                Constraint::Percentage(30),
                 Constraint::Length(facet_modal.links.len() as u16 + 2),
                 Constraint::Fill(1),
             ])
