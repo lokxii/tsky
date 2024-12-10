@@ -69,11 +69,11 @@ impl UpdatingFeed {
                 if feed.posts.len() > 0
                     && feed.state.selected == Some(feed.posts.len() - 1)
                 {
-                    let cursor = Arc::clone(&self.cursor);
-                    if let Result::Err(_) = cursor.try_lock() {
-                        feed.state.next();
-                        return AppEvent::None;
-                    };
+                    // let cursor = Arc::clone(&self.cursor);
+                    // if let Result::Err(_) = cursor.try_lock() {
+                    //     feed.state.next();
+                    //     return AppEvent::None;
+                    // };
                     self.request_worker_tx.send(RequestMsg::OldPost)
                         .unwrap_or_else(|_| {
                             log::error!("Cannot send message to worker fetching old post");
@@ -87,6 +87,38 @@ impl UpdatingFeed {
             // Cursor move up
             KeyCode::Char('k') => {
                 feed.state.previous();
+                return AppEvent::None;
+            }
+
+            KeyCode::Char('g') => {
+                let Event::Key(event::KeyEvent {
+                    code: KeyCode::Char('g'),
+                    kind: event::KeyEventKind::Press,
+                    ..
+                }) = event::read().expect("Cannot read event")
+                else {
+                    return AppEvent::None;
+                };
+
+                feed.state = ListState::default();
+                feed.state.selected = Some(0);
+                return AppEvent::None;
+            }
+
+            KeyCode::Char('G') => {
+                if feed.posts.len() > 0 {
+                    feed.state = ListState::default();
+                    feed.state.selected = Some(feed.posts.len() - 1);
+                    // let cursor = Arc::clone(&self.cursor);
+                    // if let Result::Err(_) = cursor.try_lock() {
+                    //     feed.state.next();
+                    //     return AppEvent::None;
+                    // };
+                    self.request_worker_tx.send(RequestMsg::OldPost)
+                        .unwrap_or_else(|_| {
+                            log::error!("Cannot send message to worker fetching old post");
+                        });
+                }
                 return AppEvent::None;
             }
 
