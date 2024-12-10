@@ -50,7 +50,7 @@ impl Author {
 #[derive(Clone)]
 pub enum FacetType {
     Mention,
-    Link,
+    Link(String),
     Tag,
 }
 
@@ -136,7 +136,9 @@ impl Post {
                 };
                 let r#type = match feature {
                     MainFeaturesItem::Mention(_) => FacetType::Mention,
-                    MainFeaturesItem::Link(_) => FacetType::Link,
+                    MainFeaturesItem::Link(link) => {
+                        FacetType::Link(link.uri.clone())
+                    }
                     MainFeaturesItem::Tag(_) => FacetType::Tag,
                 };
                 Some(Facet { r#type, range })

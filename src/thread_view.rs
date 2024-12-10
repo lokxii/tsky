@@ -11,9 +11,13 @@ use atrium_api::{
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
-    style::Color,
-    text::Line,
-    widgets::{Block, BorderType, Borders, Padding, StatefulWidget, Widget},
+    layout::{Constraint, Layout},
+    style::{Color, Style},
+    text::{Line, Span},
+    widgets::{
+        Block, BorderType, Borders, Clear, Padding, Paragraph, StatefulWidget,
+        Widget,
+    },
 };
 use std::process::Command;
 
@@ -21,11 +25,31 @@ use crate::{
     column::Column,
     connected_list::{ConnectedList, ConnectedListContext, ConnectedListState},
     embed::Embed,
-    post::Post,
+    post::{FacetType, Post},
     post_manager, post_manager_tx,
     post_widget::PostWidget,
     AppEvent,
 };
+
+#[derive(Clone)]
+struct Link {
+    text: String,
+    url: String,
+}
+
+struct FacetModal {
+    post: Post,
+    links: Vec<Link>,
+    state: ConnectedListState,
+}
+
+pub struct ThreadView {
+    post_uri: String,
+    parent: Vec<String>,
+    replies: Vec<String>,
+    state: ConnectedListState,
+    facet_modal: Option<FacetModal>,
+}
 
 fn parent_posts_rev(
     mut posts: Vec<String>,
@@ -43,40 +67,6 @@ fn parent_posts_rev(
 
     posts.push(post_uri);
     return parent_posts_rev(posts, parent);
-}
-
-fn reply_posts(
-    mut posts: Vec<String>,
-    replies: Option<Vec<Union<ThreadViewPostRepliesItem>>>,
-) -> Vec<String> {
-    let Some(replies) = replies else {
-        return posts;
-    };
-    for reply in replies.into_iter().rev() {
-        let Union::Refs(ThreadViewPostRepliesItem::ThreadViewPost(reply)) =
-            reply
-        else {
-            continue;
-        };
-
-        let ThreadViewPostData { post, replies, .. } = reply.data;
-        let post = Post::from(&post);
-        let post_uri = post.uri.clone();
-        post_manager!().insert(post);
-
-        posts.push(post_uri);
-        posts = reply_posts(posts, replies);
-        break;
-    }
-
-    return posts;
-}
-
-pub struct ThreadView {
-    post_uri: String,
-    parent: Vec<String>,
-    replies: Vec<String>,
-    state: ConnectedListState,
 }
 
 impl ThreadView {
@@ -111,6 +101,7 @@ impl ThreadView {
             parent,
             replies,
             state: ConnectedListState::new(Some(l)),
+            facet_modal: None,
         }
     }
 
@@ -141,6 +132,16 @@ impl ThreadView {
     }
 
     pub async fn handle_input_events(&mut self, agent: BskyAgent) -> AppEvent {
+        match &self.facet_modal {
+            None => self.handle_input_events_thread(agent).await,
+            Some(_) => self.handle_input_events_facet_model().await,
+        }
+    }
+
+    async fn handle_input_events_thread(
+        &mut self,
+        agent: BskyAgent,
+    ) -> AppEvent {
         let Event::Key(key) = event::read().expect("Cannot read event") else {
             return AppEvent::None;
         };
@@ -260,6 +261,27 @@ impl ThreadView {
                 return AppEvent::None;
             }
 
+            KeyCode::Char('f') => {
+                let post = post_manager!().at(&self.post_uri).unwrap();
+                let links = post
+                    .facets
+                    .iter()
+                    .filter_map(|facet| {
+                        let FacetType::Link(url) = &facet.r#type else {
+                            return None;
+                        };
+                        let text = post.text[facet.range.clone()].to_string();
+                        Some(Link { text, url: url.clone() })
+                    })
+                    .collect::<Vec<_>>();
+                self.facet_modal = Some(FacetModal {
+                    post: post.clone(),
+                    links,
+                    state: ConnectedListState::new(Some(0)),
+                });
+                return AppEvent::None;
+            }
+
             KeyCode::Char('m') => {
                 let Some(selected) = self.selected() else {
                     return AppEvent::None;
@@ -323,6 +345,41 @@ impl ThreadView {
             _ => return AppEvent::None,
         }
     }
+
+    async fn handle_input_events_facet_model(&mut self) -> AppEvent {
+        let Event::Key(key) = event::read().expect("Cannot read event") else {
+            return AppEvent::None;
+        };
+        if key.kind != event::KeyEventKind::Press {
+            return AppEvent::None;
+        }
+
+        match key.code {
+            KeyCode::Backspace => self.facet_modal = None,
+            KeyCode::Char('j') => {
+                let facet_modal = self.facet_modal.as_mut().unwrap();
+                facet_modal.state.next();
+            }
+            KeyCode::Char('k') => {
+                let facet_modal = self.facet_modal.as_mut().unwrap();
+                facet_modal.state.previous();
+            }
+            KeyCode::Enter => {
+                let facet_modal = self.facet_modal.as_ref().unwrap();
+                let Some(index) = facet_modal.state.selected else {
+                    return AppEvent::None;
+                };
+                let url = &facet_modal.links[index].url;
+                if let Result::Err(e) =
+                    Command::new("xdg-open").arg(url).spawn()
+                {
+                    log::error!("{:?}", e);
+                }
+            }
+            _ => {}
+        }
+        return AppEvent::None;
+    }
 }
 
 impl Widget for &mut ThreadView {
@@ -364,6 +421,49 @@ impl Widget for &mut ThreadView {
         )
         .connecting(vec![0..self.parent.len()])
         .render(area, buf, &mut self.state);
+
+        if let Some(facet_modal) = self.facet_modal.as_mut() {
+            let [_, area, _] = Layout::horizontal([
+                Constraint::Fill(1),
+                Constraint::Percentage(80),
+                Constraint::Fill(1),
+            ])
+            .areas(area);
+
+            let [_, area, _] = Layout::vertical([
+                Constraint::Fill(1),
+                Constraint::Length(facet_modal.links.len() as u16 + 2),
+                Constraint::Fill(1),
+            ])
+            .areas(area);
+            Clear.render(area, buf);
+
+            let block = Block::bordered().title("Links");
+            let inner_area = block.inner(area);
+            block.render(area, buf);
+
+            let items = facet_modal.links.clone();
+            ConnectedList::new(
+                facet_modal.links.len(),
+                move |context: ConnectedListContext| {
+                    let style = if context.is_selected {
+                        Style::default().bg(Color::Rgb(45, 50, 55))
+                    } else {
+                        Style::default()
+                    };
+                    let item = Paragraph::new(Span::styled(
+                        format!(
+                            "`{}` -> {}",
+                            items[context.index].text, items[context.index].url
+                        ),
+                        style,
+                    ));
+                    let height = item.line_count(area.width - 2) as u16;
+                    return (item, height);
+                },
+            )
+            .render(inner_area, buf, &mut facet_modal.state);
+        }
     }
 }
 

@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{StatefulWidget, Widget},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConnectedListState {
     pub selected: Option<usize>,
     selected_y: Option<i32>,
