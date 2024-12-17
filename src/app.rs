@@ -33,66 +33,36 @@ impl App {
         let logs = Arc::clone(&LOGSTORE.logs);
         let logs = logs.lock().await;
 
-        match self.column.last_mut() {
-            None => {}
-            Some(Column::UpdatingFeed(feed)) => {
-                let feed = Arc::clone(&feed.feed);
-                let mut feed = feed.lock().unwrap();
+        terminal
+            .draw(|f| {
+                let [main_area, log_area] = Layout::vertical([
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                ])
+                .areas(f.area());
 
-                terminal
-                    .draw(|f| {
-                        let [main_area, log_area] = Layout::vertical([
-                            Constraint::Fill(1),
-                            Constraint::Length(1),
-                        ])
-                        .areas(f.area());
+                match self.column.last_mut() {
+                    None => {}
+                    Some(Column::UpdatingFeed(feed)) => {
+                        let feed = Arc::clone(&feed.feed);
+                        let mut feed = feed.lock().unwrap();
                         f.render_widget(&mut *feed, main_area);
-
-                        f.render_widget(
-                            String::from("log: ")
-                                + logs.last().unwrap_or(&String::new()),
-                            log_area,
-                        );
-                    })
-                    .unwrap();
-            }
-            Some(Column::Thread(thread)) => {
-                terminal
-                    .draw(|f| {
-                        let [main_area, log_area] = Layout::vertical([
-                            Constraint::Fill(1),
-                            Constraint::Length(1),
-                        ])
-                        .areas(f.area());
+                    }
+                    Some(Column::Thread(thread)) => {
                         f.render_widget(thread, main_area);
-
-                        f.render_widget(
-                            String::from("log: ")
-                                + logs.last().unwrap_or(&String::new()),
-                            log_area,
-                        );
-                    })
-                    .unwrap();
-            }
-            Some(Column::Composer(composer)) => {
-                terminal
-                    .draw(|f| {
-                        let [main_area, log_area] = Layout::vertical([
-                            Constraint::Fill(1),
-                            Constraint::Length(1),
-                        ])
-                        .areas(f.area());
+                    }
+                    Some(Column::Composer(composer)) => {
                         f.render_widget(composer, main_area);
+                    }
+                }
 
-                        f.render_widget(
-                            String::from("log: ")
-                                + logs.last().unwrap_or(&String::new()),
-                            log_area,
-                        );
-                    })
-                    .unwrap();
-            }
-        }
+                f.render_widget(
+                    String::from("log: ")
+                        + logs.last().unwrap_or(&String::new()),
+                    log_area,
+                );
+            })
+            .unwrap();
     }
 
     pub async fn handle_events(&mut self, agent: BskyAgent) -> AppEvent {
