@@ -1,5 +1,3 @@
-use std::ops::Range;
-
 use atrium_api::{
     app::bsky::{
         actor::defs::ProfileViewBasicData,
@@ -8,9 +6,12 @@ use atrium_api::{
     },
     types::{string::Cid, TryFromUnknown, Union},
 };
+use bsky_sdk::BskyAgent;
 use chrono::{DateTime, FixedOffset, Local};
+use crossterm::event::{self, Event, KeyCode};
+use std::{ops::Range, process::Command};
 
-use crate::embed::Embed;
+use crate::{app::AppEvent, embed::Embed, post_manager, post_manager_tx};
 
 #[derive(Clone)]
 pub struct LikeRepostViewer {
@@ -161,5 +162,104 @@ impl Post {
             labels,
             facets,
         };
+    }
+
+    pub fn handle_input_events(
+        &self,
+        event: event::Event,
+        _: BskyAgent,
+    ) -> AppEvent {
+        let Event::Key(key) = event else {
+            return AppEvent::None;
+        };
+
+        match key.code {
+            KeyCode::Char(' ') => {
+                if self.like.uri.is_some() {
+                    post_manager_tx!()
+                        .send(post_manager::RequestMsg::UnlikePost(
+                            post_manager::DeleteRecordData {
+                                post_uri: self.uri.clone(),
+                                record_uri: self.like.uri.clone().unwrap(),
+                            },
+                        ))
+                        .unwrap_or_else(|_| {
+                            log::error!(
+                                "Cannot send message to worker unliking post"
+                            );
+                        });
+                } else {
+                    post_manager_tx!()
+                        .send(post_manager::RequestMsg::LikePost(
+                            post_manager::CreateRecordData {
+                                post_uri: self.uri.clone(),
+                                post_cid: self.cid.clone(),
+                            },
+                        ))
+                        .unwrap_or_else(|_| {
+                            log::error!(
+                                "Cannot send message to worker unliking post"
+                            );
+                        });
+                }
+                return AppEvent::None;
+            }
+
+            KeyCode::Char('o') => {
+                if self.repost.uri.is_some() {
+                    post_manager_tx!()
+                        .send(post_manager::RequestMsg::UnrepostPost(
+                            post_manager::DeleteRecordData {
+                                post_uri: self.uri.clone(),
+                                record_uri: self.repost.uri.clone().unwrap(),
+                            },
+                        ))
+                        .unwrap_or_else(|_| {
+                            log::error!(
+                                "Cannot send message to worker repost post"
+                            );
+                        });
+                } else {
+                    post_manager_tx!()
+                        .send(post_manager::RequestMsg::RepostPost(
+                            post_manager::CreateRecordData {
+                                post_uri: self.uri.clone(),
+                                post_cid: self.cid.clone(),
+                            },
+                        ))
+                        .unwrap_or_else(|_| {
+                            log::error!(
+                                "Cannot send message to worker unrepost post"
+                            );
+                        });
+                }
+                return AppEvent::None;
+            }
+
+            KeyCode::Char('p') => {
+                let post_uri = self.uri.split('/').collect::<Vec<_>>();
+                let author = post_uri[2];
+                let post_id = post_uri[4];
+                let url = format!(
+                    "https://bsky.app/profile/{}/post/{}",
+                    author, post_id
+                );
+                if let Result::Err(e) =
+                    Command::new("xdg-open").arg(url).spawn()
+                {
+                    log::error!("{:?}", e);
+                }
+                return AppEvent::None;
+            }
+
+            KeyCode::Char('m') => {
+                if self.embed.is_some() {
+                    self.embed.as_ref().unwrap().open_media();
+                }
+                return AppEvent::None;
+            }
+
+            _ => return AppEvent::None,
+        }
     }
 }

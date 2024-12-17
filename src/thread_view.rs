@@ -26,7 +26,7 @@ use crate::{
     connected_list::{ConnectedList, ConnectedListContext, ConnectedListState},
     embed::Embed,
     post::{FacetType, Post},
-    post_manager, post_manager_tx,
+    post_manager,
     post_widget::PostWidget,
     AppEvent,
 };
@@ -38,7 +38,6 @@ struct Link {
 }
 
 struct FacetModal {
-    post: Post,
     links: Vec<Link>,
     state: ConnectedListState,
 }
@@ -131,23 +130,25 @@ impl ThreadView {
             .unwrap_or(false);
     }
 
-    pub async fn handle_input_events(&mut self, agent: BskyAgent) -> AppEvent {
+    pub async fn handle_input_events(
+        &mut self,
+        event: event::Event,
+        agent: BskyAgent,
+    ) -> AppEvent {
         match &self.facet_modal {
-            None => self.handle_input_events_thread(agent).await,
-            Some(_) => self.handle_input_events_facet_model().await,
+            None => self.handle_input_events_thread(event, agent).await,
+            Some(_) => self.handle_input_events_facet_model(event).await,
         }
     }
 
     async fn handle_input_events_thread(
         &mut self,
+        event: event::Event,
         agent: BskyAgent,
     ) -> AppEvent {
-        let Event::Key(key) = event::read().expect("Cannot read event") else {
+        let Event::Key(key) = event else {
             return AppEvent::None;
         };
-        if key.kind != event::KeyEventKind::Press {
-            return AppEvent::None;
-        }
 
         match key.code {
             KeyCode::Backspace => return AppEvent::ColumnPopLayer,
@@ -170,97 +171,6 @@ impl ThreadView {
                 return AppEvent::None;
             }
 
-            // Like
-            KeyCode::Char(' ') => {
-                let Some(selected) = self.selected() else {
-                    return AppEvent::None;
-                };
-                let post = post_manager!().at(selected).unwrap();
-                if post.like.uri.is_some() {
-                    post_manager_tx!()
-                        .send(post_manager::RequestMsg::UnlikePost(
-                            post_manager::DeleteRecordData {
-                                post_uri: post.uri.clone(),
-                                record_uri: post.like.uri.clone().unwrap(),
-                            },
-                        ))
-                        .unwrap_or_else(|_| {
-                            log::error!(
-                                "Cannot send message to worker unliking post"
-                            );
-                        });
-                } else {
-                    post_manager_tx!()
-                        .send(post_manager::RequestMsg::LikePost(
-                            post_manager::CreateRecordData {
-                                post_uri: post.uri.clone(),
-                                post_cid: post.cid.clone(),
-                            },
-                        ))
-                        .unwrap_or_else(|_| {
-                            log::error!(
-                                "Cannot send message to worker unliking post"
-                            );
-                        });
-                }
-                return AppEvent::None;
-            }
-
-            // Repost
-            KeyCode::Char('o') => {
-                let Some(selected) = self.selected() else {
-                    return AppEvent::None;
-                };
-                let post = post_manager!().at(selected).unwrap();
-                if post.repost.uri.is_some() {
-                    post_manager_tx!()
-                        .send(post_manager::RequestMsg::UnrepostPost(
-                            post_manager::DeleteRecordData {
-                                post_uri: post.uri.clone(),
-                                record_uri: post.repost.uri.clone().unwrap(),
-                            },
-                        ))
-                        .unwrap_or_else(|_| {
-                            log::error!(
-                                "Cannot send message to worker repost post"
-                            );
-                        });
-                } else {
-                    post_manager_tx!()
-                        .send(post_manager::RequestMsg::RepostPost(
-                            post_manager::CreateRecordData {
-                                post_uri: post.uri.clone(),
-                                post_cid: post.cid.clone(),
-                            },
-                        ))
-                        .unwrap_or_else(|_| {
-                            log::error!(
-                                "Cannot send message to worker unrepost post"
-                            );
-                        });
-                }
-                return AppEvent::None;
-            }
-
-            KeyCode::Char('p') => {
-                let Some(selected) = self.selected() else {
-                    return AppEvent::None;
-                };
-                let post_uri = selected.split('/').collect::<Vec<_>>();
-                let author = post_uri[2];
-                let post_id = post_uri[4];
-                let url = format!(
-                    "https://bsky.app/profile/{}/post/{}",
-                    author, post_id
-                );
-                if let Result::Err(e) =
-                    Command::new("xdg-open").arg(url).spawn()
-                {
-                    log::error!("{:?}", e);
-                }
-                return AppEvent::None;
-            }
-
             KeyCode::Char('f') => {
                 let post = post_manager!().at(&self.post_uri).unwrap();
                 let links = post
@@ -275,22 +185,9 @@ impl ThreadView {
                     })
                     .collect::<Vec<_>>();
                 self.facet_modal = Some(FacetModal {
-                    post: post.clone(),
                     links,
                     state: ConnectedListState::new(Some(0)),
                 });
-                return AppEvent::None;
-            }
-
-            KeyCode::Char('m') => {
-                let Some(selected) = self.selected() else {
-                    return AppEvent::None;
-                };
-                let Ok(_) = post_manager_tx!().send(
-                    post_manager::RequestMsg::OpenMedia(selected.clone()),
-                ) else {
-                    return AppEvent::None;
-                };
                 return AppEvent::None;
             }
 
@@ -342,17 +239,23 @@ impl ThreadView {
                 }
             }
 
-            _ => return AppEvent::None,
+            _ => {
+                let Some(selected) = self.selected() else {
+                    return AppEvent::None;
+                };
+                let post = post_manager!().at(selected).unwrap();
+                return post.handle_input_events(event, agent);
+            }
         }
     }
 
-    async fn handle_input_events_facet_model(&mut self) -> AppEvent {
-        let Event::Key(key) = event::read().expect("Cannot read event") else {
+    async fn handle_input_events_facet_model(
+        &mut self,
+        event: event::Event,
+    ) -> AppEvent {
+        let Event::Key(key) = event else {
             return AppEvent::None;
         };
-        if key.kind != event::KeyEventKind::Press {
-            return AppEvent::None;
-        }
 
         match key.code {
             KeyCode::Esc => self.facet_modal = None,

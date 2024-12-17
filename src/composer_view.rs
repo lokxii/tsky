@@ -43,14 +43,18 @@ impl ComposerView {
             langs_field: lang,
         }
     }
-    pub async fn handle_input_events(&mut self, agent: BskyAgent) -> AppEvent {
-        let event = event::read().expect("Cannot read event");
+    pub async fn handle_input_events(
+        &mut self,
+        event: event::Event,
+        agent: BskyAgent,
+    ) -> AppEvent {
         let Event::Key(key) = event.clone().into() else {
             return AppEvent::None;
         };
         if key.kind != event::KeyEventKind::Press {
             return AppEvent::None;
         }
+
         match self.inputmode {
             InputMode::Insert => match event.into() {
                 Input { key: Key::Esc, .. } => {

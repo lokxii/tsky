@@ -24,7 +24,6 @@ pub enum RequestMsg {
     UnlikePost(DeleteRecordData),
     RepostPost(CreateRecordData),
     UnrepostPost(DeleteRecordData),
-    OpenMedia(String),
     Close,
 }
 
@@ -183,19 +182,6 @@ impl PostManager {
                         post.repost.uri = None;
                         post.repost.count -= 1;
                         tokio::spawn(async {});
-                    }
-
-                    RequestMsg::OpenMedia(uri) => {
-                        let posts = posts.lock().unwrap();
-                        let Some(post) = posts.get(&uri) else {
-                            log::error!("Could not find post in post manager");
-                            continue;
-                        };
-
-                        if post.embed.is_none() {
-                            continue;
-                        }
-                        post.embed.as_ref().unwrap().open_media();
                     }
                 }
             }

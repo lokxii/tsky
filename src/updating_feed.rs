@@ -6,12 +6,9 @@ use atrium_api::{
 };
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event, KeyCode};
-use std::{
-    process::Command,
-    sync::{
-        mpsc::{Receiver, Sender},
-        Arc,
-    },
+use std::sync::{
+    mpsc::{Receiver, Sender},
+    Arc,
 };
 use tokio::sync::{Mutex, MutexGuard};
 
@@ -21,7 +18,7 @@ use crate::{
     composer_view::ComposerView,
     feed::{Feed, FeedPost},
     list::ListState,
-    post_manager, post_manager_tx,
+    post_manager,
     thread_view::ThreadView,
 };
 
@@ -48,13 +45,14 @@ impl UpdatingFeed {
         }
     }
 
-    pub async fn handle_input_events(&self, agent: BskyAgent) -> AppEvent {
-        let Event::Key(key) = event::read().expect("Cannot read event") else {
+    pub async fn handle_input_events(
+        &self,
+        event: event::Event,
+        agent: BskyAgent,
+    ) -> AppEvent {
+        let Event::Key(key) = event.clone() else {
             return AppEvent::None;
         };
-        if key.kind != event::KeyEventKind::Press {
-            return AppEvent::None;
-        }
 
         let feed = Arc::clone(&self.feed);
         let mut feed = feed.lock().await;
@@ -122,117 +120,6 @@ impl UpdatingFeed {
                 return AppEvent::None;
             }
 
-            // Like
-            KeyCode::Char(' ') => {
-                if feed.state.selected.is_none() {
-                    return AppEvent::None;
-                }
-                let post = &feed.posts[feed.state.selected.unwrap()];
-                let post = post_manager!().at(&post.post_uri).unwrap();
-                if post.like.uri.is_some() {
-                    post_manager_tx!()
-                        .send(post_manager::RequestMsg::UnlikePost(
-                            post_manager::DeleteRecordData {
-                                post_uri: post.uri.clone(),
-                                record_uri: post.like.uri.clone().unwrap(),
-                            },
-                        ))
-                        .unwrap_or_else(|_| {
-                            log::error!(
-                                "Cannot send message to worker unliking post"
-                            );
-                        });
-                } else {
-                    post_manager_tx!()
-                        .send(post_manager::RequestMsg::LikePost(
-                            post_manager::CreateRecordData {
-                                post_uri: post.uri.clone(),
-                                post_cid: post.cid.clone(),
-                            },
-                        ))
-                        .unwrap_or_else(|_| {
-                            log::error!(
-                                "Cannot send message to worker unliking post"
-                            );
-                        });
-                }
-                return AppEvent::None;
-            }
-
-            // Repost
-            KeyCode::Char('o') => {
-                if feed.state.selected.is_none() {
-                    return AppEvent::None;
-                }
-                let post = &feed.posts[feed.state.selected.unwrap()];
-                let post = post_manager!().at(&post.post_uri).unwrap();
-                if post.repost.uri.is_some() {
-                    post_manager_tx!()
-                        .send(post_manager::RequestMsg::UnrepostPost(
-                            post_manager::DeleteRecordData {
-                                post_uri: post.uri.clone(),
-                                record_uri: post.repost.uri.clone().unwrap(),
-                            },
-                        ))
-                        .unwrap_or_else(|_| {
-                            log::error!(
-                                "Cannot send message to worker repost post"
-                            );
-                        });
-                } else {
-                    post_manager_tx!()
-                        .send(post_manager::RequestMsg::RepostPost(
-                            post_manager::CreateRecordData {
-                                post_uri: post.uri.clone(),
-                                post_cid: post.cid.clone(),
-                            },
-                        ))
-                        .unwrap_or_else(|_| {
-                            log::error!(
-                                "Cannot send message to worker unrepost post"
-                            );
-                        });
-                }
-                return AppEvent::None;
-            }
-
-            KeyCode::Char('p') => {
-                if feed.state.selected.is_none() {
-                    return AppEvent::None;
-                }
-                let post_uri = feed.posts[feed.state.selected.unwrap()]
-                    .post_uri
-                    .split('/')
-                    .collect::<Vec<_>>();
-                let author = post_uri[2];
-                let post_id = post_uri[4];
-                let url = format!(
-                    "https://bsky.app/profile/{}/post/{}",
-                    author, post_id
-                );
-                if let Result::Err(e) =
-                    Command::new("xdg-open").arg(url).spawn()
-                {
-                    log::error!("{:?}", e);
-                }
-                return AppEvent::None;
-            }
-
-            KeyCode::Char('m') => {
-                if feed.state.selected.is_none() {
-                    return AppEvent::None;
-                }
-
-                let uri =
-                    feed.posts[feed.state.selected.unwrap()].post_uri.clone();
-                let Ok(_) = post_manager_tx!()
-                    .send(post_manager::RequestMsg::OpenMedia(uri))
-                else {
-                    return AppEvent::None;
-                };
-                return AppEvent::None;
-            }
-
             KeyCode::Enter => {
                 if feed.state.selected.is_none() {
                     return AppEvent::None;
@@ -277,7 +164,12 @@ impl UpdatingFeed {
             }
 
             _ => {
-                return AppEvent::None;
+                let Some(selected) = feed.state.selected else {
+                    return AppEvent::None;
+                };
+                let uri = &feed.posts[selected].post_uri;
+                let post = post_manager!().at(uri).unwrap();
+                return post.handle_input_events(event, agent);
             }
         };
     }

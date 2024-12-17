@@ -102,16 +102,17 @@ impl App {
             return AppEvent::None;
         }
 
+        let event = event::read().expect("Cannot read event");
         match self.column.last_mut() {
             None => return AppEvent::None,
             Some(Column::UpdatingFeed(feed)) => {
-                return feed.handle_input_events(agent).await
+                return feed.handle_input_events(event, agent).await
             }
             Some(Column::Thread(thread)) => {
-                return thread.handle_input_events(agent).await
+                return thread.handle_input_events(event, agent).await
             }
             Some(Column::Composer(composer)) => {
-                return composer.handle_input_events(agent).await
+                return composer.handle_input_events(event, agent).await
             }
         };
     }
