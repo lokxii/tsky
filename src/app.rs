@@ -37,7 +37,7 @@ impl App {
             None => {}
             Some(Column::UpdatingFeed(feed)) => {
                 let feed = Arc::clone(&feed.feed);
-                let mut feed = feed.lock().await;
+                let mut feed = feed.lock().unwrap();
 
                 terminal
                     .draw(|f| {

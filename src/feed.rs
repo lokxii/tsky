@@ -23,10 +23,11 @@ use crate::{
 pub struct Feed {
     pub posts: Vec<FeedPost>,
     pub state: ListState,
+    pub cursor: Option<String>,
 }
 
 impl Feed {
-    pub async fn insert_new_posts<T>(&mut self, new_posts: T) -> bool
+    pub fn insert_new_posts<T>(&mut self, new_posts: T) -> bool
     where
         T: Iterator<Item = FeedPost> + Clone,
     {

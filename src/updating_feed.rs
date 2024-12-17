@@ -6,11 +6,11 @@ use atrium_api::{
 };
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event, KeyCode};
+use std::sync::Mutex;
 use std::sync::{
     mpsc::{Receiver, Sender},
     Arc,
 };
-use tokio::sync::{Mutex, MutexGuard};
 
 use crate::{
     app::AppEvent,
@@ -29,7 +29,6 @@ pub enum RequestMsg {
 
 pub struct UpdatingFeed {
     pub feed: Arc<Mutex<Feed>>,
-    cursor: Arc<Mutex<Option<String>>>,
     pub request_worker_tx: Sender<RequestMsg>,
 }
 
@@ -39,8 +38,8 @@ impl UpdatingFeed {
             feed: Arc::new(Mutex::new(Feed {
                 posts: Vec::new(),
                 state: ListState::default(),
+                cursor: None,
             })),
-            cursor: Arc::new(Mutex::new(None)),
             request_worker_tx: tx,
         }
     }
@@ -55,7 +54,7 @@ impl UpdatingFeed {
         };
 
         let feed = Arc::clone(&self.feed);
-        let mut feed = feed.lock().await;
+        let mut feed = feed.lock().unwrap();
 
         match key.code {
             KeyCode::Char('q') => {
@@ -121,15 +120,18 @@ impl UpdatingFeed {
             }
 
             KeyCode::Enter => {
-                if feed.state.selected.is_none() {
+                let Some(selected) = feed.state.selected else {
                     return AppEvent::None;
-                }
+                };
+
+                let uri = feed.posts[selected].post_uri.clone();
+                drop(feed);
 
                 let Ok(out) = agent.api.app.bsky.feed.get_post_thread(
                     atrium_api::app::bsky::feed::get_post_thread::ParametersData {
                         depth: Some(1.try_into().unwrap()),
                         parent_height: None,
-                        uri: feed.posts[feed.state.selected.unwrap()].post_uri.clone(),
+                        uri,
                     }.into()).await else {
                     return AppEvent::None;
                 };
@@ -176,7 +178,6 @@ impl UpdatingFeed {
 
     pub fn spawn_feed_autoupdate(&self, agent: BskyAgent) {
         let feed = Arc::clone(&self.feed);
-        let cursor = Arc::clone(&self.cursor);
         tokio::spawn(async move {
             loop {
                 let new_posts = agent
@@ -207,10 +208,9 @@ impl UpdatingFeed {
                 let new_posts = posts.iter().map(FeedPost::from);
 
                 {
-                    let mut feed = feed.lock().await;
-                    if feed.insert_new_posts(new_posts).await {
-                        let mut cursor = cursor.lock().await;
-                        *cursor = new_cursor;
+                    let mut feed = feed.lock().unwrap();
+                    if feed.insert_new_posts(new_posts) {
+                        feed.cursor = new_cursor;
                     }
                 }
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -224,7 +224,6 @@ impl UpdatingFeed {
         rx: Receiver<RequestMsg>,
     ) {
         let feed = Arc::clone(&self.feed);
-        let cursor = Arc::clone(&self.cursor);
         tokio::spawn(async move {
             loop {
                 let Ok(msg) = rx.recv() else {
@@ -236,12 +235,7 @@ impl UpdatingFeed {
                     RequestMsg::Close => return,
 
                     RequestMsg::OldPost => {
-                        get_old_posts(
-                            &agent,
-                            Arc::clone(&feed),
-                            cursor.lock().await,
-                        )
-                        .await;
+                        get_old_posts(&agent, Arc::clone(&feed)).await;
                     }
                 }
             }
@@ -249,11 +243,12 @@ impl UpdatingFeed {
     }
 }
 
-async fn get_old_posts(
-    agent: &BskyAgent,
-    feed: Arc<Mutex<Feed>>,
-    mut cursor: MutexGuard<'_, Option<String>>,
-) {
+async fn get_old_posts(agent: &BskyAgent, feed: Arc<Mutex<Feed>>) {
+    let cursor = {
+        let feed = Arc::clone(&feed);
+        let feed = feed.lock().unwrap();
+        feed.cursor.clone()
+    };
     let new_posts = agent
         .api
         .app
@@ -262,7 +257,7 @@ async fn get_old_posts(
         .get_timeline(
             get_timeline::ParametersData {
                 algorithm: None,
-                cursor: cursor.clone(),
+                cursor,
                 limit: None,
             }
             .into(),
@@ -275,8 +270,8 @@ async fn get_old_posts(
 
     let get_timeline::OutputData { feed: posts, cursor: new_cursor } =
         new_posts.data;
-    *cursor = new_cursor;
 
-    let mut feed = feed.lock().await;
+    let mut feed = feed.lock().unwrap();
     feed.append_old_posts(posts.iter().map(FeedPost::from));
+    feed.cursor = new_cursor;
 }
