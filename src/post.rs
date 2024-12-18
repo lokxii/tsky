@@ -11,7 +11,14 @@ use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
 use std::{ops::Range, process::Command};
 
-use crate::{app::AppEvent, embed::Embed, post_manager, post_manager_tx};
+use crate::{
+    app::AppEvent,
+    column::Column,
+    connected_list::ConnectedListState,
+    embed::Embed,
+    facet_modal::{FacetModal, Link},
+    post_manager, post_manager_tx,
+};
 
 #[derive(Clone)]
 pub struct LikeRepostViewer {
@@ -257,6 +264,26 @@ impl Post {
                     self.embed.as_ref().unwrap().open_media();
                 }
                 return AppEvent::None;
+            }
+
+            KeyCode::Char('f') => {
+                let links = self
+                    .facets
+                    .iter()
+                    .filter_map(|facet| {
+                        let FacetType::Link(url) = &facet.r#type else {
+                            return None;
+                        };
+                        let text = self.text[facet.range.clone()].to_string();
+                        Some(Link { text, url: url.clone() })
+                    })
+                    .collect::<Vec<_>>();
+                return AppEvent::ColumnNewLayer(Column::FacetModal(
+                    FacetModal {
+                        links,
+                        state: ConnectedListState::new(Some(0)),
+                    },
+                ));
             }
 
             _ => return AppEvent::None,

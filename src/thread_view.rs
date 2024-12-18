@@ -11,13 +11,9 @@ use atrium_api::{
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
-    layout::{Constraint, Layout},
-    style::{Color, Style},
-    text::{Line, Span},
-    widgets::{
-        Block, BorderType, Borders, Clear, Padding, Paragraph, StatefulWidget,
-        Widget,
-    },
+    style::Color,
+    text::Line,
+    widgets::{Block, BorderType, Borders, Padding, StatefulWidget, Widget},
 };
 use std::process::Command;
 
@@ -25,29 +21,18 @@ use crate::{
     column::Column,
     connected_list::{ConnectedList, ConnectedListContext, ConnectedListState},
     embed::Embed,
+    facet_modal::{FacetModal, Link},
     post::{FacetType, Post},
     post_manager,
     post_widget::PostWidget,
     AppEvent,
 };
 
-#[derive(Clone)]
-struct Link {
-    text: String,
-    url: String,
-}
-
-struct FacetModal {
-    links: Vec<Link>,
-    state: ConnectedListState,
-}
-
 pub struct ThreadView {
     post_uri: String,
     parent: Vec<String>,
     replies: Vec<String>,
     state: ConnectedListState,
-    facet_modal: Option<FacetModal>,
 }
 
 fn parent_posts_rev(
@@ -100,7 +85,6 @@ impl ThreadView {
             parent,
             replies,
             state: ConnectedListState::new(Some(l)),
-            facet_modal: None,
         }
     }
 
@@ -131,17 +115,6 @@ impl ThreadView {
     }
 
     pub async fn handle_input_events(
-        &mut self,
-        event: event::Event,
-        agent: BskyAgent,
-    ) -> AppEvent {
-        match &self.facet_modal {
-            None => self.handle_input_events_thread(event, agent).await,
-            Some(_) => self.handle_input_events_facet_model(event).await,
-        }
-    }
-
-    async fn handle_input_events_thread(
         &mut self,
         event: event::Event,
         agent: BskyAgent,
@@ -184,11 +157,12 @@ impl ThreadView {
                         Some(Link { text, url: url.clone() })
                     })
                     .collect::<Vec<_>>();
-                self.facet_modal = Some(FacetModal {
-                    links,
-                    state: ConnectedListState::new(Some(0)),
-                });
-                return AppEvent::None;
+                return AppEvent::ColumnNewLayer(Column::FacetModal(
+                    FacetModal {
+                        links,
+                        state: ConnectedListState::new(Some(0)),
+                    },
+                ));
             }
 
             KeyCode::Enter => {
@@ -248,41 +222,6 @@ impl ThreadView {
             }
         }
     }
-
-    async fn handle_input_events_facet_model(
-        &mut self,
-        event: event::Event,
-    ) -> AppEvent {
-        let Event::Key(key) = event else {
-            return AppEvent::None;
-        };
-
-        match key.code {
-            KeyCode::Esc => self.facet_modal = None,
-            KeyCode::Char('j') => {
-                let facet_modal = self.facet_modal.as_mut().unwrap();
-                facet_modal.state.next();
-            }
-            KeyCode::Char('k') => {
-                let facet_modal = self.facet_modal.as_mut().unwrap();
-                facet_modal.state.previous();
-            }
-            KeyCode::Enter => {
-                let facet_modal = self.facet_modal.as_ref().unwrap();
-                let Some(index) = facet_modal.state.selected else {
-                    return AppEvent::None;
-                };
-                let url = &facet_modal.links[index].url;
-                if let Result::Err(e) =
-                    Command::new("xdg-open").arg(url).spawn()
-                {
-                    log::error!("{:?}", e);
-                }
-            }
-            _ => {}
-        }
-        return AppEvent::None;
-    }
 }
 
 impl Widget for &mut ThreadView {
@@ -324,49 +263,6 @@ impl Widget for &mut ThreadView {
         )
         .connecting(vec![0..self.parent.len()])
         .render(area, buf, &mut self.state);
-
-        if let Some(facet_modal) = self.facet_modal.as_mut() {
-            let [_, area, _] = Layout::horizontal([
-                Constraint::Fill(1),
-                Constraint::Percentage(80),
-                Constraint::Fill(1),
-            ])
-            .areas(area);
-
-            let [_, area, _] = Layout::vertical([
-                Constraint::Percentage(30),
-                Constraint::Length(facet_modal.links.len() as u16 + 2),
-                Constraint::Fill(1),
-            ])
-            .areas(area);
-            Clear.render(area, buf);
-
-            let block = Block::bordered().title("Links");
-            let inner_area = block.inner(area);
-            block.render(area, buf);
-
-            let items = facet_modal.links.clone();
-            ConnectedList::new(
-                facet_modal.links.len(),
-                move |context: ConnectedListContext| {
-                    let style = if context.is_selected {
-                        Style::default().bg(Color::Rgb(45, 50, 55))
-                    } else {
-                        Style::default()
-                    };
-                    let item = Paragraph::new(Span::styled(
-                        format!(
-                            "`{}` -> {}",
-                            items[context.index].text, items[context.index].url
-                        ),
-                        style,
-                    ));
-                    let height = item.line_count(area.width - 2) as u16;
-                    return (item, height);
-                },
-            )
-            .render(inner_area, buf, &mut facet_modal.state);
-        }
     }
 }
 

@@ -1,12 +1,13 @@
 use crate::{
-    composer_view::ComposerView, thread_view::ThreadView,
-    updating_feed::UpdatingFeed,
+    composer_view::ComposerView, facet_modal::FacetModal,
+    thread_view::ThreadView, updating_feed::UpdatingFeed,
 };
 
 pub enum Column {
     UpdatingFeed(UpdatingFeed),
     Thread(ThreadView),
     Composer(ComposerView),
+    FacetModal(FacetModal),
 }
 
 pub struct ColumnStack {

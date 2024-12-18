@@ -41,7 +41,15 @@ impl App {
                 ])
                 .areas(f.area());
 
-                match self.column.last_mut() {
+                let last = self.column.pop();
+                let (mut modal, mut last) =
+                    if let Some(Column::FacetModal(f)) = last {
+                        (Some(f), self.column.pop())
+                    } else {
+                        (None, last)
+                    };
+
+                match &mut last {
                     None => {}
                     Some(Column::UpdatingFeed(feed)) => {
                         let feed = Arc::clone(&feed.feed);
@@ -54,11 +62,25 @@ impl App {
                     Some(Column::Composer(composer)) => {
                         f.render_widget(composer, main_area);
                     }
+                    Some(Column::FacetModal(_)) => {
+                        panic!("FacetModal on top of FacetModal?")
+                    }
+                }
+
+                match &mut modal {
+                    None => {}
+                    Some(modal) => f.render_widget(modal, main_area),
+                }
+
+                if last.is_some() {
+                    self.column.push(last.unwrap());
+                }
+                if modal.is_some() {
+                    self.column.push(Column::FacetModal(modal.unwrap()));
                 }
 
                 f.render_widget(
-                    String::from("log: ")
-                        + logs.last().unwrap_or(&String::new()),
+                    format!("log: {}", logs.last().unwrap_or(&String::new())),
                     log_area,
                 );
             })
@@ -83,6 +105,9 @@ impl App {
             }
             Some(Column::Composer(composer)) => {
                 return composer.handle_input_events(event, agent).await
+            }
+            Some(Column::FacetModal(modal)) => {
+                return modal.handle_input_events(event, agent).await
             }
         };
     }
