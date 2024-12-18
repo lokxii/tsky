@@ -17,12 +17,13 @@ mod textarea;
 mod thread_view;
 mod updating_feed;
 
-use app::{App, AppEvent};
+use app::{App, AppEvent, EventReceiver};
 use bsky_sdk::{
     agent::config::{Config, FileStore},
     BskyAgent,
 };
 use column::{Column, ColumnStack};
+use crossterm::event;
 use dotenvy::dotenv;
 use lazy_static::lazy_static;
 use logger::LOGGER;
@@ -74,7 +75,13 @@ async fn main() {
     loop {
         app.render(&mut terminal).await;
 
-        match app.handle_events(agent.clone()).await {
+        if !event::poll(std::time::Duration::from_millis(500))
+            .expect("Error polling event")
+        {
+            continue;
+        }
+        let event = event::read().expect("Cannot read event");
+        match (&mut app).handle_events(event, agent.clone()).await {
             AppEvent::None => {}
 
             AppEvent::Quit => {

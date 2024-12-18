@@ -17,6 +17,14 @@ pub enum AppEvent {
     ColumnPopLayer,
 }
 
+pub trait EventReceiver {
+    async fn handle_events(
+        self,
+        event: event::Event,
+        agent: BskyAgent,
+    ) -> AppEvent;
+}
+
 pub struct App {
     pub column: ColumnStack,
 }
@@ -86,28 +94,27 @@ impl App {
             })
             .unwrap();
     }
+}
 
-    pub async fn handle_events(&mut self, agent: BskyAgent) -> AppEvent {
-        if !event::poll(std::time::Duration::from_millis(500))
-            .expect("Error polling event")
-        {
-            return AppEvent::None;
-        }
-
-        let event = event::read().expect("Cannot read event");
+impl EventReceiver for &mut App {
+    async fn handle_events(
+        self,
+        event: event::Event,
+        agent: BskyAgent,
+    ) -> AppEvent {
         match self.column.last_mut() {
             None => return AppEvent::None,
             Some(Column::UpdatingFeed(feed)) => {
-                return feed.handle_input_events(event, agent).await
+                return feed.handle_events(event, agent).await
             }
             Some(Column::Thread(thread)) => {
-                return thread.handle_input_events(event, agent).await
+                return thread.handle_events(event, agent).await
             }
             Some(Column::Composer(composer)) => {
-                return composer.handle_input_events(event, agent).await
+                return composer.handle_events(event, agent).await
             }
             Some(Column::FacetModal(modal)) => {
-                return modal.handle_input_events(event, agent).await
+                return modal.handle_events(event, agent).await
             }
         };
     }

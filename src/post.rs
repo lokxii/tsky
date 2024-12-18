@@ -12,7 +12,7 @@ use crossterm::event::{self, Event, KeyCode};
 use std::{ops::Range, process::Command};
 
 use crate::{
-    app::AppEvent,
+    app::{AppEvent, EventReceiver},
     column::Column,
     connected_list::ConnectedListState,
     embed::Embed,
@@ -170,9 +170,11 @@ impl Post {
             facets,
         };
     }
+}
 
-    pub fn handle_input_events(
-        &self,
+impl EventReceiver for &Post {
+    async fn handle_events(
+        self,
         event: event::Event,
         _: BskyAgent,
     ) -> AppEvent {

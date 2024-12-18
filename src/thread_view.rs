@@ -15,9 +15,9 @@ use ratatui::{
     text::Line,
     widgets::{Block, BorderType, Borders, Padding, StatefulWidget, Widget},
 };
-use std::process::Command;
 
 use crate::{
+    app::EventReceiver,
     column::Column,
     connected_list::{ConnectedList, ConnectedListContext, ConnectedListState},
     embed::Embed,
@@ -113,9 +113,11 @@ impl ThreadView {
             .map(|i| i == self.parent.len())
             .unwrap_or(false);
     }
+}
 
-    pub async fn handle_input_events(
-        &mut self,
+impl EventReceiver for &mut ThreadView {
+    async fn handle_events(
+        self,
         event: event::Event,
         agent: BskyAgent,
     ) -> AppEvent {
@@ -218,7 +220,7 @@ impl ThreadView {
                     return AppEvent::None;
                 };
                 let post = post_manager!().at(selected).unwrap();
-                return post.handle_input_events(event, agent);
+                return post.handle_events(event, agent).await;
             }
         }
     }

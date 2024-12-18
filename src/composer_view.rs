@@ -1,5 +1,5 @@
 use crate::{
-    app::AppEvent,
+    app::{AppEvent, EventReceiver},
     facets::{detect_facets, CharSlice, FacetFeature},
     textarea::{CursorMove, Input, Key, TextArea, TextStyle},
 };
@@ -43,8 +43,11 @@ impl ComposerView {
             langs_field: lang,
         }
     }
-    pub async fn handle_input_events(
-        &mut self,
+}
+
+impl EventReceiver for &mut ComposerView {
+    async fn handle_events(
+        self,
         event: event::Event,
         agent: BskyAgent,
     ) -> AppEvent {

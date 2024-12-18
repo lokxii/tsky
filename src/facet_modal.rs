@@ -10,7 +10,7 @@ use ratatui::{
     widgets::{Block, Clear, Paragraph, Widget},
 };
 
-use crate::app::AppEvent;
+use crate::app::{AppEvent, EventReceiver};
 use crate::connected_list::{
     ConnectedList, ConnectedListContext, ConnectedListState,
 };
@@ -26,9 +26,9 @@ pub struct FacetModal {
     pub state: ConnectedListState,
 }
 
-impl FacetModal {
-    pub async fn handle_input_events(
-        &mut self,
+impl EventReceiver for &mut FacetModal {
+    async fn handle_events(
+        self,
         event: event::Event,
         _: BskyAgent,
     ) -> AppEvent {

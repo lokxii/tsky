@@ -13,7 +13,7 @@ use std::sync::{
 };
 
 use crate::{
-    app::AppEvent,
+    app::{AppEvent, EventReceiver},
     column::Column,
     composer_view::ComposerView,
     feed::{Feed, FeedPost},
@@ -42,138 +42,6 @@ impl UpdatingFeed {
             })),
             request_worker_tx: tx,
         }
-    }
-
-    pub async fn handle_input_events(
-        &self,
-        event: event::Event,
-        agent: BskyAgent,
-    ) -> AppEvent {
-        let Event::Key(key) = event.clone() else {
-            return AppEvent::None;
-        };
-
-        let feed = Arc::clone(&self.feed);
-        let mut feed = feed.lock().unwrap();
-
-        match key.code {
-            KeyCode::Char('q') => {
-                return AppEvent::Quit;
-            }
-
-            // Cursor move down
-            KeyCode::Char('j') => {
-                if feed.posts.len() > 0
-                    && feed.state.selected == Some(feed.posts.len() - 1)
-                {
-                    // let cursor = Arc::clone(&self.cursor);
-                    // if let Result::Err(_) = cursor.try_lock() {
-                    //     feed.state.next();
-                    //     return AppEvent::None;
-                    // };
-                    self.request_worker_tx.send(RequestMsg::OldPost)
-                        .unwrap_or_else(|_| {
-                            log::error!("Cannot send message to worker fetching old post");
-                        });
-                } else {
-                    feed.state.next();
-                }
-                return AppEvent::None;
-            }
-
-            // Cursor move up
-            KeyCode::Char('k') => {
-                feed.state.previous();
-                return AppEvent::None;
-            }
-
-            KeyCode::Char('g') => {
-                let Event::Key(event::KeyEvent {
-                    code: KeyCode::Char('g'),
-                    kind: event::KeyEventKind::Press,
-                    ..
-                }) = event::read().expect("Cannot read event")
-                else {
-                    return AppEvent::None;
-                };
-
-                feed.state = ListState::default();
-                feed.state.selected = Some(0);
-                return AppEvent::None;
-            }
-
-            KeyCode::Char('G') => {
-                if feed.posts.len() > 0 {
-                    feed.state = ListState::default();
-                    feed.state.selected = Some(feed.posts.len() - 1);
-                    // let cursor = Arc::clone(&self.cursor);
-                    // if let Result::Err(_) = cursor.try_lock() {
-                    //     feed.state.next();
-                    //     return AppEvent::None;
-                    // };
-                    self.request_worker_tx.send(RequestMsg::OldPost)
-                        .unwrap_or_else(|_| {
-                            log::error!("Cannot send message to worker fetching old post");
-                        });
-                }
-                return AppEvent::None;
-            }
-
-            KeyCode::Enter => {
-                let Some(selected) = feed.state.selected else {
-                    return AppEvent::None;
-                };
-
-                let uri = feed.posts[selected].post_uri.clone();
-                drop(feed);
-
-                let Ok(out) = agent.api.app.bsky.feed.get_post_thread(
-                    atrium_api::app::bsky::feed::get_post_thread::ParametersData {
-                        depth: Some(1.try_into().unwrap()),
-                        parent_height: None,
-                        uri,
-                    }.into()).await else {
-                    return AppEvent::None;
-                };
-                let Union::Refs(thread) = out.data.thread else {
-                    log::error!("Unknown thread response");
-                    return AppEvent::None;
-                };
-
-                match thread {
-                    GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
-                        thread,
-                    ) => {
-                        return AppEvent::ColumnNewLayer(Column::Thread(
-                            ThreadView::from(thread.data),
-                        ));
-                    }
-                    GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
-                        log::error!("Blocked thread");
-                        return AppEvent::None;
-                    }
-                    GetPostThreadOutput::AppBskyFeedDefsNotFoundPost(_) => {
-                        log::error!("Thread not found");
-                        return AppEvent::None;
-                    }
-                }
-            }
-
-            KeyCode::Char('n') => {
-                return AppEvent::ColumnNewLayer(Column::Composer(
-                    ComposerView::new(),
-                ))
-            }
-
-            _ => {
-                let Some(selected) = feed.state.selected else {
-                    return AppEvent::None;
-                };
-                let uri = &feed.posts[selected].post_uri;
-                let post = post_manager!().at(uri).unwrap();
-                return post.handle_input_events(event, agent);
-            }
-        };
     }
 
     pub fn spawn_feed_autoupdate(&self, agent: BskyAgent) {
@@ -240,6 +108,130 @@ impl UpdatingFeed {
                 }
             }
         });
+    }
+}
+
+impl EventReceiver for &mut UpdatingFeed {
+    async fn handle_events(
+        self,
+        event: event::Event,
+        agent: BskyAgent,
+    ) -> AppEvent {
+        let Event::Key(key) = event.clone() else {
+            return AppEvent::None;
+        };
+
+        let feed = Arc::clone(&self.feed);
+        let mut feed = feed.lock().unwrap();
+
+        match key.code {
+            KeyCode::Char('q') => {
+                return AppEvent::Quit;
+            }
+
+            // Cursor move down
+            KeyCode::Char('j') => {
+                if feed.posts.len() > 0
+                    && feed.state.selected == Some(feed.posts.len() - 1)
+                {
+                    self.request_worker_tx.send(RequestMsg::OldPost)
+                        .unwrap_or_else(|_| {
+                            log::error!("Cannot send message to worker fetching old post");
+                        });
+                } else {
+                    feed.state.next();
+                }
+                return AppEvent::None;
+            }
+
+            // Cursor move up
+            KeyCode::Char('k') => {
+                feed.state.previous();
+                return AppEvent::None;
+            }
+
+            KeyCode::Char('g') => {
+                let Event::Key(event::KeyEvent {
+                    code: KeyCode::Char('g'),
+                    kind: event::KeyEventKind::Press,
+                    ..
+                }) = event::read().expect("Cannot read event")
+                else {
+                    return AppEvent::None;
+                };
+
+                feed.state = ListState::default();
+                feed.state.selected = Some(0);
+                return AppEvent::None;
+            }
+
+            KeyCode::Char('G') => {
+                if feed.posts.len() > 0 {
+                    feed.state = ListState::default();
+                    feed.state.selected = Some(feed.posts.len() - 1);
+                    self.request_worker_tx.send(RequestMsg::OldPost)
+                        .unwrap_or_else(|_| {
+                            log::error!("Cannot send message to worker fetching old post");
+                        });
+                }
+                return AppEvent::None;
+            }
+
+            KeyCode::Enter => {
+                let Some(selected) = feed.state.selected else {
+                    return AppEvent::None;
+                };
+
+                let uri = feed.posts[selected].post_uri.clone();
+                drop(feed);
+
+                let Ok(out) = agent.api.app.bsky.feed.get_post_thread(
+                    atrium_api::app::bsky::feed::get_post_thread::ParametersData {
+                        depth: Some(1.try_into().unwrap()),
+                        parent_height: None,
+                        uri,
+                    }.into()).await else {
+                    return AppEvent::None;
+                };
+                let Union::Refs(thread) = out.data.thread else {
+                    log::error!("Unknown thread response");
+                    return AppEvent::None;
+                };
+
+                match thread {
+                    GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
+                        thread,
+                    ) => {
+                        return AppEvent::ColumnNewLayer(Column::Thread(
+                            ThreadView::from(thread.data),
+                        ));
+                    }
+                    GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
+                        log::error!("Blocked thread");
+                        return AppEvent::None;
+                    }
+                    GetPostThreadOutput::AppBskyFeedDefsNotFoundPost(_) => {
+                        log::error!("Thread not found");
+                        return AppEvent::None;
+                    }
+                }
+            }
+
+            KeyCode::Char('n') => {
+                return AppEvent::ColumnNewLayer(Column::Composer(
+                    ComposerView::new(),
+                ))
+            }
+
+            _ => {
+                let Some(selected) = feed.state.selected else {
+                    return AppEvent::None;
+                };
+                let uri = &feed.posts[selected].post_uri;
+                let post = post_manager!().at(uri).unwrap();
+                return post.handle_events(event, agent).await;
+            }
+        };
     }
 }
 
