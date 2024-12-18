@@ -3,6 +3,7 @@ use std::process::Command;
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::prelude::StatefulWidget;
+use ratatui::widgets::{BorderType, Padding};
 use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Style},
@@ -78,13 +79,15 @@ impl Widget for &mut FacetModal {
 
         let [_, area, _] = Layout::vertical([
             Constraint::Percentage(30),
-            Constraint::Length(self.links.len() as u16 + 2),
+            Constraint::Length(self.links.len() as u16 + 6),
             Constraint::Fill(1),
         ])
         .areas(area);
         Clear.render(area, buf);
 
-        let block = Block::bordered().title("Links");
+        let block = Block::bordered()
+            .padding(Padding::uniform(2))
+            .border_type(BorderType::QuadrantInside);
         let inner_area = block.inner(area);
         block.render(area, buf);
 
@@ -104,7 +107,7 @@ impl Widget for &mut FacetModal {
                     ),
                     style,
                 ));
-                let height = item.line_count(area.width - 2) as u16;
+                let height = item.line_count(area.width) as u16;
                 return (item, height);
             },
         )
