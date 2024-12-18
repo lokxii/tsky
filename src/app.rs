@@ -60,9 +60,7 @@ impl App {
                 match &mut last {
                     None => {}
                     Some(Column::UpdatingFeed(feed)) => {
-                        let feed = Arc::clone(&feed.feed);
-                        let mut feed = feed.lock().unwrap();
-                        f.render_widget(&mut *feed, main_area);
+                        f.render_widget(feed, main_area);
                     }
                     Some(Column::Thread(thread)) => {
                         f.render_widget(thread, main_area);

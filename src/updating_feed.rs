@@ -6,6 +6,7 @@ use atrium_api::{
 };
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event, KeyCode};
+use ratatui::widgets::Widget;
 use std::sync::Mutex;
 use std::sync::{
     mpsc::{Receiver, Sender},
@@ -232,6 +233,20 @@ impl EventReceiver for &mut UpdatingFeed {
                 return post.handle_events(event, agent).await;
             }
         };
+    }
+}
+
+impl Widget for &mut UpdatingFeed {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+        let feed = Arc::clone(&self.feed);
+        let mut feed = feed.lock().unwrap();
+        feed.render(area, buf);
     }
 }
 
