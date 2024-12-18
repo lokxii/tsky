@@ -7,20 +7,19 @@ use atrium_api::{
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::widgets::Widget;
-use std::sync::Mutex;
 use std::sync::{
     mpsc::{Receiver, Sender},
-    Arc,
+    Arc, Mutex,
 };
 
 use crate::{
     app::{AppEvent, EventReceiver},
-    column::Column,
-    composer_view::ComposerView,
-    feed::{Feed, FeedPost},
-    list::ListState,
+    columns::{Column, ComposerView, ThreadView},
+    components::{
+        feed::{Feed, FeedPost},
+        list::ListState,
+    },
     post_manager,
-    thread_view::ThreadView,
 };
 
 pub enum RequestMsg {

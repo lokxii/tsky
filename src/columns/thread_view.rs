@@ -18,14 +18,19 @@ use ratatui::{
 
 use crate::{
     app::EventReceiver,
-    column::Column,
-    connected_list::{ConnectedList, ConnectedListContext, ConnectedListState},
-    embed::Embed,
+    components::{
+        connected_list::{
+            ConnectedList, ConnectedListContext, ConnectedListState,
+        },
+        embed::{Embed, Record},
+        post::{post_widget::PostWidget, FacetType, Post},
+    },
+    post_manager, AppEvent,
+};
+
+use super::{
     facet_modal::{FacetModal, Link},
-    post::{FacetType, Post},
-    post_manager,
-    post_widget::PostWidget,
-    AppEvent,
+    Column,
 };
 
 pub struct ThreadView {
@@ -173,8 +178,7 @@ impl EventReceiver for &mut ThreadView {
                 };
                 let uri = if self.is_selecting_main_post() {
                     let post = post_manager!().at(&self.post_uri).unwrap();
-                    let Some(Embed::Record(crate::embed::Record::Post(post))) =
-                        post.embed
+                    let Some(Embed::Record(Record::Post(post))) = post.embed
                     else {
                         return AppEvent::None;
                     };

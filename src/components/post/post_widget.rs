@@ -6,8 +6,8 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 
-use crate::{
-    embed_widget::EmbedWidget,
+use crate::components::{
+    embed::embed_widget::EmbedWidget,
     post::{FacetType, Post},
 };
 

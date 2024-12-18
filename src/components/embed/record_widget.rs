@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 
-use crate::{embed::Record, embed_widget::EmbedWidget};
+use crate::components::embed::{embed_widget::EmbedWidget, Record};
 
 pub struct RecordWidget {
     record: Record,

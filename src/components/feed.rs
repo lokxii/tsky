@@ -14,10 +14,11 @@ use ratatui::{
 };
 
 use crate::{
-    list::{List, ListContext, ListState},
-    post::Post,
+    components::{
+        list::{List, ListContext, ListState},
+        post::{post_widget::PostWidget, Post},
+    },
     post_manager,
-    post_widget::PostWidget,
 };
 
 pub struct Feed {

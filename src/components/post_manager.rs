@@ -1,6 +1,3 @@
-use crate::post::Post;
-use atrium_api::types::string::Cid;
-use bsky_sdk::BskyAgent;
 use std::{
     collections::HashMap,
     sync::{
@@ -8,6 +5,11 @@ use std::{
         Arc,
     },
 };
+
+use atrium_api::types::string::Cid;
+use bsky_sdk::BskyAgent;
+
+use crate::components::post::Post;
 
 pub struct DeleteRecordData {
     pub post_uri: String,

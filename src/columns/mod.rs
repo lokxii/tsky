@@ -1,7 +1,12 @@
-use crate::{
-    composer_view::ComposerView, facet_modal::FacetModal,
-    thread_view::ThreadView, updating_feed::UpdatingFeed,
-};
+pub mod composer_view;
+pub mod facet_modal;
+pub mod thread_view;
+pub mod updating_feed;
+
+use composer_view::ComposerView;
+use facet_modal::FacetModal;
+use thread_view::ThreadView;
+use updating_feed::UpdatingFeed;
 
 pub enum Column {
     UpdatingFeed(UpdatingFeed),

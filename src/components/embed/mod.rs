@@ -1,3 +1,6 @@
+pub mod embed_widget;
+mod record_widget;
+
 use std::process::{Command, Stdio};
 
 use atrium_api::{
@@ -8,7 +11,7 @@ use atrium_api::{
     types::{Object, Union},
 };
 
-use crate::post::Author;
+use crate::components::post::Author;
 
 #[derive(Clone)]
 pub enum Embed {

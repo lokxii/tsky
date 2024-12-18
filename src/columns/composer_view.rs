@@ -1,7 +1,9 @@
 use crate::{
     app::{AppEvent, EventReceiver},
-    facets::{detect_facets, CharSlice, FacetFeature},
-    textarea::{CursorMove, Input, Key, TextArea, TextStyle},
+    components::{
+        post::facets::{detect_facets, CharSlice, FacetFeature},
+        textarea::{CursorMove, Input, Key, TextArea, TextStyle},
+    },
 };
 use atrium_api::types::string::Language;
 use bsky_sdk::{rich_text::RichText, BskyAgent};

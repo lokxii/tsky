@@ -8,7 +8,10 @@ use ratatui::{
     Terminal,
 };
 
-use crate::{column::Column, column::ColumnStack, logger::LOGSTORE};
+use crate::{
+    columns::{Column, ColumnStack},
+    components::logger::LOGSTORE,
+};
 
 pub enum AppEvent {
     None,

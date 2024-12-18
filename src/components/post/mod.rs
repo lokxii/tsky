@@ -1,3 +1,8 @@
+pub mod facets;
+pub mod post_widget;
+
+use std::{ops::Range, process::Command};
+
 use atrium_api::{
     app::bsky::{
         actor::defs::ProfileViewBasicData,
@@ -9,15 +14,17 @@ use atrium_api::{
 use bsky_sdk::BskyAgent;
 use chrono::{DateTime, FixedOffset, Local};
 use crossterm::event::{self, Event, KeyCode};
-use std::{ops::Range, process::Command};
 
 use crate::{
     app::{AppEvent, EventReceiver},
-    column::Column,
-    connected_list::ConnectedListState,
-    embed::Embed,
-    facet_modal::{FacetModal, Link},
-    post_manager, post_manager_tx,
+    columns::{
+        facet_modal::{FacetModal, Link},
+        Column,
+    },
+    components::{
+        connected_list::ConnectedListState, embed::Embed, post_manager,
+    },
+    post_manager_tx,
 };
 
 #[derive(Clone)]

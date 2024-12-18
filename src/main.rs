@@ -1,39 +1,32 @@
 mod app;
-mod column;
-mod composer_view;
-mod connected_list;
-mod embed;
-mod embed_widget;
-mod facet_modal;
-mod facets;
-mod feed;
-mod list;
-mod logger;
-mod post;
-mod post_manager;
-mod post_widget;
-mod record_widget;
-mod textarea;
-mod thread_view;
-mod updating_feed;
+mod columns;
+mod components;
 
-use app::{App, AppEvent, EventReceiver};
-use bsky_sdk::{
-    agent::config::{Config, FileStore},
-    BskyAgent,
-};
-use column::{Column, ColumnStack};
-use crossterm::event;
-use dotenvy::dotenv;
-use lazy_static::lazy_static;
-use logger::LOGGER;
-use post_manager::PostManager;
 use std::{
     env, fs,
     path::PathBuf,
     sync::{mpsc, RwLock},
 };
-use updating_feed::UpdatingFeed;
+
+use bsky_sdk::{
+    agent::config::{Config, FileStore},
+    BskyAgent,
+};
+use components::{
+    logger::LOGGER,
+    post_manager::{self, PostManager},
+};
+use crossterm::event;
+use dotenvy::dotenv;
+use lazy_static::lazy_static;
+
+use crate::{
+    app::{App, AppEvent, EventReceiver},
+    columns::{
+        updating_feed::{self, UpdatingFeed},
+        Column, ColumnStack,
+    },
+};
 
 lazy_static! {
     static ref POST_MANAGER: RwLock<PostManager> =
@@ -59,7 +52,8 @@ async fn main() {
         })
         .unwrap();
     let (tx, rx) = mpsc::channel();
-    let feed = UpdatingFeed::new(tx);
+    let var_name = UpdatingFeed::new(tx);
+    let feed = var_name;
     feed.spawn_feed_autoupdate(agent.clone());
     feed.spawn_request_worker(agent.clone(), rx);
 

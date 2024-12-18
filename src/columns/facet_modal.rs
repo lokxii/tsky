@@ -11,7 +11,7 @@ use ratatui::{
 };
 
 use crate::app::{AppEvent, EventReceiver};
-use crate::connected_list::{
+use crate::components::connected_list::{
     ConnectedList, ConnectedListContext, ConnectedListState,
 };
 

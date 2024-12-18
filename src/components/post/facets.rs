@@ -1,5 +1,6 @@
-use regex::Regex;
 use std::sync::OnceLock;
+
+use regex::Regex;
 
 static RE_MENTION: OnceLock<Regex> = OnceLock::new();
 static RE_URL: OnceLock<Regex> = OnceLock::new();
