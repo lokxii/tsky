@@ -125,7 +125,11 @@ where
                 }
                 bottom_y = y as u16 + height;
                 if bottom_y > area.height {
-                    y = (area.height - height) as i32;
+                    y = if area.height >= height {
+                        (area.height - height) as i32
+                    } else {
+                        0
+                    };
                     state.selected_y = Some(y);
                 }
                 first = false;
