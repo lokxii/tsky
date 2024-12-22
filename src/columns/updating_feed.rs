@@ -161,7 +161,7 @@ impl EventReceiver for &mut UpdatingFeed {
                 };
 
                 feed.state = ListState::default();
-                feed.state.selected = Some(0);
+                feed.state.select(Some(0));
                 return AppEvent::None;
             }
 
