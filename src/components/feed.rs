@@ -145,14 +145,14 @@ pub struct RepostBy {
 }
 
 #[derive(PartialEq, Eq, Clone)]
-pub struct ReplyToAuthor {
+pub struct ReplyData {
     pub author: String,
     pub handle: String,
 }
 
 #[derive(Clone)]
 pub enum Reply {
-    Author(ReplyToAuthor),
+    Reply(ReplyData),
     DeletedPost,
     BlockedUser,
 }
@@ -192,15 +192,13 @@ impl FeedPost {
             };
             match parent {
                 ReplyRefParentRefs::PostView(view) => {
-                    Reply::Author(ReplyToAuthor {
-                        author: view
-                            .data
-                            .author
-                            .display_name
-                            .clone()
-                            .unwrap_or("".to_string()),
-                        handle: view.data.author.handle.to_string(),
-                    })
+                    let author = view
+                        .author
+                        .display_name
+                        .clone()
+                        .unwrap_or("".to_string());
+                    let handle = view.author.handle.to_string();
+                    Reply::Reply(ReplyData { author, handle })
                 }
                 ReplyRefParentRefs::NotFoundPost(_) => Reply::DeletedPost,
                 ReplyRefParentRefs::BlockedPost(_) => Reply::BlockedUser,
@@ -289,7 +287,7 @@ impl Widget for FeedPostWidget {
 
         if let Some(reply_to) = &self.feed_post.reply_to {
             let reply_to = match reply_to {
-                Reply::Author(a) => &a.author,
+                Reply::Reply(a) => &a.author,
                 Reply::DeletedPost => "[deleted post]",
                 Reply::BlockedUser => "[blocked user]",
             };

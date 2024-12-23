@@ -113,8 +113,8 @@ impl PostManager {
                             log::error!("Could not find post in post manager");
                             continue;
                         };
-                        post.like.uri = Some(output.uri.clone());
-                        post.like.count += 1;
+                        post.like_view.uri = Some(output.uri.clone());
+                        post.like_view.count += 1;
                         tokio::spawn(async {}); // black magic, removing this causes feed autoupdating to stop
                     }
 
@@ -133,8 +133,8 @@ impl PostManager {
                             log::error!("Could not find post in post manager");
                             continue;
                         };
-                        post.like.uri = None;
-                        post.like.count -= 1;
+                        post.like_view.uri = None;
+                        post.like_view.count -= 1;
                         tokio::spawn(async {});
                     }
 
@@ -161,8 +161,8 @@ impl PostManager {
                             log::error!("Could not find post in post manager");
                             continue;
                         };
-                        post.repost.uri = Some(output.uri.clone());
-                        post.repost.count += 1;
+                        post.repost_view.uri = Some(output.uri.clone());
+                        post.repost_view.count += 1;
                         tokio::spawn(async {});
                     }
 
@@ -181,8 +181,8 @@ impl PostManager {
                             log::error!("Could not find post in post manager");
                             continue;
                         };
-                        post.repost.uri = None;
-                        post.repost.count -= 1;
+                        post.repost_view.uri = None;
+                        post.repost_view.count -= 1;
                         tokio::spawn(async {});
                     }
                 }

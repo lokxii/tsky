@@ -189,11 +189,11 @@ impl Widget for PostWidget {
 
         Line::from(format!(
             "⭮ {}{}",
-            post.repost.count,
+            post.repost_view.count,
             // if post.repost.count == 1 { "repost" } else { "reposts" },
             if self.is_selected { " (o)" } else { "" }
         ))
-        .style(if post.repost.uri.is_some() {
+        .style(if post.repost_view.uri.is_some() {
             Color::Green
         } else {
             stat_color
@@ -203,11 +203,15 @@ impl Widget for PostWidget {
 
         Line::from(format!(
             "♡ {}{}",
-            post.like.count,
+            post.like_view.count,
             // if post.like.count == 1 { "like" } else { "likes" },
             if self.is_selected { " (⎵)" } else { "" }
         ))
-        .style(if post.like.uri.is_some() { Color::Green } else { stat_color })
+        .style(if post.like_view.uri.is_some() {
+            Color::Green
+        } else {
+            stat_color
+        })
         .alignment(Alignment::Left)
         .render(like_area, buf);
 

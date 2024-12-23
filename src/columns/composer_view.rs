@@ -1,15 +1,20 @@
 use crate::{
     app::{AppEvent, EventReceiver},
     components::{
-        post::facets::{detect_facets, CharSlice, FacetFeature},
+        post::{
+            facets::{detect_facets, CharSlice, FacetFeature},
+            post_widget::PostWidget,
+            ReplyRef,
+        },
         textarea::{CursorMove, Input, Key, TextArea, TextStyle},
     },
+    post_manager,
 };
 use atrium_api::types::string::Language;
 use bsky_sdk::{rich_text::RichText, BskyAgent};
 use crossterm::event::{self, Event};
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Layout},
     style::{Style, Stylize},
     text::Line,
     widgets::{Block, BorderType, Widget},
@@ -31,10 +36,11 @@ pub struct ComposerView {
     inputmode: InputMode,
     focus: Focus,
     langs_field: TextArea,
+    reply: Option<ReplyRef>,
 }
 
 impl ComposerView {
-    pub fn new() -> Self {
+    pub fn new(reply: Option<ReplyRef>) -> Self {
         let textarea = TextArea::from(String::new());
         let lang = TextArea::from(String::new());
 
@@ -43,7 +49,81 @@ impl ComposerView {
             inputmode: InputMode::Insert,
             focus: Focus::TextField,
             langs_field: lang,
+            reply,
         }
+    }
+
+    async fn post(&self, agent: BskyAgent) -> AppEvent {
+        let langs = &self.langs_field.lines()[0];
+        let mut invalid_langs = vec![];
+        let langs = langs
+            .split(',')
+            .filter_map(|lang| {
+                if lang.is_empty() {
+                    return None;
+                }
+                if let Ok(lang) = Language::new(lang.to_string()) {
+                    return Some(lang);
+                } else {
+                    invalid_langs.push(lang);
+                    return None;
+                }
+            })
+            .collect::<Vec<_>>();
+        if invalid_langs.len() != 0 {
+            log::error!("Langs {:?} are invalid", invalid_langs);
+            return AppEvent::None;
+        }
+        let langs = if langs.is_empty() { None } else { Some(langs) };
+
+        let created_at = atrium_api::types::string::Datetime::now();
+
+        let text = self.text_field.lines().join("\n");
+
+        let facets = match RichText::new_with_detect_facets(&text).await {
+            Ok(richtext) => richtext.facets,
+            Err(e) => {
+                log::error!("Cannot parse richtext: {}", e);
+                return AppEvent::None;
+            }
+        };
+
+        let reply = self.reply.as_ref().map(|reply| {
+            atrium_api::app::bsky::feed::post::ReplyRefData {
+                root: atrium_api::com::atproto::repo::strong_ref::MainData {
+                    cid: reply.root.cid.clone(),
+                    uri: reply.root.uri.clone(),
+                }
+                .into(),
+                parent: atrium_api::com::atproto::repo::strong_ref::MainData {
+                    cid: reply.parent.cid.clone(),
+                    uri: reply.parent.uri.clone(),
+                }
+                .into(),
+            }
+            .into()
+        });
+
+        let r = agent
+            .create_record(atrium_api::app::bsky::feed::post::RecordData {
+                created_at,
+                embed: None,
+                entities: None,
+                facets,
+                labels: None,
+                langs,
+                reply,
+                tags: None,
+                text,
+            })
+            .await;
+        match r {
+            Ok(_) => {}
+            Err(e) => {
+                log::error!("Cannot post: {}", e);
+            }
+        }
+        return AppEvent::ColumnPopLayer;
     }
 }
 
@@ -90,12 +170,7 @@ impl EventReceiver for &mut ComposerView {
                         }
                         Focus::LangField => {
                             if matches!(input, Input { key: Key::Enter, .. }) {
-                                return post(
-                                    agent,
-                                    self.text_field.lines().join("\n"),
-                                    &self.langs_field.lines()[0],
-                                )
-                                .await;
+                                return self.post(agent).await;
                             }
                             if matches!(input, Input { key: Key::Char(c), .. } if ('a'..='z').contains(&c) || c == ',')
                                 || matches!(input, Input { key: Key::Esc, .. })
@@ -112,14 +187,7 @@ impl EventReceiver for &mut ComposerView {
                 }
             },
             InputMode::Normal => match event.clone().into() {
-                Input { key: Key::Enter, .. } => {
-                    return post(
-                        agent,
-                        self.text_field.lines().join("\n"),
-                        &self.langs_field.lines()[0],
-                    )
-                    .await
-                }
+                Input { key: Key::Enter, .. } => return self.post(agent).await,
                 Input { key: Key::Tab, .. } => match self.focus {
                     Focus::TextField => self.focus = Focus::LangField,
                     Focus::LangField => self.focus = Focus::TextField,
@@ -137,58 +205,6 @@ impl EventReceiver for &mut ComposerView {
             }
         };
     }
-}
-
-async fn post(agent: BskyAgent, text: String, langs: &String) -> AppEvent {
-    let mut invalid_langs = vec![];
-    let langs = langs
-        .split(',')
-        .filter_map(|lang| {
-            if lang.is_empty() {
-                return None;
-            }
-            if let Ok(lang) = Language::new(lang.to_string()) {
-                return Some(lang);
-            } else {
-                invalid_langs.push(lang);
-                return None;
-            }
-        })
-        .collect::<Vec<_>>();
-    if invalid_langs.len() != 0 {
-        log::error!("Langs {:?} are invalid", invalid_langs);
-        return AppEvent::None;
-    }
-
-    let created_at = atrium_api::types::string::Datetime::now();
-    let facets = match RichText::new_with_detect_facets(&text).await {
-        Ok(richtext) => richtext.facets,
-        Err(e) => {
-            log::error!("Cannot parse richtext: {}", e);
-            return AppEvent::None;
-        }
-    };
-    let langs = if langs.is_empty() { None } else { Some(langs) };
-    let r = agent
-        .create_record(atrium_api::app::bsky::feed::post::RecordData {
-            created_at,
-            embed: None,
-            entities: None,
-            facets,
-            labels: None,
-            langs,
-            reply: None,
-            tags: None,
-            text,
-        })
-        .await;
-    match r {
-        Ok(_) => {}
-        Err(e) => {
-            log::error!("Cannot post: {}", e);
-        }
-    }
-    return AppEvent::ColumnPopLayer;
 }
 
 fn vim_keys(
@@ -396,16 +412,36 @@ impl Widget for &mut ComposerView {
     ) where
         Self: Sized,
     {
-        let width = if area.width > 60 { 50 } else { area.width };
-        let height = if area.height > 22 { 22 } else { area.height };
-        let x = if width == area.width { 0 } else { (area.width - width) / 2 };
-        let y = 2;
-        let upper_area = Rect { x, y, width, height };
-        let lower_area = Rect {
-            y: upper_area.y + upper_area.height + 1,
-            height: 3,
-            ..upper_area
-        };
+        let reply_post = self.reply.as_ref().map(|reply| {
+            PostWidget::new(
+                post_manager!().at(&reply.parent.uri).unwrap(),
+                false,
+                true,
+            )
+        });
+        let [_, area, _] = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Max(50),
+            Constraint::Fill(1),
+        ])
+        .areas(area);
+        let [_, post_area, _, upper_area, _, lower_area] = Layout::vertical([
+            Constraint::Length(2),
+            Constraint::Length(if let Some(p) = &reply_post {
+                p.line_count(area.width)
+            } else {
+                0
+            }),
+            Constraint::Length(1),
+            Constraint::Max(10),
+            Constraint::Length(1),
+            Constraint::Length(3),
+        ])
+        .areas(area);
+
+        if let Some(p) = reply_post {
+            p.render(post_area, buf);
+        }
 
         let title = match (&self.focus, &self.inputmode) {
             (Focus::LangField, _) => "New Note",

@@ -18,6 +18,7 @@ use crossterm::event::{self, Event, KeyCode};
 use crate::{
     app::{AppEvent, EventReceiver},
     columns::{
+        composer_view::ComposerView,
         facet_modal::{FacetModal, Link},
         Column,
     },
@@ -28,15 +29,27 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct LikeRepostViewer {
+pub struct LikeRepostView {
     pub count: u32,
     pub uri: Option<String>,
 }
 
-impl LikeRepostViewer {
-    fn new(count: Option<i64>, uri: Option<String>) -> LikeRepostViewer {
-        LikeRepostViewer { count: count.unwrap_or(0) as u32, uri }
+impl LikeRepostView {
+    fn new(count: Option<i64>, uri: Option<String>) -> LikeRepostView {
+        LikeRepostView { count: count.unwrap_or(0) as u32, uri }
     }
+}
+
+#[derive(PartialEq, Eq, Clone)]
+pub struct PostRef {
+    pub cid: Cid,
+    pub uri: String,
+}
+
+#[derive(PartialEq, Eq, Clone)]
+pub struct ReplyRef {
+    pub parent: PostRef,
+    pub root: PostRef,
 }
 
 #[derive(Clone)]
@@ -82,10 +95,11 @@ pub struct Post {
     pub author: Author,
     pub created_at: DateTime<FixedOffset>,
     pub text: String,
-    pub like: LikeRepostViewer,
-    pub repost: LikeRepostViewer,
+    pub like_view: LikeRepostView,
+    pub repost_view: LikeRepostView,
     pub quote: u32,
     pub reply: u32,
+    pub reply_to: Option<ReplyRef>,
     pub embed: Option<Embed>,
     pub labels: Vec<String>,
     pub facets: Vec<Facet>,
@@ -114,17 +128,28 @@ impl Post {
 
         let like = match &view.viewer {
             Some(viewer) => {
-                LikeRepostViewer::new(view.like_count, viewer.like.clone())
+                LikeRepostView::new(view.like_count, viewer.like.clone())
             }
-            None => LikeRepostViewer::new(None, None),
+            None => LikeRepostView::new(None, None),
         };
 
         let repost = match &view.viewer {
             Some(viewer) => {
-                LikeRepostViewer::new(view.repost_count, viewer.repost.clone())
+                LikeRepostView::new(view.repost_count, viewer.repost.clone())
             }
-            None => LikeRepostViewer::new(None, None),
+            None => LikeRepostView::new(None, None),
         };
+
+        let reply_to = record.reply.map(|reply| ReplyRef {
+            root: PostRef {
+                uri: reply.root.uri.clone(),
+                cid: reply.root.cid.clone(),
+            },
+            parent: PostRef {
+                uri: reply.parent.uri.clone(),
+                cid: reply.parent.cid.clone(),
+            },
+        });
 
         let embed = view.embed.as_ref().map(Embed::from);
 
@@ -168,10 +193,11 @@ impl Post {
             author,
             created_at,
             text,
-            like,
+            like_view: like,
             quote: view.quote_count.unwrap_or(0) as u32,
-            repost,
+            repost_view: repost,
             reply: view.reply_count.unwrap_or(0) as u32,
+            reply_to,
             embed,
             labels,
             facets,
@@ -191,12 +217,12 @@ impl EventReceiver for &Post {
 
         match key.code {
             KeyCode::Char(' ') => {
-                if self.like.uri.is_some() {
+                if self.like_view.uri.is_some() {
                     post_manager_tx!()
                         .send(post_manager::RequestMsg::UnlikePost(
                             post_manager::DeleteRecordData {
                                 post_uri: self.uri.clone(),
-                                record_uri: self.like.uri.clone().unwrap(),
+                                record_uri: self.like_view.uri.clone().unwrap(),
                             },
                         ))
                         .unwrap_or_else(|_| {
@@ -222,12 +248,16 @@ impl EventReceiver for &Post {
             }
 
             KeyCode::Char('o') => {
-                if self.repost.uri.is_some() {
+                if self.repost_view.uri.is_some() {
                     post_manager_tx!()
                         .send(post_manager::RequestMsg::UnrepostPost(
                             post_manager::DeleteRecordData {
                                 post_uri: self.uri.clone(),
-                                record_uri: self.repost.uri.clone().unwrap(),
+                                record_uri: self
+                                    .repost_view
+                                    .uri
+                                    .clone()
+                                    .unwrap(),
                             },
                         ))
                         .unwrap_or_else(|_| {
@@ -250,6 +280,23 @@ impl EventReceiver for &Post {
                         });
                 }
                 return AppEvent::None;
+            }
+
+            KeyCode::Char('u') => {
+                let root = self.reply_to.clone().map_or(
+                    PostRef { uri: self.uri.clone(), cid: self.cid.clone() },
+                    |reply| reply.root.clone(),
+                );
+                let reply_to = ReplyRef {
+                    root,
+                    parent: PostRef {
+                        uri: self.uri.clone(),
+                        cid: self.cid.clone(),
+                    },
+                };
+                return AppEvent::ColumnNewLayer(Column::Composer(
+                    ComposerView::new(Some(reply_to)),
+                ));
             }
 
             KeyCode::Char('p') => {
