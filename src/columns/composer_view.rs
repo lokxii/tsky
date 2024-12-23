@@ -425,22 +425,24 @@ impl Widget for &mut ComposerView {
             Constraint::Fill(1),
         ])
         .areas(area);
-        let [_, post_area, _, upper_area, _, lower_area] = Layout::vertical([
-            Constraint::Length(2),
-            Constraint::Length(if let Some(p) = &reply_post {
-                p.line_count(area.width)
-            } else {
-                0
-            }),
-            Constraint::Length(1),
-            Constraint::Max(10),
-            Constraint::Length(1),
-            Constraint::Length(3),
-        ])
-        .areas(area);
+        let [_, post_area, connect_area, upper_area, _, lower_area] =
+            Layout::vertical([
+                Constraint::Length(2),
+                Constraint::Length(if let Some(p) = &reply_post {
+                    p.line_count(area.width)
+                } else {
+                    0
+                }),
+                Constraint::Length(1),
+                Constraint::Max(10),
+                Constraint::Length(1),
+                Constraint::Length(3),
+            ])
+            .areas(area);
 
         if let Some(p) = reply_post {
             p.render(post_area, buf);
+            Line::from("  │").render(connect_area, buf);
         }
 
         let title = match (&self.focus, &self.inputmode) {
