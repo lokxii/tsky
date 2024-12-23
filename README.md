@@ -18,11 +18,11 @@ don't use.
 - Labels
 - Auto updating feed every second
 - Posting (no rich text and embeds yet)
+    - [x] reply
     - subset of vim keybindings
 
 ## TODO List
 
-- Reply
 - Quote
 - Post embed
 - Different sources of feed
