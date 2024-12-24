@@ -44,6 +44,8 @@ impl Feed {
             return true;
         }
 
+        let autoscrolling = self.state.selected == Some(0);
+
         let Some(overlap_idx) = ({
             let mut i = None;
             for np in new_posts.iter().rev() {
@@ -65,6 +67,15 @@ impl Feed {
             .into_iter()
             .chain(self.posts.clone().into_iter().skip(overlap_idx + 1))
             .collect::<Vec<_>>();
+
+        if autoscrolling {
+            self.state = ListState::default();
+            self.state.select(Some(0));
+            self.posts = new_posts;
+            self.remove_duplicate();
+            return false;
+        }
+
         self.state.select(self.state.selected.map(|i| {
             let mut i = i;
             while i < self.posts.len() {
