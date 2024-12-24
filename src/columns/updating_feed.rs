@@ -219,7 +219,7 @@ impl EventReceiver for &mut UpdatingFeed {
 
             KeyCode::Char('n') => {
                 return AppEvent::ColumnNewLayer(Column::Composer(
-                    ComposerView::new(None),
+                    ComposerView::new(None, None),
                 ));
             }
 

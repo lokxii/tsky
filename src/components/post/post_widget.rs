@@ -178,10 +178,14 @@ impl Widget for PostWidget {
         .alignment(Alignment::Left)
         .render(reply_area, buf);
 
-        Line::from(format!("❝ {}", post.quote,))
-            .style(stat_color)
-            .alignment(Alignment::Left)
-            .render(quote_area, buf);
+        Line::from(format!(
+            "❝ {}{}",
+            post.quote,
+            if self.is_selected { " {i}" } else { "" }
+        ))
+        .style(stat_color)
+        .alignment(Alignment::Left)
+        .render(quote_area, buf);
 
         Line::from(format!(
             "⭮ {}{}",

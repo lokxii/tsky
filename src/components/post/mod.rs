@@ -295,7 +295,15 @@ impl EventReceiver for &Post {
                     },
                 };
                 return AppEvent::ColumnNewLayer(Column::Composer(
-                    ComposerView::new(Some(reply_to)),
+                    ComposerView::new(Some(reply_to), None),
+                ));
+            }
+
+            KeyCode::Char('i') => {
+                let post_ref =
+                    PostRef { uri: self.uri.clone(), cid: self.cid.clone() };
+                return AppEvent::ColumnNewLayer(Column::Composer(
+                    ComposerView::new(None, Some(post_ref)),
                 ));
             }
 

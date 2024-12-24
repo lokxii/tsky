@@ -4,7 +4,7 @@ use crate::{
         post::{
             facets::{detect_facets, CharSlice, FacetFeature},
             post_widget::PostWidget,
-            ReplyRef,
+            PostRef, ReplyRef,
         },
         textarea::{CursorMove, Input, Key, TextArea, TextStyle},
     },
@@ -37,10 +37,11 @@ pub struct ComposerView {
     focus: Focus,
     langs_field: TextArea,
     reply: Option<ReplyRef>,
+    embed: Option<PostRef>,
 }
 
 impl ComposerView {
-    pub fn new(reply: Option<ReplyRef>) -> Self {
+    pub fn new(reply: Option<ReplyRef>, embed: Option<PostRef>) -> Self {
         let textarea = TextArea::from(String::new());
         let lang = TextArea::from(String::new());
 
@@ -50,6 +51,7 @@ impl ComposerView {
             focus: Focus::TextField,
             langs_field: lang,
             reply,
+            embed,
         }
     }
 
@@ -104,10 +106,21 @@ impl ComposerView {
             .into()
         });
 
+        let embed = self.embed.as_ref().map(|post| {
+            atrium_api::types::Union::Refs(atrium_api::app::bsky::feed::post::RecordEmbedRefs::AppBskyEmbedRecordMain(
+                Box::new(atrium_api::app::bsky::embed::record::MainData {
+                    record: atrium_api::com::atproto::repo::strong_ref::MainData {
+                        cid: post.cid.clone(),
+                        uri: post.uri.clone(),
+                    }.into()
+                }.into())
+            ))
+        });
+
         let r = agent
             .create_record(atrium_api::app::bsky::feed::post::RecordData {
                 created_at,
-                embed: None,
+                embed,
                 entities: None,
                 facets,
                 labels: None,
@@ -419,13 +432,17 @@ impl Widget for &mut ComposerView {
                 true,
             )
         });
+        let quote_post = self.embed.as_ref().map(|post| {
+            PostWidget::new(post_manager!().at(&post.uri).unwrap(), false, true)
+        });
+
         let [_, area, _] = Layout::horizontal([
             Constraint::Fill(1),
             Constraint::Max(50),
             Constraint::Fill(1),
         ])
         .areas(area);
-        let [_, post_area, connect_area, upper_area, _, lower_area] =
+        let [_, post_area, connect_area, upper_area, _, lower_area, _, embed_area] =
             Layout::vertical([
                 Constraint::Length(2),
                 Constraint::Length(if let Some(p) = &reply_post {
@@ -437,6 +454,12 @@ impl Widget for &mut ComposerView {
                 Constraint::Max(10),
                 Constraint::Length(1),
                 Constraint::Length(3),
+                Constraint::Length(1),
+                Constraint::Length(if let Some(p) = &quote_post {
+                    p.line_count(area.width)
+                } else {
+                    0
+                }),
             ])
             .areas(area);
 
@@ -484,5 +507,9 @@ impl Widget for &mut ComposerView {
         );
         self.langs_field.set_focus(matches!(self.focus, Focus::LangField));
         self.langs_field.render(lower_area, buf);
+
+        if let Some(p) = quote_post {
+            p.render(embed_area, buf);
+        }
     }
 }
