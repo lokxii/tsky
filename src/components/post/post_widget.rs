@@ -170,27 +170,22 @@ impl Widget for PostWidget {
         let stat_color = Color::Rgb(130, 130, 130);
 
         Line::from(format!(
-            "💬{}",
+            "💬{}{}",
             post.reply,
-            // if post.reply == 1 { "reply" } else { "replies" }
+            if self.is_selected { " (u)" } else { "" }
         ))
         .style(stat_color)
         .alignment(Alignment::Left)
         .render(reply_area, buf);
 
-        Line::from(format!(
-            "❝ {}",
-            post.quote,
-            // if post.quote == 1 { "quote" } else { "quotes" }
-        ))
-        .style(stat_color)
-        .alignment(Alignment::Left)
-        .render(quote_area, buf);
+        Line::from(format!("❝ {}", post.quote,))
+            .style(stat_color)
+            .alignment(Alignment::Left)
+            .render(quote_area, buf);
 
         Line::from(format!(
             "⭮ {}{}",
             post.repost_view.count,
-            // if post.repost.count == 1 { "repost" } else { "reposts" },
             if self.is_selected { " (o)" } else { "" }
         ))
         .style(if post.repost_view.uri.is_some() {
@@ -204,7 +199,6 @@ impl Widget for PostWidget {
         Line::from(format!(
             "♡ {}{}",
             post.like_view.count,
-            // if post.like.count == 1 { "like" } else { "likes" },
             if self.is_selected { " (⎵)" } else { "" }
         ))
         .style(if post.like_view.uri.is_some() {
