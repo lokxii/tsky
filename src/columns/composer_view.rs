@@ -469,10 +469,10 @@ impl Widget for &mut ComposerView {
         }
 
         let title = match (&self.focus, &self.inputmode) {
-            (Focus::LangField, _) => "New Note",
-            (_, InputMode::Normal) => "New Note (Normal)",
-            (_, InputMode::Insert) => "New Note (Insert)",
-            (_, InputMode::View) => "New Note (View)",
+            (Focus::LangField, _) => "New Post",
+            (_, InputMode::Normal) => "New Post (Normal)",
+            (_, InputMode::Insert) => "New Post (Insert)",
+            (_, InputMode::View) => "New Post (View)",
         };
         let text_lines = self.text_field.lines();
         let word_remaining = if text_lines.len() == 0 {
