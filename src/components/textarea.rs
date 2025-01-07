@@ -229,8 +229,15 @@ impl TextArea {
         }
     }
 
-    pub fn input(&mut self, input: Input) {
+    pub fn input<F: Fn(Input) -> bool>(
+        &mut self,
+        input: Input,
+        allowed_input: F,
+    ) {
         if input.ctrl || input.alt {
+            return;
+        }
+        if !allowed_input(input) {
             return;
         }
 
@@ -882,7 +889,7 @@ impl Widget for &mut TextArea {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Copy)]
 pub struct Input {
     pub key: Key,
     pub ctrl: bool,
@@ -926,7 +933,7 @@ impl From<MouseEvent> for Input {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum Key {
     Char(char),
     Backspace,

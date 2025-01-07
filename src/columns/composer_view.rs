@@ -29,13 +29,14 @@ enum InputMode {
 enum Focus {
     TextField,
     LangField,
+    AttachmentField,
 }
 
 pub struct ComposerView {
     text_field: TextArea,
+    langs_field: TextArea,
     inputmode: InputMode,
     focus: Focus,
-    langs_field: TextArea,
     reply: Option<ReplyRef>,
     embed: Option<PostRef>,
 }
@@ -47,9 +48,9 @@ impl ComposerView {
 
         ComposerView {
             text_field: textarea,
+            langs_field: lang,
             inputmode: InputMode::Insert,
             focus: Focus::TextField,
-            langs_field: lang,
             reply,
             embed,
         }
@@ -154,7 +155,7 @@ impl EventReceiver for &mut ComposerView {
         }
 
         match self.inputmode {
-            InputMode::Insert => match event.into() {
+            InputMode::Insert => match event.clone().into() {
                 Input { key: Key::Esc, .. } => {
                     self.inputmode = InputMode::Normal;
                     match self.focus {
@@ -166,44 +167,51 @@ impl EventReceiver for &mut ComposerView {
                             self.text_field.push_history();
                             self.langs_field.snap_cursor();
                         }
+                        _ => {}
                     }
                     return AppEvent::None;
                 }
                 Input { key: Key::Tab, .. } => {
                     match self.focus {
                         Focus::TextField => self.focus = Focus::LangField,
-                        Focus::LangField => self.focus = Focus::TextField,
+                        Focus::LangField => self.focus = Focus::AttachmentField,
+                        Focus::AttachmentField => self.focus = Focus::TextField,
                     };
                     return AppEvent::None;
                 }
-                input => {
-                    match self.focus {
-                        Focus::TextField => {
-                            self.text_field.input(input);
+                input => match self.focus {
+                    Focus::TextField => {
+                        self.text_field.input(input, |_| true);
+                        return AppEvent::None;
+                    }
+                    Focus::LangField => {
+                        if matches!(input, Input { key: Key::Enter, .. }) {
+                            return self.post(agent).await;
                         }
-                        Focus::LangField => {
-                            if matches!(input, Input { key: Key::Enter, .. }) {
-                                return self.post(agent).await;
-                            }
-                            if matches!(input, Input { key: Key::Char(c), .. } if ('a'..='z').contains(&c) || c == ',')
-                                || matches!(input, Input { key: Key::Esc, .. })
-                                || matches!(
-                                    input,
-                                    Input { key: Key::Backspace, .. }
-                                )
-                            {
-                                self.langs_field.input(input);
-                            }
-                        }
-                    };
-                    return AppEvent::None;
-                }
+                        let atoz = |i| {
+                            matches!(i, Input { key: Key::Char(c), .. }
+                            if ('a'..='z').contains(&c) || c == ',')
+                        };
+                        let esc_or_backspace = |i| {
+                            matches!(
+                                i,
+                                Input { key: Key::Esc, .. }
+                                    | Input { key: Key::Backspace, .. }
+                            )
+                        };
+                        self.langs_field
+                            .input(input, |i| atoz(i) || esc_or_backspace(i));
+                        return AppEvent::None;
+                    }
+                    Focus::AttachmentField => {}
+                },
             },
             InputMode::Normal => match event.clone().into() {
                 Input { key: Key::Enter, .. } => return self.post(agent).await,
                 Input { key: Key::Tab, .. } => match self.focus {
                     Focus::TextField => self.focus = Focus::LangField,
-                    Focus::LangField => self.focus = Focus::TextField,
+                    Focus::LangField => self.focus = Focus::AttachmentField,
+                    Focus::AttachmentField => self.focus = Focus::TextField,
                 },
                 _ => (),
             },
@@ -215,6 +223,9 @@ impl EventReceiver for &mut ComposerView {
             }
             Focus::LangField => {
                 vim_keys(event, &mut self.langs_field, &mut self.inputmode)
+            }
+            Focus::AttachmentField => {
+                todo!();
             }
         };
     }
@@ -442,7 +453,7 @@ impl Widget for &mut ComposerView {
             Constraint::Fill(1),
         ])
         .areas(area);
-        let [_, post_area, connect_area, upper_area, _, lower_area, _, embed_area] =
+        let [_, reply_post_area, connect_area, text_area, _, lang_area, _, attachment_area, _, quote_area] =
             Layout::vertical([
                 Constraint::Length(2),
                 Constraint::Length(if let Some(p) = &reply_post {
@@ -455,6 +466,8 @@ impl Widget for &mut ComposerView {
                 Constraint::Length(1),
                 Constraint::Length(3),
                 Constraint::Length(1),
+                Constraint::Length(3),
+                Constraint::Length(1),
                 Constraint::Length(if let Some(p) = &quote_post {
                     p.line_count(area.width)
                 } else {
@@ -464,7 +477,7 @@ impl Widget for &mut ComposerView {
             .areas(area);
 
         if let Some(p) = reply_post {
-            p.render(post_area, buf);
+            p.render(reply_post_area, buf);
             Line::from("  │").render(connect_area, buf);
         }
 
@@ -494,7 +507,7 @@ impl Widget for &mut ComposerView {
         self.text_field.set_focus(matches!(self.focus, Focus::TextField));
         let text_styles = parse_text_styles(self.text_field.lines());
         self.text_field.set_text_styles(text_styles);
-        self.text_field.render(upper_area, buf);
+        self.text_field.render(text_area, buf);
 
         let title = match (&self.focus, &self.inputmode) {
             (Focus::TextField, _) => "Langs",
@@ -506,10 +519,19 @@ impl Widget for &mut ComposerView {
             Block::bordered().border_type(BorderType::Rounded).title(title),
         );
         self.langs_field.set_focus(matches!(self.focus, Focus::LangField));
-        self.langs_field.render(lower_area, buf);
+        self.langs_field.render(lang_area, buf);
+
+        let title = match &self.focus {
+            Focus::AttachmentField => "Add attachments",
+            _ => "Attachments",
+        };
+        let block = Block::bordered().title(title);
+        let attachment_inner = block.inner(attachment_area);
+        block.render(attachment_area, buf);
+        Line::from("(Open file picker)").render(attachment_inner, buf);
 
         if let Some(p) = quote_post {
-            p.render(embed_area, buf);
+            p.render(quote_area, buf);
         }
     }
 }
