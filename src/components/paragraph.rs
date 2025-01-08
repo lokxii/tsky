@@ -69,11 +69,6 @@ impl<'a> Widget for Paragraph<'a> {
             self.text.lines
         };
 
-        log::info!(
-            "{:?}",
-            lines.iter().map(Line::to_string).collect::<Vec<_>>()
-        );
-
         lines
             .into_iter()
             .skip(self.scroll_y)
