@@ -1,3 +1,4 @@
+use crate::components::paragraph::Paragraph;
 use crossterm::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
     MouseEventKind,
@@ -5,7 +6,7 @@ use crossterm::event::{
 use ratatui::{
     style::{Color, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, Paragraph, Widget, Wrap},
+    widgets::{Block, Widget},
 };
 use std::cmp::Ordering;
 
@@ -584,6 +585,9 @@ impl TextArea {
             return;
         }
         self.lines.remove(self.cursor.0);
+        if self.lines.is_empty() {
+            self.lines.push("".to_string());
+        }
         self.cursor.1 = 0;
         if self.cursor.0 > 0 && self.cursor.0 == self.lines.len() {
             self.cursor.0 -= 1;
@@ -871,7 +875,8 @@ impl Widget for &mut TextArea {
                 line
             })
             .collect::<Vec<_>>();
-        let mut para = Paragraph::new(lines).wrap(Wrap { trim: false });
+
+        let mut para = Paragraph::new(lines).wrap(true);
         if let Some(block) = &self.block {
             para = para.block(block.clone())
         }
@@ -884,7 +889,7 @@ impl Widget for &mut TextArea {
             self.viewport = self.cursor.0 - (viewport_height - 1);
         }
 
-        para = para.scroll((self.viewport as u16, 0));
+        para = para.scroll(self.viewport);
         para.render(area, buf);
     }
 }

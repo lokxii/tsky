@@ -2,10 +2,13 @@ use ratatui::{
     style::{Color, Modifier, Style},
     symbols,
     text::Line,
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, Widget},
 };
 
-use crate::components::embed::{record_widget::RecordWidget, Embed};
+use crate::components::{
+    embed::{record_widget::RecordWidget, Embed},
+    paragraph::Paragraph,
+};
 
 pub struct EmbedWidget {
     embed: Embed,
