@@ -506,7 +506,7 @@ impl Widget for &mut ComposerView {
             Block::bordered().border_type(BorderType::Rounded).title(title),
         );
         self.langs_field.set_focus(matches!(self.focus, Focus::LangField));
-        self.langs_field.render(lower_area, buf);
+        // self.langs_field.render(lower_area, buf);
 
         if let Some(p) = quote_post {
             p.render(embed_area, buf);

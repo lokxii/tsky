@@ -18,3 +18,4 @@ ratatui = { version = "0.28.1", features = ["unstable-rendered-line-info"] }
 regex = "1.11.1"
 tokio = { version = "1.40.0", features = ["full"] }
 tui-textarea = "0.6.1"
+unicode-width = "0.2.0"

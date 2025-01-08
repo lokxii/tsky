@@ -8,13 +8,14 @@ use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Style},
     text::Span,
-    widgets::{Block, Clear, Paragraph, Widget},
+    widgets::{Block, Clear, Widget},
 };
 
 use crate::app::{AppEvent, EventReceiver};
 use crate::components::connected_list::{
     ConnectedList, ConnectedListContext, ConnectedListState,
 };
+use crate::components::paragraph::Paragraph;
 
 #[derive(Clone)]
 pub struct Link {

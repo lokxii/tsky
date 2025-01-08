@@ -3,11 +3,12 @@ use ratatui::{
     style::{Color, Style, Stylize},
     symbols,
     text::{Line, Span},
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, Widget},
 };
 
 use crate::components::{
     embed::embed_widget::EmbedWidget,
+    paragraph::Paragraph,
     post::{FacetType, Post},
 };
 
@@ -82,7 +83,7 @@ impl PostWidget {
             lines.push(Line::from(line));
         });
 
-        Paragraph::new(lines).wrap(ratatui::widgets::Wrap { trim: false })
+        Paragraph::new(lines).wrap(true)
     }
 }
 

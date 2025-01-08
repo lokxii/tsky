@@ -3,10 +3,13 @@ use ratatui::{
     style::{Color, Style},
     symbols,
     text::{Line, Span},
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, Widget},
 };
 
-use crate::components::embed::{embed_widget::EmbedWidget, Record};
+use crate::components::{
+    embed::{embed_widget::EmbedWidget, Record},
+    paragraph::Paragraph,
+};
 
 pub struct RecordWidget {
     record: Record,
@@ -36,7 +39,7 @@ impl RecordWidget {
                         .map(|line| Line::from(line).style(Color::White))
                         .collect::<Vec<Line>>(),
                 )
-                .wrap(ratatui::widgets::Wrap { trim: false })
+                .wrap(true)
                 .line_count(width - 2) as u16;
 
                 let media_lines = post
@@ -70,7 +73,7 @@ impl Widget for RecordWidget {
                         .map(|line| Line::from(line).style(Color::White))
                         .collect::<Vec<Line>>(),
                 )
-                .wrap(ratatui::widgets::Wrap { trim: false });
+                .wrap(true);
 
                 let media = post
                     .media
