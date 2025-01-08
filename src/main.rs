@@ -4,6 +4,7 @@ mod components;
 
 use std::{
     env, fs,
+    io::stdout,
     path::PathBuf,
     sync::{mpsc, RwLock},
 };
@@ -16,9 +17,17 @@ use components::{
     logger::LOGGER,
     post_manager::{self, PostManager},
 };
-use crossterm::event;
+use crossterm::{
+    event::{self, DisableBracketedPaste, EnableBracketedPaste},
+    execute,
+    terminal::{
+        disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
+        LeaveAlternateScreen,
+    },
+};
 use dotenvy::dotenv;
 use lazy_static::lazy_static;
+use ratatui::{prelude::CrosstermBackend, DefaultTerminal, Terminal};
 
 use crate::{
     app::{App, AppEvent, EventReceiver},
@@ -45,7 +54,7 @@ async fn main() {
     eprintln!("Logging in");
     let agent = login().await;
 
-    let mut terminal = ratatui::init();
+    let mut terminal = init_term().expect("Cannot init term");
     terminal
         .draw(|f| {
             f.render_widget("Creating column (starting workers)", f.area())
@@ -104,7 +113,8 @@ async fn main() {
     post_manager_tx!()
         .send(post_manager::RequestMsg::Close)
         .expect("Cannot close worker");
-    ratatui::restore();
+    restore_term().expect("Cannot restore term");
+
     agent
         .to_config()
         .await
@@ -114,6 +124,27 @@ async fn main() {
             format!("Cannot save session file {}", SESSION_FILE.as_str())
                 .as_str(),
         );
+}
+
+fn init_term() -> std::io::Result<DefaultTerminal> {
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        post_manager_tx!()
+            .send(post_manager::RequestMsg::Close)
+            .expect("Cannot close worker");
+        restore_term().expect("Cannot restore term");
+        hook(info);
+    }));
+    enable_raw_mode()?;
+    execute!(stdout(), EnterAlternateScreen, EnableBracketedPaste)?;
+    let backend = CrosstermBackend::new(stdout());
+    Terminal::new(backend)
+}
+
+fn restore_term() -> std::io::Result<()> {
+    disable_raw_mode()?;
+    execute!(stdout(), LeaveAlternateScreen, DisableBracketedPaste)?;
+    Ok(())
 }
 
 async fn login() -> BskyAgent {

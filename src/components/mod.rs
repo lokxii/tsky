@@ -1,3 +1,4 @@
+pub mod attachment;
 pub mod connected_list;
 pub mod embed;
 pub mod feed;

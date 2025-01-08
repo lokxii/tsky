@@ -147,8 +147,13 @@ impl EventReceiver for &mut ComposerView {
         event: event::Event,
         agent: BskyAgent,
     ) -> AppEvent {
-        let Event::Key(key) = event.clone().into() else {
-            return AppEvent::None;
+        let key = match event.clone() {
+            Event::Key(key) => key,
+            Event::Paste(_) => {
+                log::info!("pasted from clipboard");
+                return AppEvent::None;
+            }
+            _ => return AppEvent::None,
         };
         if key.kind != event::KeyEventKind::Press {
             return AppEvent::None;
