@@ -476,7 +476,7 @@ impl Widget for &mut ComposerView {
         };
         let text_lines = self.text_field.lines();
         let word_remaining = if text_lines.len() == 0 {
-            0
+            300
         } else {
             300 - text_lines
                 .into_iter()

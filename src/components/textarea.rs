@@ -578,6 +578,9 @@ impl TextArea {
             return;
         }
         self.lines.remove(self.cursor.0);
+        if self.lines.is_empty() {
+            self.lines.push("".to_string());
+        }
         self.cursor.1 = 0;
         if self.cursor.0 > 0 && self.cursor.0 == self.lines.len() {
             self.cursor.0 -= 1;
