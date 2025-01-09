@@ -594,6 +594,13 @@ impl TextArea {
         }
     }
 
+    pub fn insert_string(&mut self, s: String) {
+        let mut old_clipboard = s.split('\n').map(String::from).collect();
+        std::mem::swap(&mut self.clipboard, &mut old_clipboard);
+        self.paste_after();
+        std::mem::swap(&mut self.clipboard, &mut old_clipboard);
+    }
+
     pub fn delete_char(&mut self) {
         if self.lines.is_empty()
             || self.lines[self.cursor.0].len() == self.cursor.1

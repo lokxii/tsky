@@ -139,6 +139,20 @@ impl ComposerView {
         }
         return AppEvent::ColumnPopLayer;
     }
+
+    fn handle_pasting(&mut self, s: String) {
+        match self.focus {
+            Focus::TextField => {
+                self.text_field.insert_string(s);
+            }
+            Focus::LangField => {
+                self.langs_field.insert_string(s);
+            }
+            _ => {
+                todo!()
+            }
+        }
+    }
 }
 
 impl EventReceiver for &mut ComposerView {
@@ -149,8 +163,8 @@ impl EventReceiver for &mut ComposerView {
     ) -> AppEvent {
         let key = match event.clone() {
             Event::Key(key) => key,
-            Event::Paste(_) => {
-                log::info!("pasted from clipboard");
+            Event::Paste(s) => {
+                self.handle_pasting(s);
                 return AppEvent::None;
             }
             _ => return AppEvent::None,
