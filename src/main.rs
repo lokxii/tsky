@@ -76,6 +76,7 @@ async fn main() {
     let mut app = App::new(ColumnStack::from(vec![Column::UpdatingFeed(feed)]));
 
     loop {
+        app.active().await;
         app.render(&mut terminal).await;
 
         if !event::poll(std::time::Duration::from_millis(500))

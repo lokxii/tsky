@@ -1,4 +1,4 @@
-pub mod attachment;
+pub mod composer;
 pub mod connected_list;
 pub mod embed;
 pub mod feed;
@@ -8,4 +8,3 @@ pub mod post;
 #[macro_use]
 pub mod post_manager;
 pub mod paragraph;
-pub mod textarea;

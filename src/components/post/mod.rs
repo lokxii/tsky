@@ -23,7 +23,8 @@ use crate::{
         Column,
     },
     components::{
-        connected_list::ConnectedListState, embed::Embed, post_manager,
+        composer, connected_list::ConnectedListState, embed::Embed,
+        post_manager,
     },
     post_manager_tx,
 };
@@ -295,7 +296,10 @@ impl EventReceiver for &Post {
                     },
                 };
                 return AppEvent::ColumnNewLayer(Column::Composer(
-                    ComposerView::new(Some(reply_to), None),
+                    ComposerView::new(
+                        Some(reply_to),
+                        composer::embed::Embed::None,
+                    ),
                 ));
             }
 
@@ -303,7 +307,10 @@ impl EventReceiver for &Post {
                 let post_ref =
                     PostRef { uri: self.uri.clone(), cid: self.cid.clone() };
                 return AppEvent::ColumnNewLayer(Column::Composer(
-                    ComposerView::new(None, Some(post_ref)),
+                    ComposerView::new(
+                        None,
+                        composer::embed::Embed::Record(post_ref),
+                    ),
                 ));
             }
 

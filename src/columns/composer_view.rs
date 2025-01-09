@@ -1,16 +1,24 @@
 use crate::{
     app::{AppEvent, EventReceiver},
     components::{
+        composer::{
+            embed::{Embed, EmbedWidget},
+            textarea::{CursorMove, Input, Key, TextArea, TextStyle},
+        },
         post::{
             facets::{detect_facets, CharSlice, FacetFeature},
             post_widget::PostWidget,
-            PostRef, ReplyRef,
+            ReplyRef,
         },
-        textarea::{CursorMove, Input, Key, TextArea, TextStyle},
     },
     post_manager,
 };
-use atrium_api::types::string::Language;
+use atrium_api::{
+    app::bsky::{
+        embed::record_with_media::MainMediaRefs, feed::post::RecordEmbedRefs,
+    },
+    types::{string::Language, Union},
+};
 use bsky_sdk::{rich_text::RichText, BskyAgent};
 use crossterm::event::{self, Event};
 use ratatui::{
@@ -19,6 +27,7 @@ use ratatui::{
     text::Line,
     widgets::{Block, BorderType, Widget},
 };
+use tokio::task::JoinHandle;
 
 enum InputMode {
     Normal,
@@ -38,11 +47,53 @@ pub struct ComposerView {
     inputmode: InputMode,
     focus: Focus,
     reply: Option<ReplyRef>,
-    embed: Option<PostRef>,
+    embed: Embed,
+    post_handle: Option<JoinHandle<AppEvent>>,
+}
+
+macro_rules! create_quote_ref {
+    ($post:expr) => {
+        atrium_api::app::bsky::embed::record::MainData {
+            record: atrium_api::com::atproto::repo::strong_ref::MainData {
+                cid: $post.cid.clone(),
+                uri: $post.uri.clone(),
+            }
+            .into(),
+        }
+        .into()
+    };
+}
+
+macro_rules! create_image_refs {
+    ($agent:expr, $images:expr) => {{
+        log::info!("Uploading media");
+        let h = $images
+            .into_iter()
+            .map(|i| $agent.api.com.atproto.repo.upload_blob(i.data.clone()));
+        let blobs = match futures::future::try_join_all(h).await {
+            Ok(r) => r,
+            Err(e) => {
+                log::error!("Cannot upload image: {}", e);
+                return AppEvent::None;
+            }
+        };
+        let images = blobs
+            .into_iter()
+            .map(|blob| {
+                atrium_api::app::bsky::embed::images::ImageData {
+                    alt: String::new(),
+                    aspect_ratio: None,
+                    image: blob.data.blob,
+                }
+                .into()
+            })
+            .collect();
+        atrium_api::app::bsky::embed::images::MainData { images }.into()
+    }};
 }
 
 impl ComposerView {
-    pub fn new(reply: Option<ReplyRef>, embed: Option<PostRef>) -> Self {
+    pub fn new(reply: Option<ReplyRef>, embed: Embed) -> Self {
         let textarea = TextArea::from(String::new());
         let lang = TextArea::from(String::new());
 
@@ -53,10 +104,25 @@ impl ComposerView {
             focus: Focus::TextField,
             reply,
             embed,
+            post_handle: None,
         }
     }
 
-    async fn post(&self, agent: BskyAgent) -> AppEvent {
+    pub async fn post_finished(&mut self) -> bool {
+        if self.post_handle.is_none() {
+            return false;
+        }
+        if self.post_handle.as_ref().map(|h| h.is_finished()).unwrap_or(false) {
+            let mut handle = None;
+            std::mem::swap(&mut handle, &mut self.post_handle);
+            if let AppEvent::ColumnPopLayer = handle.unwrap().await.unwrap() {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    async fn post(&self, agent: BskyAgent) -> Option<JoinHandle<AppEvent>> {
         let langs = &self.langs_field.lines()[0];
         let mut invalid_langs = vec![];
         let langs = langs
@@ -75,7 +141,7 @@ impl ComposerView {
             .collect::<Vec<_>>();
         if invalid_langs.len() != 0 {
             log::error!("Langs {:?} are invalid", invalid_langs);
-            return AppEvent::None;
+            return None;
         }
         let langs = if langs.is_empty() { None } else { Some(langs) };
 
@@ -87,7 +153,7 @@ impl ComposerView {
             Ok(richtext) => richtext.facets,
             Err(e) => {
                 log::error!("Cannot parse richtext: {}", e);
-                return AppEvent::None;
+                return None;
             }
         };
 
@@ -107,40 +173,67 @@ impl ComposerView {
             .into()
         });
 
-        let embed = self.embed.as_ref().map(|post| {
-            atrium_api::types::Union::Refs(atrium_api::app::bsky::feed::post::RecordEmbedRefs::AppBskyEmbedRecordMain(
-                Box::new(atrium_api::app::bsky::embed::record::MainData {
-                    record: atrium_api::com::atproto::repo::strong_ref::MainData {
-                        cid: post.cid.clone(),
-                        uri: post.uri.clone(),
-                    }.into()
-                }.into())
-            ))
-        });
+        let embed = self.embed.clone();
+        return Some(tokio::spawn(async move {
+            let embed = match embed {
+                Embed::None => None,
+                Embed::Record(post) => {
+                    Some(Union::Refs(RecordEmbedRefs::AppBskyEmbedRecordMain(
+                        Box::new(create_quote_ref!(post)),
+                    )))
+                }
+                Embed::Image(images) => {
+                    let images = create_image_refs!(agent, images);
+                    Some(Union::Refs(RecordEmbedRefs::AppBskyEmbedImagesMain(
+                        Box::new(images),
+                    )))
+                }
+                Embed::RecordWithImage(post, images) => {
+                    let quote = create_quote_ref!(post);
+                    let images = create_image_refs!(agent, images);
+                    let media = Union::Refs(
+                        MainMediaRefs::AppBskyEmbedImagesMain(Box::new(images)),
+                    );
+                    Some(Union::Refs(RecordEmbedRefs::AppBskyEmbedRecordWithMediaMain(Box::new(
+                    atrium_api::app::bsky::embed::record_with_media::MainData {
+                        media,
+                        record: quote,
+                    }
+                    .into(),
+                ))))
+                }
+            };
 
-        let r = agent
-            .create_record(atrium_api::app::bsky::feed::post::RecordData {
-                created_at,
-                embed,
-                entities: None,
-                facets,
-                labels: None,
-                langs,
-                reply,
-                tags: None,
-                text,
-            })
-            .await;
-        match r {
-            Ok(_) => {}
-            Err(e) => {
-                log::error!("Cannot post: {}", e);
+            log::info!("Posting");
+            let r = agent
+                .create_record(atrium_api::app::bsky::feed::post::RecordData {
+                    created_at,
+                    embed,
+                    entities: None,
+                    facets,
+                    labels: None,
+                    langs,
+                    reply,
+                    tags: None,
+                    text,
+                })
+                .await;
+            match r {
+                Ok(_) => {}
+                Err(e) => {
+                    log::error!("Cannot post: {}", e);
+                }
             }
-        }
-        return AppEvent::ColumnPopLayer;
+            log::info!("Posted");
+            return AppEvent::ColumnPopLayer;
+        }));
     }
 
     fn handle_pasting(&mut self, s: String) {
+        if s.is_empty() {
+            self.embed.paste_image();
+            return;
+        }
         match self.focus {
             Focus::TextField => {
                 self.text_field.insert_string(s);
@@ -148,9 +241,7 @@ impl ComposerView {
             Focus::LangField => {
                 self.langs_field.insert_string(s);
             }
-            _ => {
-                todo!()
-            }
+            _ => {}
         }
     }
 }
@@ -161,6 +252,10 @@ impl EventReceiver for &mut ComposerView {
         event: event::Event,
         agent: BskyAgent,
     ) -> AppEvent {
+        if self.post_handle.is_some() {
+            return AppEvent::None;
+        }
+
         let key = match event.clone() {
             Event::Key(key) => key,
             Event::Paste(s) => {
@@ -205,7 +300,10 @@ impl EventReceiver for &mut ComposerView {
                     }
                     Focus::LangField => {
                         if matches!(input, Input { key: Key::Enter, .. }) {
-                            return self.post(agent).await;
+                            if self.post_handle.is_none() {
+                                self.post_handle = self.post(agent).await;
+                            }
+                            return AppEvent::None;
                         }
                         let atoz = |i| {
                             matches!(i, Input { key: Key::Char(c), .. }
@@ -226,7 +324,11 @@ impl EventReceiver for &mut ComposerView {
                 },
             },
             InputMode::Normal => match event.clone().into() {
-                Input { key: Key::Enter, .. } => return self.post(agent).await,
+                Input { key: Key::Enter, .. } => {
+                    if self.post_handle.is_none() {
+                        self.post_handle = self.post(agent).await;
+                    }
+                }
                 Input { key: Key::Tab, .. } => match self.focus {
                     Focus::TextField => self.focus = Focus::LangField,
                     Focus::LangField => self.focus = Focus::AttachmentField,
@@ -462,9 +564,9 @@ impl Widget for &mut ComposerView {
                 true,
             )
         });
-        let quote_post = self.embed.as_ref().map(|post| {
-            PostWidget::new(post_manager!().at(&post.uri).unwrap(), false, true)
-        });
+
+        let embed = EmbedWidget::new(self.embed.clone())
+            .set_focus(matches!(self.focus, Focus::AttachmentField));
 
         let [_, area, _] = Layout::horizontal([
             Constraint::Fill(1),
@@ -472,7 +574,7 @@ impl Widget for &mut ComposerView {
             Constraint::Fill(1),
         ])
         .areas(area);
-        let [_, reply_post_area, connect_area, text_area, _, lang_area, _, attachment_area, _, quote_area] =
+        let [_, reply_post_area, connect_area, text_area, _, lang_area, _, embed_area] =
             Layout::vertical([
                 Constraint::Length(2),
                 Constraint::Length(if let Some(p) = &reply_post {
@@ -485,13 +587,7 @@ impl Widget for &mut ComposerView {
                 Constraint::Length(1),
                 Constraint::Length(3),
                 Constraint::Length(1),
-                Constraint::Length(3),
-                Constraint::Length(1),
-                Constraint::Length(if let Some(p) = &quote_post {
-                    p.line_count(area.width)
-                } else {
-                    0
-                }),
+                Constraint::Length(embed.line_count(area.width)),
             ])
             .areas(area);
 
@@ -540,17 +636,6 @@ impl Widget for &mut ComposerView {
         self.langs_field.set_focus(matches!(self.focus, Focus::LangField));
         self.langs_field.render(lang_area, buf);
 
-        let title = match &self.focus {
-            Focus::AttachmentField => "Add attachments",
-            _ => "Attachments",
-        };
-        let block = Block::bordered().title(title);
-        let attachment_inner = block.inner(attachment_area);
-        block.render(attachment_area, buf);
-        Line::from("(Open file picker)").render(attachment_inner, buf);
-
-        if let Some(p) = quote_post {
-            p.render(quote_area, buf);
-        }
+        embed.render(embed_area, buf);
     }
 }

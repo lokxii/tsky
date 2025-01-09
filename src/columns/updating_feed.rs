@@ -16,6 +16,7 @@ use crate::{
     app::{AppEvent, EventReceiver},
     columns::{Column, ComposerView, ThreadView},
     components::{
+        composer,
         feed::{Feed, FeedPost},
         list::ListState,
     },
@@ -219,7 +220,7 @@ impl EventReceiver for &mut UpdatingFeed {
 
             KeyCode::Char('n') => {
                 return AppEvent::ColumnNewLayer(Column::Composer(
-                    ComposerView::new(None, None),
+                    ComposerView::new(None, composer::embed::Embed::None),
                 ));
             }
 

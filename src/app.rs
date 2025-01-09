@@ -2,6 +2,7 @@ use std::{io::Stdout, sync::Arc};
 
 use bsky_sdk::BskyAgent;
 use crossterm::event;
+use futures::FutureExt;
 use ratatui::{
     layout::{Constraint, Layout},
     prelude::CrosstermBackend,
@@ -94,6 +95,21 @@ impl App {
                 );
             })
             .unwrap();
+    }
+
+    pub async fn active(&mut self) {
+        let last = self.column.pop();
+        if last.is_none() {
+            return;
+        }
+        let Some(Column::Composer(mut composer)) = last else {
+            self.column.push(last.unwrap());
+            return;
+        };
+        if !composer.post_finished().await {
+            self.column.push(Column::Composer(composer));
+            return;
+        }
     }
 }
 
