@@ -158,6 +158,7 @@ pub struct RepostBy {
 pub struct ReplyData {
     pub author: String,
     pub handle: String,
+    pub following: bool,
 }
 
 #[derive(Clone)]
@@ -208,7 +209,10 @@ impl FeedPost {
                         .clone()
                         .unwrap_or("".to_string());
                     let handle = view.author.handle.to_string();
-                    Reply::Reply(ReplyData { author, handle })
+                    #[rustfmt::skip]
+                    let following = view.author.viewer.is_some()
+                        && view .author.viewer.as_ref().unwrap().following.is_some();
+                    Reply::Reply(ReplyData { author, handle, following })
                 }
                 ReplyRefParentRefs::NotFoundPost(_) => Reply::DeletedPost,
                 ReplyRefParentRefs::BlockedPost(_) => Reply::BlockedUser,

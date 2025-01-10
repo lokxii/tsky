@@ -12,7 +12,7 @@ use crate::{
     columns::{Column, ComposerView, ThreadView},
     components::{
         composer,
-        feed::{Feed, FeedPost},
+        feed::{Feed, FeedPost, Reply},
         list::ListState,
     },
     post_manager,
@@ -69,7 +69,15 @@ impl UpdatingFeed {
                     feed: posts,
                     cursor: new_cursor,
                 } = new_posts.data;
-                let new_posts = posts.iter().map(FeedPost::from);
+                let new_posts = posts.iter().map(FeedPost::from).filter(|p| {
+                    p.reply_to
+                        .as_ref()
+                        .map(|r| match r {
+                            Reply::Reply(r) => r.following,
+                            _ => false,
+                        })
+                        .unwrap_or(true)
+                });
 
                 {
                     let mut feed = feed.lock().unwrap();
@@ -252,6 +260,15 @@ async fn get_old_posts(agent: &BskyAgent, feed: Arc<Mutex<Feed>>) {
         new_posts.data;
 
     let mut feed = feed.lock().unwrap();
-    feed.append_old_posts(posts.iter().map(FeedPost::from));
+    let posts = posts.iter().map(FeedPost::from).filter(|p| {
+        p.reply_to
+            .as_ref()
+            .map(|r| match r {
+                Reply::Reply(r) => r.following,
+                _ => false,
+            })
+            .unwrap_or(true)
+    });
+    feed.append_old_posts(posts);
     feed.cursor = new_cursor;
 }
