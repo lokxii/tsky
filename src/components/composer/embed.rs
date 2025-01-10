@@ -359,9 +359,8 @@ impl Image {
         };
         let accepted_types =
             ["image/jpeg", "image/png", "image/webp", "image/bmp"];
-        let Some(mime) =
-            accepted_types.iter().find(|t| mime_types.contains(**t))
-        else {
+        let mime = accepted_types.iter().find(|t| mime_types.contains(**t));
+        let Some(mime) = mime else {
             return Err("No supported images found in clipboard".to_string());
         };
         let content = paste::get_contents(
@@ -389,6 +388,9 @@ impl Image {
     }
 
     pub async fn from_path(path: std::path::PathBuf) -> Result<Image, String> {
+        let accepted_types =
+            ["image/jpeg", "image/png", "image/webp", "image/bmp"];
+
         let name = path.file_name().unwrap().to_str().unwrap().to_string();
         let mut file = match File::open(path).await {
             Ok(file) => file,
@@ -398,6 +400,12 @@ impl Image {
         if let Some(e) = file.read_to_end(&mut data).await.err() {
             return Err(format!("Cannot read from file: {}", e));
         }
+
+        let mime = tree_magic::from_u8(&data);
+        if !accepted_types.contains(&mime.as_str()) {
+            return Err("Filetype not supported".to_string());
+        };
+
         return Ok(Image { data, name });
     }
 }
