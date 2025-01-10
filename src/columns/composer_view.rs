@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use crate::{
     app::{AppEvent, EventReceiver},
     components::{
@@ -27,6 +29,7 @@ use ratatui::{
     text::Line,
     widgets::{Block, BorderType, Widget},
 };
+use regex::Regex;
 use tokio::task::JoinHandle;
 
 enum InputMode {
@@ -40,6 +43,9 @@ enum Focus {
     LangField,
     AttachmentField,
 }
+
+static RE_URL: OnceLock<Regex> = OnceLock::new();
+static RE_ENDING_PUNCTUATION: OnceLock<Regex> = OnceLock::new();
 
 pub struct ComposerView {
     text_field: TextArea,
@@ -341,12 +347,46 @@ impl ComposerView {
         match self.focus {
             Focus::TextField => {
                 self.text_field.insert_string(s);
+                self.embed_external();
             }
             Focus::LangField => {
                 self.langs_field.insert_string(s);
             }
             _ => {}
         }
+    }
+
+    fn embed_external(&mut self) {
+        let text = self.text_field.lines().join("\n");
+        let re_url = RE_URL.get_or_init(|| {
+            Regex::new(
+                r"(?:^|\s|\()((?:https?:\/\/[\S]+)|(?:(?<domain>[a-z][a-z0-9]*(?:\.[a-z0-9]+)+)[\S]*))",
+            )
+            .expect("invalid regex")
+        });
+        let Some(capture) = re_url.captures(&text) else {
+            return;
+        };
+
+        let m = capture.get(1).expect("invalid capture");
+        let mut uri = if let Some(domain) = capture.name("domain") {
+            if !psl::suffix(domain.as_str().as_bytes())
+                .map_or(false, |suffix| suffix.is_known())
+            {
+                return;
+            }
+            format!("https://{}", m.as_str())
+        } else {
+            m.as_str().into()
+        };
+
+        let re_ep = RE_ENDING_PUNCTUATION
+            .get_or_init(|| Regex::new(r"[.,;:!?]$").expect("invalid regex"));
+        if re_ep.is_match(&uri) || (uri.ends_with(')') && !uri.contains('(')) {
+            uri.pop();
+        }
+
+        self.embed.add_external(uri);
     }
 }
 
@@ -400,6 +440,7 @@ impl EventReceiver for &mut ComposerView {
                 input => match self.focus {
                     Focus::TextField => {
                         self.text_field.input(input, |_| true);
+                        self.embed_external();
                         return AppEvent::None;
                     }
                     Focus::LangField => {

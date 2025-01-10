@@ -155,6 +155,25 @@ impl EmbedState {
             }
         }
     }
+
+    pub fn add_external(&mut self, external: String) {
+        match &mut self.embed {
+            Embed::None => {
+                self.embed = Embed::Media(Media::External(external));
+                self.state = 0;
+            }
+            Embed::Media(_) | Embed::RecordWithMedia(_, _) => {
+                log::info!("Media already exists");
+            }
+            Embed::Record(post) => {
+                self.embed = Embed::RecordWithMedia(
+                    post.clone(),
+                    Media::External(external),
+                );
+                self.state = 0;
+            }
+        }
+    }
 }
 
 impl EventReceiver for &mut EmbedState {
