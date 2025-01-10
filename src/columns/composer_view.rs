@@ -1,8 +1,10 @@
+use std::sync::OnceLock;
+
 use crate::{
     app::{AppEvent, EventReceiver},
     components::{
         composer::{
-            embed::{Embed, EmbedState, EmbedWidget},
+            embed::{Embed, EmbedState, EmbedWidget, Media},
             textarea::{CursorMove, Input, Key, TextArea, TextStyle},
         },
         post::{
@@ -27,6 +29,7 @@ use ratatui::{
     text::Line,
     widgets::{Block, BorderType, Widget},
 };
+use regex::Regex;
 use tokio::task::JoinHandle;
 
 enum InputMode {
@@ -40,6 +43,9 @@ enum Focus {
     LangField,
     AttachmentField,
 }
+
+static RE_URL: OnceLock<Regex> = OnceLock::new();
+static RE_ENDING_PUNCTUATION: OnceLock<Regex> = OnceLock::new();
 
 pub struct ComposerView {
     text_field: TextArea,
@@ -66,7 +72,7 @@ macro_rules! create_quote_ref {
 
 macro_rules! create_image_refs {
     ($agent:expr, $images:expr) => {{
-        log::info!("Uploading media");
+        log::info!("Uploading image");
         let h = $images
             .into_iter()
             .map(|i| $agent.api.com.atproto.repo.upload_blob(i.data.clone()));
@@ -89,6 +95,87 @@ macro_rules! create_image_refs {
             })
             .collect();
         atrium_api::app::bsky::embed::images::MainData { images }.into()
+    }};
+}
+
+macro_rules! create_external_ref {
+    ($agent:expr, $uri:expr) => {{
+        log::info!("Fetching webpage");
+        let text = reqwest::get($uri.clone())
+            .await
+            .expect("Cannot fetch page")
+            .text()
+            .await
+            .expect("Cannot fetch text");
+
+        let (description, title, thumb) = {
+            let dom = tl::parse(&text, tl::ParserOptions::default()).unwrap();
+            let parser = dom.parser();
+            let meta = dom
+                .query_selector("meta")
+                .unwrap()
+                .filter_map(|h| h.get(parser))
+                .filter_map(|t| {
+                    let attributes = t.as_tag()?.attributes();
+                    let property = attributes.get("property")??.as_bytes();
+                    let property = std::str::from_utf8(property).ok()?;
+                    if !property.starts_with("og:") {
+                        return None;
+                    }
+                    let content = attributes.get("content")??.as_bytes();
+                    let content = std::str::from_utf8(content).ok()?;
+                    Some((property, content))
+                })
+                .collect::<Vec<_>>();
+            let description = meta
+                .iter()
+                .find(|(p, _)| *p == "og:description")
+                .map(|(_, c)| c.to_string())
+                .unwrap_or(String::new());
+            let title = meta
+                .iter()
+                .find(|(p, _)| *p == "og:title")
+                .map(|(_, c)| c.to_string())
+                .unwrap_or(String::new());
+            let thumb = meta
+                .iter()
+                .find(|(p, _)| *p == "og:image")
+                .map(|(_, c)| c.to_string());
+            (description, title, thumb)
+        };
+        let thumb = if let Some(thumb) = thumb {
+            log::info!("Fetching thumbnail");
+            let Ok(res) = reqwest::get(thumb).await else {
+                log::error!("Cannot fetch image");
+                return AppEvent::None;
+            };
+            let Ok(blob) = res.bytes().await else {
+                log::error!("Cannot fetch blob");
+                return AppEvent::None;
+            };
+
+            log::info!("Uploading thumbnail");
+            let r#ref = $agent.api.com.atproto.repo.upload_blob(blob.to_vec());
+            let blob = match r#ref.await {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("Cannot upload thumbnail: {}", e);
+                    return AppEvent::None;
+                }
+            };
+            Some(blob.blob.clone())
+        } else {
+            None
+        };
+
+        let external = atrium_api::app::bsky::embed::external::ExternalData {
+            description,
+            title,
+            uri: $uri,
+            thumb,
+        }
+        .into();
+        atrium_api::app::bsky::embed::external::MainData { external }.into()
     }};
 }
 
@@ -182,25 +269,48 @@ impl ComposerView {
                         Box::new(create_quote_ref!(post)),
                     )))
                 }
-                Embed::Image(images) => {
+                Embed::Media(Media::Images(images)) => {
                     let images = create_image_refs!(agent, images);
                     Some(Union::Refs(RecordEmbedRefs::AppBskyEmbedImagesMain(
                         Box::new(images),
                     )))
                 }
-                Embed::RecordWithImage(post, images) => {
+                Embed::Media(Media::External(uri)) => {
+                    let external = create_external_ref!(agent, uri);
+                    Some(Union::Refs(
+                        RecordEmbedRefs::AppBskyEmbedExternalMain(Box::new(
+                            external,
+                        )),
+                    ))
+                }
+                Embed::RecordWithMedia(post, Media::Images(images)) => {
                     let quote = create_quote_ref!(post);
                     let images = create_image_refs!(agent, images);
                     let media = Union::Refs(
                         MainMediaRefs::AppBskyEmbedImagesMain(Box::new(images)),
                     );
                     Some(Union::Refs(RecordEmbedRefs::AppBskyEmbedRecordWithMediaMain(Box::new(
-                    atrium_api::app::bsky::embed::record_with_media::MainData {
-                        media,
-                        record: quote,
-                    }
-                    .into(),
-                ))))
+                        atrium_api::app::bsky::embed::record_with_media::MainData {
+                            media,
+                            record: quote,
+                        }
+                        .into(),
+                    ))))
+                }
+                Embed::RecordWithMedia(post, Media::External(uri)) => {
+                    let quote = create_quote_ref!(post);
+                    let external = create_external_ref!(agent, uri);
+                    let media =
+                        Union::Refs(MainMediaRefs::AppBskyEmbedExternalMain(
+                            Box::new(external),
+                        ));
+                    Some(Union::Refs(RecordEmbedRefs::AppBskyEmbedRecordWithMediaMain(Box::new(
+                        atrium_api::app::bsky::embed::record_with_media::MainData {
+                            media,
+                            record: quote,
+                        }
+                        .into(),
+                    ))))
                 }
             };
 
@@ -237,12 +347,46 @@ impl ComposerView {
         match self.focus {
             Focus::TextField => {
                 self.text_field.insert_string(s);
+                self.embed_external();
             }
             Focus::LangField => {
                 self.langs_field.insert_string(s);
             }
             _ => {}
         }
+    }
+
+    fn embed_external(&mut self) {
+        let text = self.text_field.lines().join("\n");
+        let re_url = RE_URL.get_or_init(|| {
+            Regex::new(
+                r"(?:^|\s|\()((?:https?:\/\/[\S]+)|(?:(?<domain>[a-z][a-z0-9]*(?:\.[a-z0-9]+)+)[\S]*))",
+            )
+            .expect("invalid regex")
+        });
+        let Some(capture) = re_url.captures(&text) else {
+            return;
+        };
+
+        let m = capture.get(1).expect("invalid capture");
+        let mut uri = if let Some(domain) = capture.name("domain") {
+            if !psl::suffix(domain.as_str().as_bytes())
+                .map_or(false, |suffix| suffix.is_known())
+            {
+                return;
+            }
+            format!("https://{}", m.as_str())
+        } else {
+            m.as_str().into()
+        };
+
+        let re_ep = RE_ENDING_PUNCTUATION
+            .get_or_init(|| Regex::new(r"[.,;:!?]$").expect("invalid regex"));
+        if re_ep.is_match(&uri) || (uri.ends_with(')') && !uri.contains('(')) {
+            uri.pop();
+        }
+
+        self.embed.add_external(uri);
     }
 }
 
@@ -296,6 +440,7 @@ impl EventReceiver for &mut ComposerView {
                 input => match self.focus {
                     Focus::TextField => {
                         self.text_field.input(input, |_| true);
+                        self.embed_external();
                         return AppEvent::None;
                     }
                     Focus::LangField => {

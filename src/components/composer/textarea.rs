@@ -692,7 +692,8 @@ impl TextArea {
             self.cursor.0 += 1;
             self.lines.insert(self.cursor.0, clipboard.next().unwrap());
         }
-        self.cursor.1 = self.lines[self.cursor.0].chars().count() - 1;
+        self.cursor.1 =
+            self.lines[self.cursor.0].chars().count().saturating_sub(1);
         self.lines[self.cursor.0] += &tail;
 
         self.history.changed = true;
