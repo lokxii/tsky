@@ -1,7 +1,7 @@
 use std::{io::Read, process::Stdio};
 
 use bsky_sdk::BskyAgent;
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Style},
@@ -14,7 +14,10 @@ use wl_clipboard_rs::paste::{self, ClipboardType, MimeType, Seat};
 use crate::{
     app::{AppEvent, EventReceiver},
     columns::{thread_view::ThreadView, Column},
-    components::post::{post_widget::PostWidget, PostRef},
+    components::{
+        composer::textarea::{Input, Key},
+        post::{post_widget::PostWidget, PostRef},
+    },
     post_manager,
 };
 
@@ -152,6 +155,41 @@ impl EventReceiver for &mut EmbedState {
                 self.add_image(image);
                 return AppEvent::None;
             }
+
+            KeyCode::Char('d') => {
+                let e = event::read().expect("Cannot read event").into();
+                let Input { key: Key::Char('d'), .. } = e else {
+                    return AppEvent::None;
+                };
+                let mut embed = Embed::None;
+                std::mem::swap(&mut embed, &mut self.embed);
+                self.embed = match embed {
+                    Embed::None => Embed::None,
+                    Embed::Image(mut images) => {
+                        self.state = self.state.saturating_sub(1);
+                        images.remove(self.state);
+                        Embed::Image(images)
+                    }
+                    Embed::Record(post) => {
+                        if self.state == 0 {
+                            Embed::Record(post)
+                        } else {
+                            self.state = 0;
+                            Embed::None
+                        }
+                    }
+                    Embed::RecordWithImage(post, mut images) => {
+                        self.state = self.state.saturating_sub(1);
+                        if self.state == images.len() {
+                            Embed::Image(images)
+                        } else {
+                            images.remove(self.state);
+                            Embed::RecordWithImage(post, images)
+                        }
+                    }
+                };
+            }
+
             _ => {
                 let post = match &self.embed {
                     Embed::Record(post) if self.state == 1 => Some(post),
