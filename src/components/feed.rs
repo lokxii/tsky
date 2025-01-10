@@ -69,10 +69,9 @@ impl Feed {
             .collect::<Vec<_>>();
 
         if autoscrolling {
-            self.state = ListState::default();
-            self.state.select(Some(0));
             self.posts = new_posts;
             self.remove_duplicate();
+            self.state.select(Some(0));
             return false;
         }
 
