@@ -86,6 +86,12 @@ impl<'a> Widget for Paragraph<'a> {
     }
 }
 
+fn line_to_string(line: &Line) -> String {
+    let mut out = String::new();
+    line.spans.iter().for_each(|s| out.push_str(&s.content));
+    return out;
+}
+
 fn break_lines<'a>(lines: &'a Vec<Line<'a>>, width: u16) -> Vec<Line<'a>> {
     let mut new_lines = vec![];
 
@@ -96,7 +102,7 @@ fn break_lines<'a>(lines: &'a Vec<Line<'a>>, width: u16) -> Vec<Line<'a>> {
             .iter()
             .flat_map(|s| s.styled_graphemes(Style::default()))
             .fold(Line::from(""), |acc, e| {
-                let acc_s = acc.to_string();
+                let acc_s = line_to_string(&acc);
                 let e_space = e.symbol.chars().all(char::is_whitespace);
                 let acc_space = acc_s.chars().all(char::is_whitespace);
                 if e_space || !acc_s.is_empty() && acc_space {
@@ -109,19 +115,20 @@ fn break_lines<'a>(lines: &'a Vec<Line<'a>>, width: u16) -> Vec<Line<'a>> {
         words.push(last_word);
 
         let last_acc = words.into_iter().fold(Line::from(""), |acc, e| {
-            let acc_w = acc.to_string().width_cjk();
-            let e_w = e.to_string().width_cjk();
+            let acc_s = line_to_string(&acc);
+            let acc_w = acc_s.width_cjk();
+            let e_w = line_to_string(&e).width_cjk();
             if acc_w + e_w <= width as usize {
                 return e.spans.into_iter().fold(acc, |acc, e| acc + e);
             }
 
-            if !acc.to_string().is_empty() {
+            if !acc_s.is_empty() {
                 new_lines.push(acc);
             }
             let mut acc = Line::from("");
 
             for g in e.styled_graphemes(Style::default()) {
-                let acc_w = acc.to_string().width_cjk();
+                let acc_w = line_to_string(&acc).width_cjk();
                 if acc_w + g.symbol.width_cjk() > width as usize {
                     new_lines.push(acc);
                     acc =
