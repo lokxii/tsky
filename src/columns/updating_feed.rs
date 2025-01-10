@@ -1,9 +1,4 @@
-use atrium_api::{
-    app::bsky::feed::{
-        get_post_thread::OutputThreadRefs as GetPostThreadOutput, get_timeline,
-    },
-    types::Union,
-};
+use atrium_api::app::bsky::feed::get_timeline;
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event, KeyCode};
 use ratatui::widgets::Widget;
@@ -186,36 +181,14 @@ impl EventReceiver for &mut UpdatingFeed {
                 let uri = feed.posts[selected].post_uri.clone();
                 drop(feed);
 
-                let Ok(out) = agent.api.app.bsky.feed.get_post_thread(
-                    atrium_api::app::bsky::feed::get_post_thread::ParametersData {
-                        depth: Some(1.try_into().unwrap()),
-                        parent_height: None,
-                        uri,
-                    }.into()).await else {
-                    return AppEvent::None;
-                };
-                let Union::Refs(thread) = out.data.thread else {
-                    log::error!("Unknown thread response");
-                    return AppEvent::None;
-                };
-
-                match thread {
-                    GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
-                        thread,
-                    ) => {
-                        return AppEvent::ColumnNewLayer(Column::Thread(
-                            ThreadView::from(thread.data),
-                        ));
-                    }
-                    GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
-                        log::error!("Blocked thread");
+                let view = match ThreadView::from_uri(uri, agent).await {
+                    Ok(view) => view,
+                    Err(e) => {
+                        log::error!("{}", e);
                         return AppEvent::None;
                     }
-                    GetPostThreadOutput::AppBskyFeedDefsNotFoundPost(_) => {
-                        log::error!("Thread not found");
-                        return AppEvent::None;
-                    }
-                }
+                };
+                return AppEvent::ColumnNewLayer(Column::Thread(view));
             }
 
             KeyCode::Char('n') => {

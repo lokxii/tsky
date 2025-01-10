@@ -2,7 +2,7 @@ use crate::{
     app::{AppEvent, EventReceiver},
     components::{
         composer::{
-            embed::{Embed, EmbedWidget},
+            embed::{Embed, EmbedState, EmbedWidget},
             textarea::{CursorMove, Input, Key, TextArea, TextStyle},
         },
         post::{
@@ -47,7 +47,7 @@ pub struct ComposerView {
     inputmode: InputMode,
     focus: Focus,
     reply: Option<ReplyRef>,
-    embed: Embed,
+    embed: EmbedState,
     post_handle: Option<JoinHandle<AppEvent>>,
 }
 
@@ -103,7 +103,7 @@ impl ComposerView {
             inputmode: InputMode::Insert,
             focus: Focus::TextField,
             reply,
-            embed,
+            embed: EmbedState::new(embed),
             post_handle: None,
         }
     }
@@ -173,7 +173,7 @@ impl ComposerView {
             .into()
         });
 
-        let embed = self.embed.clone();
+        let embed = self.embed.embed.clone();
         return Some(tokio::spawn(async move {
             let embed = match embed {
                 Embed::None => None,
@@ -324,11 +324,14 @@ impl EventReceiver for &mut ComposerView {
                 },
             },
             InputMode::Normal => match event.clone().into() {
-                Input { key: Key::Enter, .. } => {
-                    if self.post_handle.is_none() {
-                        self.post_handle = self.post(agent).await;
+                Input { key: Key::Enter, .. } => match self.focus {
+                    Focus::TextField | Focus::LangField => {
+                        if self.post_handle.is_none() {
+                            self.post_handle = self.post(agent.clone()).await;
+                        }
                     }
-                }
+                    _ => {}
+                },
                 Input { key: Key::Tab, .. } => match self.focus {
                     Focus::TextField => self.focus = Focus::LangField,
                     Focus::LangField => self.focus = Focus::AttachmentField,
@@ -346,7 +349,7 @@ impl EventReceiver for &mut ComposerView {
                 vim_keys(event, &mut self.langs_field, &mut self.inputmode)
             }
             Focus::AttachmentField => {
-                todo!();
+                self.embed.handle_events(event, agent).await
             }
         };
     }

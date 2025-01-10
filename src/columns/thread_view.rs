@@ -59,7 +59,47 @@ fn parent_posts_rev(
 }
 
 impl ThreadView {
-    pub fn from(thread: ThreadViewPostData) -> ThreadView {
+    pub async fn from_uri(
+        uri: String,
+        agent: BskyAgent,
+    ) -> Result<ThreadView, String> {
+        let out = agent
+            .api
+            .app
+            .bsky
+            .feed
+            .get_post_thread(
+                atrium_api::app::bsky::feed::get_post_thread::ParametersData {
+                    depth: Some(1.try_into().unwrap()),
+                    parent_height: None,
+                    uri,
+                }
+                .into(),
+            )
+            .await;
+        let out = match out {
+            Ok(out) => out,
+            Err(e) => {
+                return Err(format!("Cannot fetch thread: {}", e));
+            }
+        };
+        let Union::Refs(thread) = out.data.thread else {
+            return Err("Unknown thread response".to_string());
+        };
+        match thread {
+            GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(thread) => {
+                return Ok(ThreadView::new(thread.data));
+            }
+            GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
+                return Err("Blocked thread".to_string());
+            }
+            GetPostThreadOutput::AppBskyFeedDefsNotFoundPost(_) => {
+                return Err("Thread not found".to_string());
+            }
+        }
+    }
+
+    fn new(thread: ThreadViewPostData) -> ThreadView {
         let post = Post::from(&thread.post);
         let post_uri = post.uri.clone();
         post_manager!().insert(post);
@@ -187,36 +227,14 @@ impl EventReceiver for &mut ThreadView {
                     selected.clone()
                 };
 
-                let Ok(out) = agent.api.app.bsky.feed.get_post_thread(
-                    atrium_api::app::bsky::feed::get_post_thread::ParametersData {
-                        depth: Some(1.try_into().unwrap()),
-                        parent_height: None,
-                        uri,
-                    }.into()).await else {
-                    return AppEvent::None;
-                };
-                let Union::Refs(thread) = out.data.thread else {
-                    log::error!("Unknown thread response");
-                    return AppEvent::None;
-                };
-
-                match thread {
-                    GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(
-                        thread,
-                    ) => {
-                        return AppEvent::ColumnNewLayer(Column::Thread(
-                            ThreadView::from(thread.data),
-                        ));
-                    }
-                    GetPostThreadOutput::AppBskyFeedDefsBlockedPost(_) => {
-                        log::error!("Blocked thread");
+                let view = match ThreadView::from_uri(uri, agent).await {
+                    Ok(view) => view,
+                    Err(e) => {
+                        log::error!("{}", e);
                         return AppEvent::None;
                     }
-                    GetPostThreadOutput::AppBskyFeedDefsNotFoundPost(_) => {
-                        log::error!("Thread not found");
-                        return AppEvent::None;
-                    }
-                }
+                };
+                return AppEvent::ColumnNewLayer(Column::Thread(view));
             }
 
             _ => {

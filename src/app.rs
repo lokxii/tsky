@@ -2,7 +2,6 @@ use std::{io::Stdout, sync::Arc};
 
 use bsky_sdk::BskyAgent;
 use crossterm::event;
-use futures::FutureExt;
 use ratatui::{
     layout::{Constraint, Layout},
     prelude::CrosstermBackend,
