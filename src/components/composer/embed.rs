@@ -344,25 +344,20 @@ async fn file_picker() -> Result<Option<std::path::PathBuf>, String> {
         .stderr(Stdio::null())
         .stdout(Stdio::piped())
         .spawn();
-    let child = match child {
-        Ok(child) => child,
-        Err(e) => {
-            return Err(format!("Cannot spawn zenity (file selector): {}", e));
-        }
-    };
-    let out = match child.wait_with_output().await {
-        Ok(out) => out.stdout,
-        Err(e) => return Err(format!("Cannot read output from zenity: {}", e)),
-    };
+    let child = child
+        .map_err(|e| format!("Cannot spawn zenity (file selector): {}", e))?;
+    let out = child
+        .wait_with_output()
+        .await
+        .map_err(|e| format!("Cannot read output from zenity: {}", e))?
+        .stdout;
     if out.is_empty() {
         return Ok(None);
     }
-    let path = match std::str::from_utf8(&out) {
-        Ok(path) => path.strip_suffix('\n').unwrap(),
-        Err(e) => {
-            return Err(format!("Malformed utf8 path: {}", e));
-        }
-    };
+    let path = std::str::from_utf8(&out)
+        .map_err(|e| format!("Malformed utf8 path: {}", e))?
+        .strip_suffix('\n')
+        .unwrap();
     Ok(Some(std::path::PathBuf::from(path)))
 }
 
@@ -452,9 +447,11 @@ impl Widget for EmbedWidget {
             .title(if self.focused { "Add media" } else { "Media" });
 
         if let Some(media) = media {
-            MediaWidget::new(&media)
-                .set_block(media_block)
-                .render(media_area, buf);
+            let mut mw = MediaWidget::new(&media).set_block(media_block);
+            if self.focused {
+                mw = mw.set_focus(self.embed.state);
+            }
+            mw.render(media_area, buf);
         } else {
             let media_inner = media_block.inner(media_area);
             media_block.render(media_area, buf);
@@ -497,21 +494,21 @@ pub struct Image {
 
 impl Image {
     pub fn from_clipboard() -> Result<Image, String> {
-        let mime_types = match paste::get_mime_types(
-            ClipboardType::Regular,
-            Seat::Unspecified,
-        ) {
-            Ok(m) => m,
-            Err(e) => {
-                return Err(format!("Cannot get clipboard mime type: {}", e))
-            }
-        };
+        let mime_types =
+            paste::get_mime_types(ClipboardType::Regular, Seat::Unspecified)
+                .map_err(|e| {
+                    format!("Cannot get clipboard mime type: {}", e)
+                })?;
+
         let accepted_types =
             ["image/jpeg", "image/png", "image/webp", "image/bmp"];
-        let mime = accepted_types.iter().find(|t| mime_types.contains(**t));
-        let Some(mime) = mime else {
-            return Err("No supported images found in clipboard".to_string());
-        };
+        let mime = accepted_types
+            .iter()
+            .find(|t| mime_types.contains(**t))
+            .ok_or_else(|| {
+                "No supported images found in clipboard".to_string()
+            })?;
+
         let content = paste::get_contents(
             ClipboardType::Regular,
             Seat::Unspecified,
@@ -520,9 +517,9 @@ impl Image {
         match content {
             Ok((mut pipe, _)) => {
                 let mut data = vec![];
-                if let Some(e) = pipe.read_to_end(&mut data).err() {
-                    return Err(format!("Cannot read from clipboard: {}", e));
-                }
+                pipe.read_to_end(&mut data).map_err(|e| {
+                    format!("Cannot read from clipboard: {}", e)
+                })?;
                 return Ok(Image { name: String::from("clipboard"), data });
             }
             Err(paste::Error::NoSeats)
@@ -541,14 +538,13 @@ impl Image {
             ["image/jpeg", "image/png", "image/webp", "image/bmp"];
 
         let name = path.file_name().unwrap().to_str().unwrap().to_string();
-        let mut file = match File::open(path).await {
-            Ok(file) => file,
-            Err(e) => return Err(format!("Cannot open file: {}", e)),
-        };
+        let mut file = File::open(path)
+            .await
+            .map_err(|e| format!("Cannot open file: {}", e))?;
         let mut data = vec![];
-        if let Some(e) = file.read_to_end(&mut data).await.err() {
-            return Err(format!("Cannot read from file: {}", e));
-        }
+        file.read_to_end(&mut data)
+            .await
+            .map_err(|e| format!("Cannot read from file: {}", e))?;
 
         let mime = tree_magic::from_u8(&data);
         if !accepted_types.contains(&mime.as_str()) {
