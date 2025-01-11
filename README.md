@@ -5,6 +5,15 @@
 I will prioritize features I use daily, and most likely ignore features I
 don't use.
 
+![Works on my machine](https://blog.codinghorror.com/content/images/uploads/2007/03/6a0120a85dcdae970b0128776ff992970c-pi.png)
+
+## Dependencies
+
+- feh
+- vlc
+- zenity
+- wl-paste (wayland / wlroots)
+
 ## Features implemented
 
 - Viewing Following Feed
@@ -17,14 +26,16 @@ don't use.
 - Viewing post threads
 - Labels
 - Auto updating feed every second
-- Posting (no rich text and embeds yet)
-    - [x] reply
+- Posting
     - subset of vim keybindings
+    - embed
+        - images
+        - link card
+        - quote
+    - paste image from clipboard
 
 ## TODO List
 
-- Quote
-- Post embed
 - Different sources of feed
 - Multicolumn
 - Config file (default layout, post languages, how to open media, feed update frequency)
@@ -74,6 +85,9 @@ Composer view
 
 | key | function |
 | - | - |
-| `tab` | switch between focusing text field and langs field |
-| `enter` | post |
+| `tab` | switch focus between fields |
+| `enter` (text / lang) | post |
+| `enter` (embed) | open file picker |
 | `backspace` | go back to previous view |
+| `j / k` | navigate embed items |
+| `dd` | remove embed item |
