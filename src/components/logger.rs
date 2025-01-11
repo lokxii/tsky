@@ -1,7 +1,6 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use lazy_static::lazy_static;
-use tokio::sync::Mutex;
 
 lazy_static! {
     pub static ref LOGSTORE: LogStore = LogStore::new();
@@ -24,10 +23,8 @@ impl log::Log for Logger {
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
                 record.args()
             );
-            tokio::spawn(async move {
-                let mut logs = logs.lock().await;
-                logs.push(msg);
-            });
+            let mut logs = logs.lock().unwrap();
+            logs.push(msg);
         }
     }
 

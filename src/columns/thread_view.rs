@@ -76,16 +76,12 @@ impl ThreadView {
                 }
                 .into(),
             )
-            .await;
-        let out = match out {
-            Ok(out) => out,
-            Err(e) => {
-                return Err(format!("Cannot fetch thread: {}", e));
-            }
-        };
+            .await
+            .map_err(|e| format!("Cannot fetch thread: {}", e))?;
         let Union::Refs(thread) = out.data.thread else {
             return Err("Unknown thread response".to_string());
         };
+
         match thread {
             GetPostThreadOutput::AppBskyFeedDefsThreadViewPost(thread) => {
                 return Ok(ThreadView::new(thread.data));
