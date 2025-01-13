@@ -210,6 +210,11 @@ impl ComposerView {
     }
 
     async fn post(&self, agent: BskyAgent) -> Option<JoinHandle<AppEvent>> {
+        let text = self.text_field.lines().join("\n");
+        if text.is_empty() {
+            return None;
+        }
+
         let langs = &self.langs_field.lines()[0];
         let mut invalid_langs = vec![];
         let langs = langs
@@ -233,8 +238,6 @@ impl ComposerView {
         let langs = if langs.is_empty() { None } else { Some(langs) };
 
         let created_at = atrium_api::types::string::Datetime::now();
-
-        let text = self.text_field.lines().join("\n");
 
         let facets = match RichText::new_with_detect_facets(&text).await {
             Ok(richtext) => richtext.facets,
