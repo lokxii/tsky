@@ -1,7 +1,10 @@
 pub mod facets;
 pub mod post_widget;
 
-use std::{ops::Range, process::Command};
+use std::{
+    ops::Range,
+    process::{Command, Stdio},
+};
 
 use atrium_api::{
     app::bsky::{
@@ -322,8 +325,11 @@ impl EventReceiver for &Post {
                     "https://bsky.app/profile/{}/post/{}",
                     author, post_id
                 );
-                if let Result::Err(e) =
-                    Command::new("xdg-open").arg(url).spawn()
+                if let Result::Err(e) = Command::new("xdg-open")
+                    .arg(url)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
                 {
                     log::error!("{:?}", e);
                 }

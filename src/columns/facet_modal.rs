@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use bsky_sdk::BskyAgent;
 use crossterm::event::{self, Event, KeyCode};
@@ -51,8 +51,11 @@ impl EventReceiver for &mut FacetModal {
                     return AppEvent::None;
                 };
                 let url = &self.links[index].url;
-                if let Result::Err(e) =
-                    Command::new("xdg-open").arg(url).spawn()
+                if let Result::Err(e) = Command::new("xdg-open")
+                    .arg(url)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
                 {
                     log::error!("{:?}", e);
                 }
