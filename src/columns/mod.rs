@@ -1,10 +1,12 @@
 pub mod composer_view;
 pub mod facet_modal;
+pub mod post_likes;
 pub mod thread_view;
 pub mod updating_feed;
 
 use composer_view::ComposerView;
 use facet_modal::FacetModal;
+use post_likes::PostLikes;
 use thread_view::ThreadView;
 use updating_feed::UpdatingFeed;
 
@@ -13,6 +15,7 @@ pub enum Column {
     Thread(ThreadView),
     Composer(ComposerView),
     FacetModal(FacetModal),
+    PostLikes(PostLikes),
 }
 
 pub struct ColumnStack {

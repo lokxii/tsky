@@ -23,6 +23,7 @@ use crate::{
     columns::{
         composer_view::ComposerView,
         facet_modal::{FacetModal, Link},
+        post_likes::PostLikes,
         Column,
     },
     components::{
@@ -213,7 +214,7 @@ impl EventReceiver for &Post {
     async fn handle_events(
         self,
         event: event::Event,
-        _: BskyAgent,
+        agent: BskyAgent,
     ) -> AppEvent {
         let Event::Key(key) = event else {
             return AppEvent::None;
@@ -375,6 +376,18 @@ impl EventReceiver for &Post {
                         state: ConnectedListState::new(Some(0)),
                     },
                 ));
+            }
+
+            KeyCode::Char('F') => {
+                let post_likes = PostLikes::new(agent, self.uri.clone()).await;
+                let post_likes = match post_likes {
+                    Ok(p) => p,
+                    Err(e) => {
+                        log::error!("Cannot get post likes: {}", e);
+                        return AppEvent::None;
+                    }
+                };
+                return AppEvent::ColumnNewLayer(Column::PostLikes(post_likes));
             }
 
             _ => return AppEvent::None,
