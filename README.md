@@ -74,6 +74,7 @@ Feed / Thread view
 | `space` | like post |
 | `o` | repost post |
 | `p` | open post in browser |
+| `a` | open author page in browser |
 | `m` | open media (VLC is required to watch video) |
 | `enter` | open post thread view |
 | `enter (in thread view)` | open embeded post (if any) |

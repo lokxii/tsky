@@ -325,7 +325,21 @@ impl EventReceiver for &Post {
                     "https://bsky.app/profile/{}/post/{}",
                     author, post_id
                 );
-                if let Result::Err(e) = Command::new("xdg-open")
+                if let Err(e) = Command::new("xdg-open")
+                    .arg(url)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                {
+                    log::error!("{:?}", e);
+                }
+                return AppEvent::None;
+            }
+
+            KeyCode::Char('a') => {
+                let author = &self.author.handle;
+                let url = format!("https://bsky.app/profile/{}", author);
+                if let Err(e) = Command::new("xdg-open")
                     .arg(url)
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
