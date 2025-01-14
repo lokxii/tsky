@@ -597,7 +597,7 @@ impl TextArea {
     pub fn insert_string(&mut self, s: String) {
         let mut old_clipboard = s.split('\n').map(String::from).collect();
         std::mem::swap(&mut self.clipboard, &mut old_clipboard);
-        self.paste_after();
+        self.paste_before();
         std::mem::swap(&mut self.clipboard, &mut old_clipboard);
     }
 
