@@ -335,6 +335,7 @@ impl ComposerView {
                 Ok(_) => {}
                 Err(e) => {
                     log::error!("Cannot post: {}", e);
+                    return AppEvent::None;
                 }
             }
             log::info!("Posted");
@@ -760,8 +761,8 @@ impl Widget for &mut ComposerView {
             300 - text_lines
                 .into_iter()
                 .map(|l| l.chars().count())
-                .sum::<usize>()
-                - text_lines.len()
+                .sum::<usize>() as i64
+                - text_lines.len() as i64
                 + 1
         };
         self.text_field.set_block(
