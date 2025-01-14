@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use chrono::{DateTime, Local};
 use lazy_static::lazy_static;
 use tokio::sync::Mutex;
 
@@ -18,15 +19,11 @@ impl log::Log for Logger {
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
             let logs = Arc::clone(&LOGSTORE.logs);
-            let msg = format!(
-                "[{}][{}]{}",
-                record.level(),
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-                record.args()
-            );
+            let time = chrono::Local::now();
+            let msg = format!("[{}] {}", record.level(), record.args());
             tokio::spawn(async move {
                 let mut logs = logs.lock().await;
-                logs.push(msg);
+                logs.push((time, msg));
             });
         }
     }
@@ -35,7 +32,7 @@ impl log::Log for Logger {
 }
 
 pub struct LogStore {
-    pub logs: Arc<Mutex<Vec<String>>>,
+    pub logs: Arc<Mutex<Vec<(DateTime<Local>, String)>>>,
 }
 
 impl LogStore {

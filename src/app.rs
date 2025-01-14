@@ -46,9 +46,21 @@ impl App {
 
         terminal
             .draw(|f| {
+                let last_log = logs
+                    .last()
+                    .map(|(time, log)| {
+                        let delta_time = chrono::Local::now() - time;
+                        if delta_time.num_seconds() < 5 {
+                            Some(log)
+                        } else {
+                            None
+                        }
+                    })
+                    .flatten();
+
                 let [main_area, log_area] = Layout::vertical([
                     Constraint::Fill(1),
-                    Constraint::Length(1),
+                    Constraint::Length(last_log.is_some() as u16),
                 ])
                 .areas(f.area());
 
@@ -88,10 +100,9 @@ impl App {
                     self.column.push(Column::FacetModal(modal.unwrap()));
                 }
 
-                f.render_widget(
-                    format!("log: {}", logs.last().unwrap_or(&String::new())),
-                    log_area,
-                );
+                last_log.map(|log| {
+                    f.render_widget(log, log_area);
+                });
             })
             .unwrap();
     }
