@@ -1,11 +1,11 @@
-use std::sync::Arc;
+use std::{io::Stdout, sync::Arc};
 
 use bsky_sdk::BskyAgent;
 use crossterm::event;
 use ratatui::{
     layout::{Constraint, Layout},
-    text::Line,
-    widgets::Widget,
+    prelude::CrosstermBackend,
+    Terminal,
 };
 
 use crate::{
@@ -37,6 +37,65 @@ impl App {
         App { column }
     }
 
+    pub async fn render(
+        &mut self,
+        terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    ) {
+        let logs = Arc::clone(&LOGSTORE.logs);
+        let logs = logs.lock().await;
+
+        terminal
+            .draw(|f| {
+                let [main_area, log_area] = Layout::vertical([
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                ])
+                .areas(f.area());
+
+                let last = self.column.pop();
+                let (mut modal, mut last) =
+                    if let Some(Column::FacetModal(f)) = last {
+                        (Some(f), self.column.pop())
+                    } else {
+                        (None, last)
+                    };
+
+                match &mut last {
+                    None => {}
+                    Some(Column::UpdatingFeed(feed)) => {
+                        f.render_widget(feed, main_area);
+                    }
+                    Some(Column::Thread(thread)) => {
+                        f.render_widget(thread, main_area);
+                    }
+                    Some(Column::Composer(composer)) => {
+                        f.render_widget(composer, main_area);
+                    }
+                    Some(Column::FacetModal(_)) => {
+                        panic!("FacetModal on top of FacetModal?")
+                    }
+                }
+
+                match &mut modal {
+                    None => {}
+                    Some(modal) => f.render_widget(modal, main_area),
+                }
+
+                if last.is_some() {
+                    self.column.push(last.unwrap());
+                }
+                if modal.is_some() {
+                    self.column.push(Column::FacetModal(modal.unwrap()));
+                }
+
+                f.render_widget(
+                    format!("log: {}", logs.last().unwrap_or(&String::new())),
+                    log_area,
+                );
+            })
+            .unwrap();
+    }
+
     pub async fn active(&mut self) {
         let last = self.column.pop();
         if last.is_none() {
@@ -50,61 +109,6 @@ impl App {
             self.column.push(Column::Composer(composer));
             return;
         }
-    }
-}
-
-impl Widget for &mut App {
-    fn render(
-        self,
-        area: ratatui::prelude::Rect,
-        buf: &mut ratatui::prelude::Buffer,
-    ) where
-        Self: Sized,
-    {
-        let logs = Arc::clone(&LOGSTORE.logs);
-        let logs = logs.lock().unwrap();
-
-        let [main_area, log_area] =
-            Layout::vertical([Constraint::Fill(1), Constraint::Length(1)])
-                .areas(area);
-
-        let last = self.column.pop();
-        let (mut modal, mut last) = if let Some(Column::FacetModal(f)) = last {
-            (Some(f), self.column.pop())
-        } else {
-            (None, last)
-        };
-
-        match &mut last {
-            None => {}
-            Some(Column::UpdatingFeed(feed)) => {
-                feed.render(main_area, buf);
-            }
-            Some(Column::Thread(thread)) => {
-                thread.render(main_area, buf);
-            }
-            Some(Column::Composer(composer)) => {
-                composer.render(main_area, buf);
-            }
-            Some(Column::FacetModal(_)) => {
-                panic!("FacetModal on top of FacetModal?")
-            }
-        }
-
-        match &mut modal {
-            None => {}
-            Some(modal) => modal.render(main_area, buf),
-        }
-
-        if last.is_some() {
-            self.column.push(last.unwrap());
-        }
-        if modal.is_some() {
-            self.column.push(Column::FacetModal(modal.unwrap()));
-        }
-
-        Line::from(format!("log: {}", logs.last().unwrap_or(&String::new())))
-            .render(log_area, buf);
     }
 }
 

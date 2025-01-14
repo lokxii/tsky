@@ -77,7 +77,7 @@ async fn main() {
 
     loop {
         app.active().await;
-        terminal.draw(|f| f.render_widget(&mut app, f.area())).unwrap();
+        app.render(&mut terminal).await;
 
         if !event::poll(std::time::Duration::from_millis(500))
             .expect("Error polling event")
