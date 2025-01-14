@@ -1,14 +1,14 @@
 use std::process::{Command, Stdio};
 
 use bsky_sdk::BskyAgent;
-use crossterm::event::{self, Event, KeyCode};
-use ratatui::prelude::StatefulWidget;
-use ratatui::widgets::{BorderType, Padding};
 use ratatui::{
+    crossterm::event::{self, Event, KeyCode},
     layout::{Constraint, Layout},
+    prelude::StatefulWidget,
     style::{Color, Style},
     text::Span,
     widgets::{Block, Clear, Widget},
+    widgets::{BorderType, Padding},
 };
 
 use crate::app::{AppEvent, EventReceiver};

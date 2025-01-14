@@ -16,7 +16,7 @@ use atrium_api::{
 };
 use bsky_sdk::BskyAgent;
 use chrono::{DateTime, FixedOffset, Local};
-use crossterm::event::{self, Event, KeyCode};
+use ratatui::crossterm::event::{self, Event, KeyCode};
 
 use crate::{
     app::{AppEvent, EventReceiver},

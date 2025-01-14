@@ -17,17 +17,20 @@ use components::{
     logger::LOGGER,
     post_manager::{self, PostManager},
 };
-use crossterm::{
-    event::{self, DisableBracketedPaste, EnableBracketedPaste},
-    execute,
-    terminal::{
-        disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
-        LeaveAlternateScreen,
-    },
-};
 use dotenvy::dotenv;
 use lazy_static::lazy_static;
-use ratatui::{prelude::CrosstermBackend, DefaultTerminal, Terminal};
+use ratatui::{
+    crossterm::{
+        event::{self, DisableBracketedPaste, EnableBracketedPaste},
+        execute,
+        terminal::{
+            disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
+            LeaveAlternateScreen,
+        },
+    },
+    prelude::CrosstermBackend,
+    DefaultTerminal, Terminal,
+};
 
 use crate::{
     app::{App, AppEvent, EventReceiver},

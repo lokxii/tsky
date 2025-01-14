@@ -1,7 +1,9 @@
 use atrium_api::app::bsky::feed::get_timeline;
 use bsky_sdk::BskyAgent;
-use crossterm::event::{self, Event, KeyCode};
-use ratatui::widgets::Widget;
+use ratatui::{
+    crossterm::event::{self, Event, KeyCode},
+    widgets::Widget,
+};
 use std::sync::{
     mpsc::{Receiver, Sender},
     Arc, Mutex,

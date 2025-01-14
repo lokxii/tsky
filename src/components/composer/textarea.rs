@@ -1,9 +1,9 @@
 use crate::components::paragraph::Paragraph;
-use crossterm::event::{
-    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
-    MouseEventKind,
-};
 use ratatui::{
+    crossterm::event::{
+        Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
+        MouseEventKind,
+    },
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, Widget},

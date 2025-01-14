@@ -1,8 +1,8 @@
 use std::{io::Read, process::Stdio};
 
 use bsky_sdk::BskyAgent;
-use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
+    crossterm::event::{self, Event, KeyCode},
     layout::{Constraint, Layout, Rect},
     style::{Color, Style},
     text::Line,
@@ -546,8 +546,8 @@ impl Image {
             .await
             .map_err(|e| format!("Cannot read from file: {}", e))?;
 
-        let mime = tree_magic::from_u8(&data);
-        if !accepted_types.contains(&mime.as_str()) {
+        let mime = tree_magic_mini::from_u8(&data);
+        if !accepted_types.contains(&mime) {
             return Err("Filetype not supported".to_string());
         };
 

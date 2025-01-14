@@ -9,8 +9,8 @@ use atrium_api::{
     types::Union,
 };
 use bsky_sdk::BskyAgent;
-use crossterm::event::{self, Event, KeyCode};
 use ratatui::{
+    crossterm::event::{self, Event, KeyCode},
     style::Color,
     text::Line,
     widgets::{Block, BorderType, Borders, Padding, StatefulWidget, Widget},

@@ -22,8 +22,8 @@ use atrium_api::{
     types::{string::Language, Union},
 };
 use bsky_sdk::{rich_text::RichText, BskyAgent};
-use crossterm::event::{self, Event};
 use ratatui::{
+    crossterm::event::{self, Event},
     layout::{Constraint, Layout},
     style::{Style, Stylize},
     text::Line,

@@ -1,8 +1,8 @@
 use std::{io::Stdout, sync::Arc};
 
 use bsky_sdk::BskyAgent;
-use crossterm::event;
 use ratatui::{
+    crossterm::event,
     layout::{Constraint, Layout},
     prelude::CrosstermBackend,
     Terminal,
