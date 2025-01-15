@@ -58,15 +58,15 @@ pub struct ReplyRef {
 }
 
 #[derive(Clone)]
-pub struct Author {
+pub struct ActorBasic {
     pub name: String,
     pub handle: String,
     pub labels: Vec<String>,
 }
 
-impl Author {
+impl ActorBasic {
     pub fn from(author: &ProfileViewBasicData) -> Self {
-        Author {
+        ActorBasic {
             name: author.display_name.clone().unwrap_or("(None)".to_string()),
             handle: author.handle.to_string(),
             labels: author
@@ -97,7 +97,7 @@ pub struct Facet {
 pub struct Post {
     pub uri: String,
     pub cid: Cid,
-    pub author: Author,
+    pub author: ActorBasic,
     pub created_at: DateTime<FixedOffset>,
     pub text: String,
     pub like_view: LikeRepostView,
@@ -129,7 +129,7 @@ impl Post {
         };
 
         let text = record.text.replace("\t", "    ");
-        let author = Author::from(author);
+        let author = ActorBasic::from(author);
 
         let like = match &view.viewer {
             Some(viewer) => {

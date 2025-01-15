@@ -1,12 +1,27 @@
 use std::sync::{Arc, Mutex};
 
 use bsky_sdk::BskyAgent;
+use ratatui::{
+    crossterm::event::{Event, KeyCode},
+    layout::{Constraint, Layout},
+    style::{Color, Style},
+    text::Line,
+    widgets::{StatefulWidget, Widget},
+};
 
-use crate::components::post::Author;
+use crate::{
+    app::{AppEvent, EventReceiver},
+    components::{
+        list::{List, ListContext, ListState},
+        post::ActorBasic,
+    },
+};
 
 pub struct PostLikes {
     uri: String,
-    likes: Arc<Mutex<LikeList>>,
+    actors: Vec<Actor>,
+    cursor: Option<String>,
+    state: ListState,
 }
 
 impl PostLikes {
@@ -58,21 +73,71 @@ impl PostLikes {
                         labels,
                         viewer,
                     };
-                Actor { basic: Author::from(&basic), description }
+                Actor { basic: ActorBasic::from(&basic), description }
             })
             .collect();
-        let likes = LikeList { actors, cursor };
 
-        Ok(PostLikes { uri, likes: Arc::new(Mutex::new(likes)) })
+        Ok(PostLikes { uri, actors, cursor, state: ListState::default() })
     }
 }
 
-struct LikeList {
-    actors: Vec<Actor>,
-    cursor: Option<String>,
+impl EventReceiver for &mut PostLikes {
+    async fn handle_events(
+        self,
+        event: ratatui::crossterm::event::Event,
+        agent: BskyAgent,
+    ) -> crate::app::AppEvent {
+        let Event::Key(key) = event.into() else {
+            return AppEvent::None;
+        };
+        match key.code {
+            KeyCode::Char('j') => {
+                if let None = self.state.selected {
+                    self.state.select(Some(0));
+                } else {
+                    self.state.next();
+                }
+                return AppEvent::None;
+            }
+            KeyCode::Char('k') => {
+                self.state.previous();
+                return AppEvent::None;
+            }
+            KeyCode::Backspace => return AppEvent::ColumnPopLayer,
+
+            _ => return AppEvent::None,
+        }
+    }
+}
+
+impl Widget for &mut PostLikes {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+        let [title_area, list_area] =
+            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)])
+                .areas(area);
+        Line::from("Post likes:").render(title_area, buf);
+
+        let list = List::new(self.actors.len(), |context: ListContext| {
+            let name = self.actors[context.index].basic.name.clone();
+            let style = if context.is_selected {
+                Style::default().bg(Color::Rgb(45, 50, 55))
+            } else {
+                Style::default()
+            };
+            let item = Line::styled(name, style);
+            return (item, 1);
+        });
+        list.render(list_area, buf, &mut self.state);
+    }
 }
 
 struct Actor {
-    basic: Author,
+    basic: ActorBasic,
     description: Option<String>,
 }

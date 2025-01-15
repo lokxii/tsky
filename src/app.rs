@@ -86,7 +86,9 @@ impl App {
                     Some(Column::FacetModal(_)) => {
                         panic!("FacetModal on top of FacetModal?")
                     }
-                    Some(Column::PostLikes(_)) => todo!("render post likes"),
+                    Some(Column::PostLikes(post_likes)) => {
+                        f.render_widget(post_likes, main_area);
+                    }
                 }
 
                 match &mut modal {
@@ -144,7 +146,9 @@ impl EventReceiver for &mut App {
             Some(Column::FacetModal(modal)) => {
                 return modal.handle_events(event, agent).await
             }
-            Some(Column::PostLikes(_)) => todo!("post likes event receiver"),
+            Some(Column::PostLikes(post_likes)) => {
+                return post_likes.handle_events(event, agent).await
+            }
         };
     }
 }

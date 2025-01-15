@@ -11,7 +11,7 @@ use atrium_api::{
     types::{Object, Union},
 };
 
-use crate::components::post::Author;
+use crate::components::post::ActorBasic;
 
 #[derive(Clone)]
 pub enum Embed {
@@ -144,7 +144,7 @@ impl Record {
                 };
                 let text = text.replace("\t", "    ");
 
-                let author = Author::from(&post.author);
+                let author = ActorBasic::from(&post.author);
 
                 Record::Post(EmbededPost {
                     uri: post.uri.clone(),
@@ -170,7 +170,7 @@ impl Record {
 #[derive(Clone)]
 pub struct EmbededPost {
     pub uri: String,
-    pub author: Author,
+    pub author: ActorBasic,
     pub has_embed: bool,
     pub media: Option<EmbededPostMedia>,
     pub text: String,
