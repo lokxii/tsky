@@ -102,7 +102,6 @@ impl Feed {
     }
 
     fn remove_duplicate(&mut self) {
-        let selected_post = self.state.selected.map(|i| self.posts[i].clone());
         let new_view = self
             .posts
             .iter()
@@ -110,12 +109,34 @@ impl Feed {
             .map(FeedPost::clone)
             .collect::<Vec<_>>();
 
-        self.state.select(selected_post.map(|post| {
-            if let Some(i) = new_view.iter().position(|p| p.post_uri == post.post_uri) {
-                return i;
+        if let Some(i) = self.state.selected {
+            let mut j = i as i64;
+            while j >= 0 {
+                let selected_post = &self.posts[j as usize];
+                let position = new_view.iter().position(|p| p == selected_post);
+                if position.is_some() {
+                    self.state.select(position);
+                    self.posts = new_view;
+                    return;
+                } else {
+                    j -= 1;
+                }
             }
-            panic!("Cannot decide which post to select after removing duplications");
-        }));
+            let mut j = i + 1;
+            while j < self.posts.len() {
+                let selected_post = &self.posts[j as usize];
+                let position = new_view.iter().position(|p| p == selected_post);
+                if position.is_some() {
+                    self.state.select(position);
+                    self.posts = new_view;
+                    return;
+                } else {
+                    j += 1;
+                }
+            }
+            // don't change selected
+        }
+
         self.posts = new_view;
     }
 }
@@ -143,7 +164,7 @@ impl Widget for &mut Feed {
     }
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct RepostBy {
     pub author: String,
     pub handle: String,
