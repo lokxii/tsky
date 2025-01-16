@@ -105,6 +105,9 @@ where
         let mut bottom_y = 0;
         let mut first = true;
 
+        let mut upper_items = vec![];
+        let mut upper_rects = vec![];
+
         while i >= 0 {
             let (item, height) = (self.f)(ListContext {
                 index: i as usize,
@@ -137,18 +140,30 @@ where
                 y -= height as i32;
             }
 
-            render_truncated(
-                item,
-                SignedRect {
-                    x: area.left() as i32,
-                    y: area.top() as i32 + y,
-                    width: area.width,
-                    height,
-                },
-                area,
-                buf,
-            );
+            upper_items.push(item);
+            upper_rects.push(SignedRect {
+                x: area.left() as i32,
+                y: area.top() as i32 + y,
+                width: area.width,
+                height,
+            });
             i -= 1;
+        }
+
+        if let Some(last) = upper_rects.last() {
+            if last.y > 0 {
+                let offset = last.y;
+                upper_rects = upper_rects
+                    .iter()
+                    .map(|r| SignedRect { y: r.y - offset, ..*r })
+                    .collect();
+                bottom_y -= offset as u16;
+            }
+        }
+
+        let it = upper_items.into_iter().zip(upper_rects.into_iter());
+        for (item, rect) in it {
+            render_truncated(item, rect, area, buf);
         }
 
         let mut i = state.selected.map(|i| i + 1).unwrap_or(1);

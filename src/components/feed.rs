@@ -47,15 +47,10 @@ impl Feed {
         let autoscrolling = self.state.selected == Some(0);
 
         let Some(overlap_idx) = ({
-            let mut i = None;
-            for np in new_posts.iter().rev() {
-                if let Some(overlap_idx) =
-                    self.posts.iter().position(|p| p == np)
-                {
-                    i = Some(overlap_idx)
-                }
-            }
-            i
+            new_posts
+                .iter()
+                .rev()
+                .find_map(|np| self.posts.iter().position(|p| p == np))
         }) else {
             self.posts = new_posts;
             self.state.select(Some(0));
