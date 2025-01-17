@@ -12,11 +12,18 @@ pub struct Paragraph<'a> {
     wrap: bool,
     text: Text<'a>,
     scroll_y: usize,
+    style: Style,
 }
 
 impl<'a> Paragraph<'a> {
     pub fn new<T: Into<Text<'a>>>(text: T) -> Self {
-        Self { block: None, wrap: true, text: text.into(), scroll_y: 0 }
+        Self {
+            block: None,
+            wrap: true,
+            text: text.into(),
+            scroll_y: 0,
+            style: Style::default(),
+        }
     }
 
     pub fn block(mut self, block: Block<'a>) -> Self {
@@ -31,6 +38,11 @@ impl<'a> Paragraph<'a> {
 
     pub fn scroll(mut self, scroll: usize) -> Self {
         self.scroll_y = scroll;
+        self
+    }
+
+    pub fn style(mut self, style: Style) -> Self {
+        self.style = style;
         self
     }
 
@@ -81,7 +93,7 @@ impl<'a> Widget for Paragraph<'a> {
                     height: 1,
                     width: area.width,
                 };
-                l.render(a, buf);
+                l.style(self.style).render(a, buf);
             });
     }
 }

@@ -1,3 +1,4 @@
+pub mod actor;
 pub mod composer;
 pub mod connected_list;
 pub mod embed;

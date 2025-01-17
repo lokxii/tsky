@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::components::{
+    actor::ActorBasicWidget,
     embed::embed_widget::EmbedWidget,
     paragraph::Paragraph,
     post::{FacetType, Post},
@@ -131,15 +132,9 @@ impl Widget for PostWidget {
             ])
             .areas(area);
 
-        let author_labels = post
-            .author
-            .labels
-            .iter()
-            .fold(String::new(), |acc, e| format!("{} [{}]", acc, e));
-        (Span::styled(post.author.name.clone(), Color::Cyan)
-            + Span::styled(format!(" @{}", post.author.handle), Color::Gray)
-            + Span::styled(author_labels, Color::LightRed))
-        .render(author_area, buf);
+        ActorBasicWidget::new(&post.author)
+            .set_focused(self.is_selected)
+            .render(author_area, buf);
 
         Line::from(post.created_at.to_string())
             .style(Color::DarkGray)

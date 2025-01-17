@@ -11,7 +11,7 @@ use atrium_api::{
     types::{Object, Union},
 };
 
-use crate::components::post::ActorBasic;
+use crate::components::actor::ActorBasic;
 
 #[derive(Clone)]
 pub enum Embed {

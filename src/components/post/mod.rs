@@ -8,7 +8,6 @@ use std::{
 
 use atrium_api::{
     app::bsky::{
-        actor::defs::ProfileViewBasicData,
         feed::{defs::PostView, post},
         richtext::facet::MainFeaturesItem,
     },
@@ -27,8 +26,8 @@ use crate::{
         Column,
     },
     components::{
-        composer, connected_list::ConnectedListState, embed::Embed,
-        post_manager,
+        actor::ActorBasic, composer, connected_list::ConnectedListState,
+        embed::Embed, post_manager,
     },
     post_manager_tx,
 };
@@ -55,29 +54,6 @@ pub struct PostRef {
 pub struct ReplyRef {
     pub parent: PostRef,
     pub root: PostRef,
-}
-
-#[derive(Clone)]
-pub struct ActorBasic {
-    pub name: String,
-    pub handle: String,
-    pub labels: Vec<String>,
-}
-
-impl ActorBasic {
-    pub fn from(author: &ProfileViewBasicData) -> Self {
-        ActorBasic {
-            name: author.display_name.clone().unwrap_or("(None)".to_string()),
-            handle: author.handle.to_string(),
-            labels: author
-                .labels
-                .as_ref()
-                .unwrap_or(&vec![])
-                .iter()
-                .map(|label| label.val.clone())
-                .collect(),
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -379,14 +355,7 @@ impl EventReceiver for &Post {
             }
 
             KeyCode::Char('F') => {
-                let post_likes = PostLikes::new(agent, self.uri.clone()).await;
-                let post_likes = match post_likes {
-                    Ok(p) => p,
-                    Err(e) => {
-                        log::error!("Cannot get post likes: {}", e);
-                        return AppEvent::None;
-                    }
-                };
+                let post_likes = PostLikes::new(agent, self.uri.clone());
                 return AppEvent::ColumnNewLayer(Column::PostLikes(post_likes));
             }
 

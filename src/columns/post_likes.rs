@@ -4,53 +4,87 @@ use bsky_sdk::BskyAgent;
 use ratatui::{
     crossterm::event::{Event, KeyCode},
     layout::{Constraint, Layout},
-    style::{Color, Style},
     text::Line,
-    widgets::{StatefulWidget, Widget},
+    widgets::{Block, BorderType, StatefulWidget, Widget},
 };
 
 use crate::{
     app::{AppEvent, EventReceiver},
     components::{
+        actor::{Actor, ActorBasic, ActorWidget},
         list::{List, ListContext, ListState},
-        post::ActorBasic,
     },
 };
 
 pub struct PostLikes {
     uri: String,
-    actors: Vec<Actor>,
-    cursor: Option<String>,
+    likes: Arc<Mutex<Option<(Vec<Actor>, Option<String>)>>>,
     state: ListState,
 }
 
 impl PostLikes {
-    pub async fn new(agent: BskyAgent, uri: String) -> Result<Self, String> {
-        let res = agent
-            .api
-            .app
-            .bsky
-            .feed
-            .get_likes(
-                atrium_api::app::bsky::feed::get_likes::ParametersData {
-                    cid: None,
-                    cursor: None,
-                    limit: Some(100.try_into().unwrap()),
-                    uri: uri.clone(),
+    pub fn new(agent: BskyAgent, uri: String) -> Self {
+        let likes = Arc::new(Mutex::new(None));
+        let likes_c = Arc::clone(&likes);
+        let uri_c = uri.clone();
+        tokio::spawn(async move {
+            let o = match fetch_likes(agent, uri_c, None).await {
+                Ok(o) => o,
+                Err(e) => {
+                    log::error!("Cannot fetch likes: {}", e);
+                    return;
                 }
-                .into(),
-            )
-            .await
-            .map_err(|e| e.to_string())?;
-        let atrium_api::app::bsky::feed::get_likes::OutputData {
-            cursor,
-            likes,
-            ..
-        } = res.data;
-        let actors = likes
-            .into_iter()
-            .map(|like| {
-                let atrium_api::app::bsky::actor::defs::ProfileViewData {
+            };
+            let mut likes = likes_c.lock().unwrap();
+            *likes = Some(o);
+        });
+        PostLikes { uri, likes, state: ListState::default() }
+    }
+}
+
+async fn fetch_likes(
+    agent: BskyAgent,
+    uri: String,
+    cursor: Option<String>,
+) -> Result<(Vec<Actor>, Option<String>), String> {
+    let res = agent
+        .api
+        .app
+        .bsky
+        .feed
+        .get_likes(
+            atrium_api::app::bsky::feed::get_likes::ParametersData {
+                cid: None,
+                cursor,
+                limit: Some(100.try_into().unwrap()),
+                uri,
+            }
+            .into(),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let atrium_api::app::bsky::feed::get_likes::OutputData {
+        cursor,
+        likes,
+        ..
+    } = res.data;
+    let actors = likes
+        .into_iter()
+        .map(|like| {
+            let atrium_api::app::bsky::actor::defs::ProfileViewData {
+                associated,
+                avatar,
+                created_at,
+                did,
+                display_name,
+                handle,
+                labels,
+                viewer,
+                description,
+                ..
+            } = like.actor.data.clone();
+            let basic =
+                atrium_api::app::bsky::actor::defs::ProfileViewBasicData {
                     associated,
                     avatar,
                     created_at,
@@ -59,26 +93,11 @@ impl PostLikes {
                     handle,
                     labels,
                     viewer,
-                    description,
-                    ..
-                } = like.actor.data.clone();
-                let basic =
-                    atrium_api::app::bsky::actor::defs::ProfileViewBasicData {
-                        associated,
-                        avatar,
-                        created_at,
-                        did,
-                        display_name,
-                        handle,
-                        labels,
-                        viewer,
-                    };
-                Actor { basic: ActorBasic::from(&basic), description }
-            })
-            .collect();
-
-        Ok(PostLikes { uri, actors, cursor, state: ListState::default() })
-    }
+                };
+            Actor { basic: ActorBasic::from(&basic), description }
+        })
+        .collect();
+    return Ok((actors, cursor));
 }
 
 impl EventReceiver for &mut PostLikes {
@@ -92,11 +111,49 @@ impl EventReceiver for &mut PostLikes {
         };
         match key.code {
             KeyCode::Char('j') => {
+                let likes = {
+                    let likes = Arc::clone(&self.likes);
+                    let likes = likes.lock().unwrap();
+                    likes.clone()
+                };
+                if likes.is_none() {
+                    return AppEvent::None;
+                }
+
+                let (actors, cursor) = likes.unwrap();
+                let likes = Arc::clone(&self.likes);
+
                 if let None = self.state.selected {
                     self.state.select(Some(0));
-                } else {
-                    self.state.next();
+                    return AppEvent::None;
                 }
+                if self.state.selected.unwrap() == actors.len() - 1
+                    && cursor.is_some()
+                {
+                    let uri = self.uri.clone();
+                    tokio::spawn(async move {
+                        let new_likes =
+                            fetch_likes(agent, uri, cursor.clone()).await;
+                        let mut new_likes = match new_likes {
+                            Ok(o) => o,
+                            Err(e) => {
+                                log::error!("Cannot fetch likes: {}", e);
+                                return;
+                            }
+                        };
+                        let mut likes = likes.lock().unwrap();
+                        if likes.is_none() {
+                            return;
+                        }
+                        if likes.as_ref().unwrap().1 != cursor {
+                            return;
+                        }
+                        likes.as_mut().unwrap().0.append(&mut new_likes.0);
+                        likes.as_mut().unwrap().1 = new_likes.1;
+                    });
+                    return AppEvent::None;
+                }
+                self.state.next();
                 return AppEvent::None;
             }
             KeyCode::Char('k') => {
@@ -123,21 +180,20 @@ impl Widget for &mut PostLikes {
                 .areas(area);
         Line::from("Post likes:").render(title_area, buf);
 
-        let list = List::new(self.actors.len(), |context: ListContext| {
-            let name = self.actors[context.index].basic.name.clone();
-            let style = if context.is_selected {
-                Style::default().bg(Color::Rgb(45, 50, 55))
-            } else {
-                Style::default()
-            };
-            let item = Line::styled(name, style);
-            return (item, 1);
+        let likes = Arc::clone(&self.likes);
+        let likes = likes.lock().unwrap();
+        if likes.is_none() {
+            return;
+        }
+
+        let actors = &likes.as_ref().unwrap().0;
+        let list = List::new(actors.len(), |context: ListContext| {
+            let item = ActorWidget::new(&actors[context.index])
+                .set_block(Block::bordered().border_type(BorderType::Rounded))
+                .set_focused(context.is_selected);
+            let height = item.line_count(area.width) as u16;
+            return (item, height);
         });
         list.render(list_area, buf, &mut self.state);
     }
-}
-
-struct Actor {
-    basic: ActorBasic,
-    description: Option<String>,
 }
