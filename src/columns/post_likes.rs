@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    process::{Command, Stdio},
+    sync::{Arc, Mutex},
+};
 
 use bsky_sdk::BskyAgent;
 use ratatui::{
@@ -161,6 +164,27 @@ impl EventReceiver for &mut PostLikes {
                 return AppEvent::None;
             }
             KeyCode::Backspace => return AppEvent::ColumnPopLayer,
+
+            KeyCode::Enter => {
+                let likes = Arc::clone(&self.likes);
+                let likes = likes.lock().unwrap();
+                if likes.is_none() || self.state.selected.is_none() {
+                    return AppEvent::None;
+                }
+                let i = self.state.selected.unwrap();
+                let actor = &likes.as_ref().unwrap().0[i];
+                let handle = &actor.basic.handle;
+                let url = format!("https://bsky.app/profile/{}", handle);
+                if let Err(e) = Command::new("xdg-open")
+                    .arg(url)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                {
+                    log::error!("{:?}", e);
+                }
+                return AppEvent::None;
+            }
 
             _ => return AppEvent::None,
         }
