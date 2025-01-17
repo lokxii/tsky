@@ -211,15 +211,15 @@ impl TextArea {
         return self.cursor;
     }
 
-    pub fn set_block(&mut self, block: Block<'static>) {
+    pub fn block(&mut self, block: Block<'static>) {
         self.block = Some(block);
     }
 
-    pub fn set_focus(&mut self, focus: bool) {
+    pub fn focused(&mut self, focus: bool) {
         self.focused = focus;
     }
 
-    pub fn set_text_styles(&mut self, text_styles: Vec<TextStyle>) {
+    pub fn text_styles(&mut self, text_styles: Vec<TextStyle>) {
         self.text_styles = text_styles;
     }
 

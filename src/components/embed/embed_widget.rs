@@ -17,7 +17,7 @@ pub struct EmbedWidget {
 }
 
 impl EmbedWidget {
-    pub fn new(embed: Embed, is_selected: bool) -> EmbedWidget {
+    pub fn new(embed: Embed, is_selected: bool) -> Self {
         EmbedWidget {
             embed,
             style: if is_selected {
@@ -31,7 +31,7 @@ impl EmbedWidget {
 
     pub fn line_count(&self, width: u16) -> u16 {
         if let Embed::Record(record) = &self.embed {
-            RecordWidget::new(record.clone(), false).line_count(width) as u16
+            RecordWidget::new(record, false).line_count(width) as u16
         } else {
             self.non_record_paragraph().line_count(width - 2) as u16 + 2
         }
@@ -74,7 +74,7 @@ impl Widget for EmbedWidget {
         Self: Sized,
     {
         if let Embed::Record(record) = self.embed {
-            RecordWidget::new(record, self.is_selected).render(area, buf);
+            RecordWidget::new(&record, self.is_selected).render(area, buf);
         } else {
             let borders = Block::bordered()
                 .style(self.style)

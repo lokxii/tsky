@@ -46,12 +46,12 @@ impl<'a> MediaWidget<'a> {
         MediaWidget { media, block: None, focused: None }
     }
 
-    fn set_block(mut self, block: Block<'a>) -> Self {
+    fn block(mut self, block: Block<'a>) -> Self {
         self.block = Some(block);
         self
     }
 
-    fn set_focus(mut self, focus: usize) -> Self {
+    fn focused(mut self, focus: usize) -> Self {
         self.focused = Some(focus);
         self
     }
@@ -361,17 +361,17 @@ async fn file_picker() -> Result<Option<std::path::PathBuf>, String> {
     Ok(Some(std::path::PathBuf::from(path)))
 }
 
-pub struct EmbedWidget {
-    embed: EmbedState,
+pub struct EmbedWidget<'a> {
+    embed: &'a EmbedState,
     focused: bool,
 }
 
-impl EmbedWidget {
-    pub fn new(embed: EmbedState) -> Self {
+impl<'a> EmbedWidget<'a> {
+    pub fn new(embed: &'a EmbedState) -> Self {
         EmbedWidget { embed, focused: false }
     }
 
-    pub fn set_focus(mut self, focused: bool) -> Self {
+    pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
         self
     }
@@ -390,36 +390,27 @@ impl EmbedWidget {
             Embed::Media(Media::External(_)) => (1, 0),
             Embed::Record(post) => (
                 1,
-                PostWidget::new(
-                    post_manager!().at(&post.uri).unwrap(),
-                    false,
-                    true,
-                )
-                .line_count(width),
+                PostWidget::new(post_manager!().at(&post.uri).unwrap())
+                    .has_border(true)
+                    .line_count(width),
             ),
             Embed::RecordWithMedia(post, Media::Images(images)) => (
                 images.len().clamp(1, 4) as u16,
-                PostWidget::new(
-                    post_manager!().at(&post.uri).unwrap(),
-                    false,
-                    true,
-                )
-                .line_count(width),
+                PostWidget::new(post_manager!().at(&post.uri).unwrap())
+                    .has_border(true)
+                    .line_count(width),
             ),
             Embed::RecordWithMedia(post, Media::External(_)) => (
                 1,
-                PostWidget::new(
-                    post_manager!().at(&post.uri).unwrap(),
-                    false,
-                    true,
-                )
-                .line_count(width),
+                PostWidget::new(post_manager!().at(&post.uri).unwrap())
+                    .has_border(true)
+                    .line_count(width),
             ),
         }
     }
 }
 
-impl Widget for EmbedWidget {
+impl<'a> Widget for EmbedWidget<'a> {
     fn render(
         self,
         area: ratatui::prelude::Rect,
@@ -447,9 +438,9 @@ impl Widget for EmbedWidget {
             .title(if self.focused { "Add media" } else { "Media" });
 
         if let Some(media) = media {
-            let mut mw = MediaWidget::new(&media).set_block(media_block);
+            let mut mw = MediaWidget::new(&media).block(media_block);
             if self.focused {
-                mw = mw.set_focus(self.embed.state);
+                mw = mw.focused(self.embed.state);
             }
             mw.render(media_area, buf);
         } else {
@@ -476,12 +467,10 @@ impl Widget for EmbedWidget {
                     self.embed.state == images.len()
                 }
             };
-            PostWidget::new(
-                post_manager!().at(&quote.uri).unwrap(),
-                is_selected,
-                true,
-            )
-            .render(quote_area, buf);
+            PostWidget::new(post_manager!().at(&quote.uri).unwrap())
+                .is_selected(is_selected)
+                .has_border(true)
+                .render(quote_area, buf);
         }
     }
 }

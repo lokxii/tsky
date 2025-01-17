@@ -267,7 +267,9 @@ impl Widget for &mut ThreadView {
             move |context: ConnectedListContext| match &items[context.index] {
                 ThreadViewItem::Post(uri) => {
                     let post = post_manager!().at(&uri).unwrap();
-                    let item = PostWidget::new(post, context.is_selected, true);
+                    let item = PostWidget::new(post)
+                        .is_selected(context.is_selected)
+                        .has_border(true);
                     let height = item.line_count(area.width) as u16;
                     return (ThreadViewItemWidget::Post(item), height);
                 }

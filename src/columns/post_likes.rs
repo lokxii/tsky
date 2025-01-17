@@ -213,8 +213,8 @@ impl Widget for &mut PostLikes {
         let actors = &likes.as_ref().unwrap().0;
         let list = List::new(actors.len(), |context: ListContext| {
             let item = ActorWidget::new(&actors[context.index])
-                .set_block(Block::bordered().border_type(BorderType::Rounded))
-                .set_focused(context.is_selected);
+                .block(Block::bordered().border_type(BorderType::Rounded))
+                .focused(context.is_selected);
             let height = item.line_count(area.width) as u16;
             return (item, height);
         });

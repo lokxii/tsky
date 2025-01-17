@@ -710,15 +710,12 @@ impl Widget for &mut ComposerView {
         Self: Sized,
     {
         let reply_post = self.reply.as_ref().map(|reply| {
-            PostWidget::new(
-                post_manager!().at(&reply.parent.uri).unwrap(),
-                false,
-                true,
-            )
+            PostWidget::new(post_manager!().at(&reply.parent.uri).unwrap())
+                .has_border(true)
         });
 
-        let embed = EmbedWidget::new(self.embed.clone())
-            .set_focus(matches!(self.focus, Focus::AttachmentField));
+        let embed = EmbedWidget::new(&self.embed)
+            .focused(matches!(self.focus, Focus::AttachmentField));
 
         let [_, area, _] = Layout::horizontal([
             Constraint::Fill(1),
@@ -765,15 +762,15 @@ impl Widget for &mut ComposerView {
                 - text_lines.len() as i64
                 + 1
         };
-        self.text_field.set_block(
+        self.text_field.block(
             Block::bordered()
                 .border_type(BorderType::Rounded)
                 .title(Line::from(title).left_aligned())
                 .title(Line::from(word_remaining.to_string()).right_aligned()),
         );
-        self.text_field.set_focus(matches!(self.focus, Focus::TextField));
+        self.text_field.focused(matches!(self.focus, Focus::TextField));
         let text_styles = parse_text_styles(self.text_field.lines());
-        self.text_field.set_text_styles(text_styles);
+        self.text_field.text_styles(text_styles);
         self.text_field.render(text_area, buf);
 
         let title = match (&self.focus, &self.inputmode) {
@@ -782,10 +779,10 @@ impl Widget for &mut ComposerView {
             (_, InputMode::Insert) => "Langs (Insert)",
             (_, InputMode::View) => "Langs (View)",
         };
-        self.langs_field.set_block(
+        self.langs_field.block(
             Block::bordered().border_type(BorderType::Rounded).title(title),
         );
-        self.langs_field.set_focus(matches!(self.focus, Focus::LangField));
+        self.langs_field.focused(matches!(self.focus, Focus::LangField));
         self.langs_field.render(lang_area, buf);
 
         embed.render(embed_area, buf);

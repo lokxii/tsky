@@ -21,17 +21,28 @@ pub struct PostWidget {
 }
 
 impl PostWidget {
-    pub fn new(post: Post, is_selected: bool, has_border: bool) -> PostWidget {
+    pub fn new(post: Post) -> Self {
         PostWidget {
             post,
-            style: if is_selected {
-                Style::default().bg(Color::Rgb(45, 50, 55))
-            } else {
-                Style::default()
-            },
-            is_selected,
-            has_border,
+            style: Style::default(),
+            is_selected: false,
+            has_border: false,
         }
+    }
+
+    pub fn is_selected(mut self, selected: bool) -> Self {
+        self.is_selected = selected;
+        self.style = if self.is_selected {
+            Style::default().bg(Color::Rgb(45, 50, 55))
+        } else {
+            Style::default()
+        };
+        self
+    }
+
+    pub fn has_border(mut self, has_border: bool) -> Self {
+        self.has_border = has_border;
+        self
     }
 
     pub fn line_count(&self, width: u16) -> u16 {
@@ -39,7 +50,7 @@ impl PostWidget {
             + self.body_paragraph().line_count(width) as u16
             + self.post.labels.len() as u16
             + 1 // stats
-            + self.post.embed.clone().map(|e| EmbedWidget::new(e, false).line_count(width) as u16).unwrap_or(0)
+            + self.post.embed.as_ref().map(|e| EmbedWidget::new(e.clone(), false).line_count(width) as u16).unwrap_or(0)
             + self.has_border as u16 * 2
     }
 
@@ -133,7 +144,7 @@ impl Widget for PostWidget {
             .areas(area);
 
         ActorBasicWidget::new(&post.author)
-            .set_focused(self.is_selected)
+            .focused(self.is_selected)
             .render(author_area, buf);
 
         Line::from(post.created_at.to_string())

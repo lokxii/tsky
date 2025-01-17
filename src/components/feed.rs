@@ -152,11 +152,9 @@ impl Widget for &mut Feed {
         let width = area.width;
         let posts = self.posts.clone();
 
-        List::new(self.posts.len(), move |context: ListContext| {
-            let item = FeedPostWidget::new(
-                posts[context.index].clone(),
-                context.is_selected,
-            );
+        List::new(self.posts.len(), |context: ListContext| {
+            let post = &posts[context.index];
+            let item = FeedPostWidget::new(post, context.is_selected);
             let height = item.line_count(width) as u16;
             return (item, height);
         })
@@ -247,14 +245,14 @@ impl PartialEq for FeedPost {
 
 impl Eq for FeedPost {}
 
-struct FeedPostWidget {
-    feed_post: FeedPost,
+struct FeedPostWidget<'a> {
+    feed_post: &'a FeedPost,
     is_selected: bool,
     style: Style,
 }
 
-impl FeedPostWidget {
-    fn new(feed_post: FeedPost, is_selected: bool) -> FeedPostWidget {
+impl<'a> FeedPostWidget<'a> {
+    fn new(feed_post: &'a FeedPost, is_selected: bool) -> Self {
         FeedPostWidget {
             feed_post,
             style: if is_selected {
@@ -268,14 +266,14 @@ impl FeedPostWidget {
 
     fn line_count(&self, width: u16) -> u16 {
         let post = post_manager!().at(&self.feed_post.post_uri).unwrap();
-        PostWidget::new(post, false, false).line_count(width)
+        PostWidget::new(post).line_count(width)
             + self.feed_post.reply_to.is_some() as u16
             + self.feed_post.reason.is_some() as u16
             + 2 // borders
     }
 }
 
-impl Widget for FeedPostWidget {
+impl<'a> Widget for FeedPostWidget<'a> {
     fn render(
         self,
         area: ratatui::prelude::Rect,
@@ -290,7 +288,7 @@ impl Widget for FeedPostWidget {
         borders.render(area, buf);
 
         let post = post_manager!().at(&self.feed_post.post_uri).unwrap();
-        let post_widget = PostWidget::new(post, self.is_selected, false);
+        let post_widget = PostWidget::new(post).is_selected(self.is_selected);
 
         let [top_area, post_area] = Layout::vertical([
             Constraint::Length(

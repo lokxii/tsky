@@ -228,9 +228,9 @@ impl EmbededPostMedia {
 impl Into<Embed> for EmbededPostMedia {
     fn into(self) -> Embed {
         match self {
-            Self::Images(images) => Embed::Images(images),
-            Self::Video(video) => Embed::Video(video),
-            Self::External(external) => Embed::External(external),
+            EmbededPostMedia::Images(images) => Embed::Images(images),
+            EmbededPostMedia::Video(video) => Embed::Video(video),
+            EmbededPostMedia::External(external) => Embed::External(external),
         }
     }
 }

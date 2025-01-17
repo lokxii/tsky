@@ -11,14 +11,14 @@ use crate::components::{
     paragraph::Paragraph,
 };
 
-pub struct RecordWidget {
-    record: Record,
+pub struct RecordWidget<'a> {
+    record: &'a Record,
     style: Style,
     is_selected: bool,
 }
 
-impl RecordWidget {
-    pub fn new(record: Record, is_selected: bool) -> RecordWidget {
+impl<'a> RecordWidget<'a> {
+    pub fn new(record: &'a Record, is_selected: bool) -> Self {
         RecordWidget {
             record,
             style: if is_selected {
@@ -57,7 +57,7 @@ impl RecordWidget {
     }
 }
 
-impl Widget for RecordWidget {
+impl<'a> Widget for RecordWidget<'a> {
     fn render(
         self,
         area: ratatui::prelude::Rect,
@@ -65,7 +65,7 @@ impl Widget for RecordWidget {
     ) where
         Self: Sized,
     {
-        match self.record {
+        match &self.record {
             Record::Post(post) => {
                 let text = Paragraph::new(
                     post.text
@@ -77,6 +77,7 @@ impl Widget for RecordWidget {
 
                 let media = post
                     .media
+                    .clone()
                     .map(|e| EmbedWidget::new(e.into(), self.is_selected));
 
                 let [media_area, quote_area] = Layout::vertical([
