@@ -177,13 +177,26 @@ impl EventReceiver for &mut ThreadView {
                 if let None = self.state.selected {
                     self.state.select(Some(0));
                 } else {
-                    self.state.next();
+                    if self.state.selected.unwrap() == self.parent.len() {
+                        if !self.replies.is_empty() {
+                            self.state.next();
+                            self.state.next();
+                        }
+                    } else {
+                        self.state.next();
+                    }
                 }
                 return AppEvent::None;
             }
 
             KeyCode::Char('k') => {
-                self.state.previous();
+                if matches!(self.state.selected, Some(i) if i == self.parent.len() + 2)
+                {
+                    self.state.previous();
+                    self.state.previous();
+                } else {
+                    self.state.previous();
+                }
                 return AppEvent::None;
             }
 
