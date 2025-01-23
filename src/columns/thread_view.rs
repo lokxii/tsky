@@ -13,7 +13,7 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode},
     style::Color,
     text::Line,
-    widgets::{Block, BorderType, Borders, Padding, StatefulWidget, Widget},
+    widgets::{BorderType, StatefulWidget, Widget},
 };
 
 use crate::{
@@ -24,6 +24,7 @@ use crate::{
         },
         embed::{Embed, Record},
         post::{post_widget::PostWidget, FacetType, Post},
+        separation::Separation,
     },
     post_manager, AppEvent,
 };
@@ -287,12 +288,11 @@ impl Widget for &mut ThreadView {
                     return (ThreadViewItemWidget::Post(item), height);
                 }
                 ThreadViewItem::Bar => {
-                    let item = Block::new()
-                        .borders(Borders::TOP)
-                        .title(Line::from("Replies").style(Color::Green))
-                        .padding(Padding::uniform(1))
-                        .border_type(BorderType::Double);
-                    return (ThreadViewItemWidget::Bar(item), 1);
+                    let item = Separation::default()
+                        .text(Line::from("Replies ").style(Color::Green))
+                        .line(BorderType::Double)
+                        .padding(1);
+                    return (ThreadViewItemWidget::Bar(item), 3);
                 }
             },
         )
@@ -308,7 +308,7 @@ enum ThreadViewItem {
 
 enum ThreadViewItemWidget<'a> {
     Post(PostWidget),
-    Bar(Block<'a>),
+    Bar(Separation<'a>),
 }
 
 impl<'a> Widget for ThreadViewItemWidget<'a> {

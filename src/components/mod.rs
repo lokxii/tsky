@@ -9,3 +9,4 @@ pub mod post;
 #[macro_use]
 pub mod post_manager;
 pub mod paragraph;
+pub mod separation;
