@@ -152,7 +152,7 @@ where
 
         if let Some(last) = upper_rects.last() {
             if last.y > 0 {
-                let offset = last.y;
+                let offset = area.y as i32 - last.y;
                 upper_rects = upper_rects
                     .iter()
                     .map(|r| SignedRect { y: r.y - offset, ..*r })

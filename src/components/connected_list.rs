@@ -136,7 +136,7 @@ where
                     .unwrap_or(false),
             });
             let y = state.selected_y + h as i32;
-            let y = y.clamp(0, area.bottom() as i32);
+            let y = y.clamp(0, area.height as i32);
             state.selected_y = y - h as i32;
             y
         };
@@ -154,7 +154,7 @@ where
                 item,
                 SignedRect {
                     x: area.x as i32,
-                    y: y as i32,
+                    y: area.y as i32 + y,
                     height,
                     width: area.width,
                 },
@@ -213,7 +213,7 @@ where
                 item,
                 SignedRect {
                     x: area.left() as i32,
-                    y: y as i32,
+                    y: area.top() as i32 + y,
                     height,
                     width: area.width,
                 },
