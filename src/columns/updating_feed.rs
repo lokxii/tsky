@@ -33,11 +33,7 @@ pub struct UpdatingFeed {
 impl UpdatingFeed {
     pub fn new(tx: Sender<RequestMsg>) -> UpdatingFeed {
         UpdatingFeed {
-            feed: Arc::new(Mutex::new(Feed {
-                posts: Vec::new(),
-                state: ListState::default(),
-                cursor: None,
-            })),
+            feed: Arc::new(Mutex::new(Feed::default())),
             request_worker_tx: tx,
         }
     }

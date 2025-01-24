@@ -14,7 +14,7 @@ use ratatui::{
 use crate::{
     app::{AppEvent, EventReceiver},
     components::{
-        actor::{Actor, ActorBasic, ActorWidget},
+        actor::{Actor, ActorWidget},
         list::{List, ListContext, ListState},
     },
 };
@@ -73,32 +73,7 @@ async fn fetch_likes(
     } = res.data;
     let actors = likes
         .into_iter()
-        .map(|like| {
-            let atrium_api::app::bsky::actor::defs::ProfileViewData {
-                associated,
-                avatar,
-                created_at,
-                did,
-                display_name,
-                handle,
-                labels,
-                viewer,
-                description,
-                ..
-            } = like.actor.data.clone();
-            let basic =
-                atrium_api::app::bsky::actor::defs::ProfileViewBasicData {
-                    associated,
-                    avatar,
-                    created_at,
-                    did,
-                    display_name,
-                    handle,
-                    labels,
-                    viewer,
-                };
-            Actor { basic: ActorBasic::from(&basic), description }
-        })
+        .map(|like| Actor::new(like.actor.data.clone()))
         .collect();
     return Ok((actors, cursor));
 }

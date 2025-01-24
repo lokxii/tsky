@@ -21,6 +21,7 @@ use crate::{
     post_manager,
 };
 
+#[derive(Default)]
 pub struct Feed {
     pub posts: Vec<FeedPost>,
     pub state: ListState,
@@ -30,7 +31,7 @@ pub struct Feed {
 impl Feed {
     pub fn insert_new_posts<T>(&mut self, new_posts: T) -> bool
     where
-        T: Iterator<Item = FeedPost> + Clone,
+        T: Iterator<Item = FeedPost>,
     {
         let new_posts = new_posts.collect::<Vec<_>>();
         if new_posts.len() == 0 {
@@ -163,6 +164,12 @@ impl Widget for &mut Feed {
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
+pub enum Reason {
+    Repost(RepostBy),
+    Pin,
+}
+
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct RepostBy {
     pub author: String,
     pub handle: String,
@@ -185,7 +192,7 @@ pub enum Reply {
 #[derive(Clone)]
 pub struct FeedPost {
     pub post_uri: String,
-    pub reason: Option<RepostBy>,
+    pub reason: Option<Reason>,
     pub reply_to: Option<Reply>,
 }
 
@@ -197,10 +204,13 @@ impl FeedPost {
 
         let reason = match view.reason.as_ref() {
             Some(Union::Refs(FeedViewPostReasonRefs::ReasonRepost(r))) => {
-                Some(RepostBy {
+                Some(Reason::Repost(RepostBy {
                     author: r.by.display_name.clone().unwrap_or(String::new()),
                     handle: r.by.handle.to_string(),
-                })
+                }))
+            }
+            Some(Union::Refs(FeedViewPostReasonRefs::ReasonPin(_))) => {
+                Some(Reason::Pin)
             }
             Some(Union::Unknown(u)) => {
                 panic!("Unknown reason type: {}", u.r#type)
@@ -305,7 +315,7 @@ impl<'a> Widget for FeedPostWidget<'a> {
         ])
         .areas(top_area);
 
-        if let Some(repost) = &self.feed_post.reason {
+        if let Some(Reason::Repost(repost)) = &self.feed_post.reason {
             Line::from(Span::styled(
                 format!("⭮ Reposted by {}", repost.author),
                 Color::Green,

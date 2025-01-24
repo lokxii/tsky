@@ -1,4 +1,6 @@
-use atrium_api::app::bsky::actor::defs::ProfileViewBasicData;
+use atrium_api::{
+    app::bsky::actor::defs::ProfileViewBasicData, types::string::Did,
+};
 use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Style},
@@ -10,6 +12,7 @@ use crate::components::paragraph::Paragraph;
 
 #[derive(Clone)]
 pub struct ActorBasic {
+    pub did: Did,
     pub name: String,
     pub handle: String,
     pub labels: Vec<String>,
@@ -27,6 +30,7 @@ impl ActorBasic {
                 .iter()
                 .map(|label| label.val.clone())
                 .collect(),
+            did: author.did.clone(),
         }
     }
 }
@@ -77,6 +81,36 @@ impl<'a> Widget for ActorBasicWidget<'a> {
 pub struct Actor {
     pub basic: ActorBasic,
     pub description: Option<String>,
+}
+
+impl Actor {
+    pub fn new(
+        data: atrium_api::app::bsky::actor::defs::ProfileViewData,
+    ) -> Self {
+        let atrium_api::app::bsky::actor::defs::ProfileViewData {
+            associated,
+            avatar,
+            created_at,
+            did,
+            display_name,
+            handle,
+            labels,
+            viewer,
+            description,
+            ..
+        } = data;
+        let basic = atrium_api::app::bsky::actor::defs::ProfileViewBasicData {
+            associated,
+            avatar,
+            created_at,
+            did,
+            display_name,
+            handle,
+            labels,
+            viewer,
+        };
+        Actor { basic: ActorBasic::from(&basic), description }
+    }
 }
 
 pub struct ActorWidget<'a> {
@@ -139,5 +173,85 @@ impl<'a> Widget for ActorWidget<'a> {
             .render(basic_area, buf);
         Paragraph::new(self.actor.description.clone().unwrap_or(String::new()))
             .render(description_area, buf);
+    }
+}
+
+#[derive(Clone)]
+pub struct ActorDetailed {
+    actor: Actor,
+    following_count: u64,
+    follower_count: u64,
+    posts_count: u64,
+    avatar: Option<String>,
+    banner: Option<String>,
+    blocking: bool,
+    blocked_by: bool,
+    following: bool,
+    followed_by: bool,
+    muted: bool,
+}
+
+impl ActorDetailed {
+    pub fn new(
+        data: atrium_api::app::bsky::actor::defs::ProfileViewDetailedData,
+    ) -> Self {
+        let atrium_api::app::bsky::actor::defs::ProfileViewDetailedData {
+            associated,
+            avatar,
+            banner,
+            created_at,
+            description,
+            did,
+            display_name,
+            handle,
+            indexed_at,
+            labels,
+            viewer,
+            followers_count,
+            follows_count,
+            posts_count,
+            ..
+        } = data;
+        let actor = atrium_api::app::bsky::actor::defs::ProfileViewData {
+            associated,
+            avatar: avatar.clone(),
+            created_at,
+            description,
+            did,
+            display_name,
+            handle,
+            indexed_at,
+            labels,
+            viewer: viewer.clone(),
+        };
+        let actor = Actor::new(actor);
+        ActorDetailed {
+            actor,
+            follower_count: followers_count.unwrap_or(0) as u64,
+            following_count: follows_count.unwrap_or(0) as u64,
+            posts_count: posts_count.unwrap_or(0) as u64,
+            avatar,
+            banner,
+            blocking: viewer
+                .as_ref()
+                .map(|v| v.blocking.is_some())
+                .unwrap_or(false),
+            blocked_by: viewer
+                .as_ref()
+                .map(|v| v.blocked_by.unwrap_or(false))
+                .unwrap_or(false),
+            following: viewer
+                .as_ref()
+                .map(|v| v.following.is_some())
+                .unwrap_or(false),
+            followed_by: viewer
+                .as_ref()
+                .map(|v| v.followed_by.is_some())
+                .unwrap_or(false),
+            muted: viewer
+                .as_ref()
+                .map(|v| v.muted.unwrap_or(false))
+                .unwrap_or(false),
+        }
     }
 }
