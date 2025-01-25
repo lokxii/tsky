@@ -260,11 +260,12 @@ impl ActorDetailed {
 pub struct ActorDetailedWidget<'a> {
     detailed: &'a ActorDetailed,
     focused: bool,
+    block: Option<Block<'a>>,
 }
 
 impl<'a> ActorDetailedWidget<'a> {
     pub fn new(detailed: &'a ActorDetailed) -> Self {
-        ActorDetailedWidget { detailed, focused: false }
+        ActorDetailedWidget { detailed, focused: false, block: None }
     }
 
     pub fn focused(mut self, focused: bool) -> Self {
@@ -272,11 +273,21 @@ impl<'a> ActorDetailedWidget<'a> {
         self
     }
 
+    pub fn block(mut self, block: Block<'a>) -> Self {
+        self.block = Some(block);
+        self
+    }
+
     pub fn line_count(&self, width: u16) -> u16 {
-        5 + Paragraph::new(
-            self.detailed.actor.description.clone().unwrap_or(String::new()),
-        )
-        .line_count(width)
+        4 + !self.detailed.actor.basic.labels.is_empty() as u16
+            + Paragraph::new(
+                self.detailed
+                    .actor
+                    .description
+                    .clone()
+                    .unwrap_or(String::new()),
+            )
+            .line_count(width)
     }
 }
 
@@ -288,6 +299,14 @@ impl<'a> Widget for ActorDetailedWidget<'a> {
     ) where
         Self: Sized,
     {
+        let area = if let Some(block) = self.block {
+            let inner = block.inner(area);
+            block.render(area, buf);
+            inner
+        } else {
+            area
+        };
+
         let description = Paragraph::new(
             self.detailed.actor.description.clone().unwrap_or(String::new()),
         );
@@ -296,18 +315,14 @@ impl<'a> Widget for ActorDetailedWidget<'a> {
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
-                Constraint::Length(1),
+                Constraint::Length(
+                    !self.detailed.actor.basic.labels.is_empty() as u16,
+                ),
                 Constraint::Length(1),
                 Constraint::Length(description.line_count(area.width) as u16),
             ])
             .areas(area);
 
-        let [name_area, _, ff_area] = Layout::horizontal([
-            Constraint::Min(1),
-            Constraint::Fill(1),
-            Constraint::Min(1),
-        ])
-        .areas(name_ff_area);
         let name = Span::styled(&self.detailed.actor.basic.handle, Color::Cyan);
         let ff = match (self.detailed.followed_by, self.detailed.following) {
             (true, true) => "[FF]",
@@ -316,22 +331,28 @@ impl<'a> Widget for ActorDetailedWidget<'a> {
             (false, false) => "[+ Follow]",
         };
         let ff = format!("{}{}", ff, if self.focused { "(↵)" } else { "" });
+        let [name_area, _, ff_area] = Layout::horizontal([
+            Constraint::Min(1),
+            Constraint::Fill(1),
+            Constraint::Length(ff.len() as u16),
+        ])
+        .areas(name_ff_area);
         name.render(name_area, buf);
         ff.render(ff_area, buf);
 
         Span::styled(
             format!("@{}", self.detailed.actor.basic.handle),
-            Color::Gray,
+            Color::DarkGray,
         )
         .render(handle_area, buf);
 
         [
             Span::from(self.detailed.follower_count.to_string()),
-            Span::styled(" followers ", Color::Gray),
+            Span::styled(" followers ", Color::DarkGray),
             Span::from(self.detailed.following_count.to_string()),
-            Span::styled(" following ", Color::Gray),
+            Span::styled(" following ", Color::DarkGray),
             Span::from(self.detailed.posts_count.to_string()),
-            Span::styled(" posts", Color::Gray),
+            Span::styled(" posts", Color::DarkGray),
         ]
         .into_iter()
         .fold(Line::from(""), |l, s| l + s)
@@ -344,7 +365,7 @@ impl<'a> Widget for ActorDetailedWidget<'a> {
             .labels
             .iter()
             .fold(String::new(), |acc, e| format!("{} [{}]", acc, e));
-        Span::styled(labels, Color::LightRed).render(label_area, buf);
+        Span::styled(labels.trim(), Color::LightRed).render(label_area, buf);
 
         description.render(description_area, buf);
     }

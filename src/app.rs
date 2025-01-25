@@ -89,6 +89,9 @@ impl App {
                     Some(Column::PostLikes(post_likes)) => {
                         f.render_widget(post_likes, main_area);
                     }
+                    Some(Column::ProfilePage(profile)) => {
+                        f.render_widget(profile, main_area);
+                    }
                 }
 
                 match &mut modal {
@@ -148,6 +151,9 @@ impl EventReceiver for &mut App {
             }
             Some(Column::PostLikes(post_likes)) => {
                 return post_likes.handle_events(event, agent).await
+            }
+            Some(Column::ProfilePage(profile)) => {
+                return profile.handle_events(event, agent).await
             }
         };
     }

@@ -23,6 +23,7 @@ use crate::{
         composer_view::ComposerView,
         facet_modal::{FacetModal, Link},
         post_likes::PostLikes,
+        profile_page::ProfilePage,
         Column,
     },
     components::{
@@ -314,17 +315,9 @@ impl EventReceiver for &Post {
             }
 
             KeyCode::Char('a') => {
-                let author = &self.author.handle;
-                let url = format!("https://bsky.app/profile/{}", author);
-                if let Err(e) = Command::new("xdg-open")
-                    .arg(url)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                {
-                    log::error!("{:?}", e);
-                }
-                return AppEvent::None;
+                let profile =
+                    ProfilePage::from_did(self.author.did.clone(), agent);
+                return AppEvent::ColumnNewLayer(Column::ProfilePage(profile));
             }
 
             KeyCode::Char('m') => {

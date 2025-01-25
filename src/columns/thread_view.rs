@@ -271,7 +271,7 @@ impl Widget for &mut ThreadView {
                 let item = PostWidget::new(post)
                     .is_selected(context.is_selected)
                     .has_border(true);
-                let height = item.line_count(area.width) as u16;
+                let height = item.line_count(area.width);
                 return (ThreadViewItemWidget::Post(item), height);
             }
             ThreadViewItem::Bar => {

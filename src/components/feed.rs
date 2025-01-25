@@ -317,18 +317,24 @@ impl<'a> Widget for FeedPostWidget<'a> {
         ])
         .areas(inner_area);
 
-        let [repost_area, reply_area] = Layout::vertical([
+        let [reason_area, reply_area] = Layout::vertical([
             Constraint::Length(self.feed_post.reason.is_some() as u16),
             Constraint::Length(self.feed_post.reply_to.is_some() as u16),
         ])
         .areas(top_area);
 
-        if let Some(Reason::Repost(repost)) = &self.feed_post.reason {
-            Line::from(Span::styled(
-                format!("⭮ Reposted by {}", repost.author),
-                Color::Green,
-            ))
-            .render(repost_area, buf);
+        match &self.feed_post.reason {
+            Some(Reason::Repost(repost)) => {
+                Line::styled(
+                    format!("⭮ Reposted by {}", repost.author),
+                    Color::Green,
+                )
+                .render(reason_area, buf);
+            }
+            Some(Reason::Pin) => {
+                Line::styled("📌Pinned", Color::Green).render(reason_area, buf);
+            }
+            None => {}
         }
 
         if let Some(reply_to) = &self.feed_post.reply_to {

@@ -27,7 +27,7 @@ impl<'a> Separation<'a> {
     }
 
     pub fn line_count(&self, _: u16) -> u16 {
-        self.padding + 1
+        self.padding * 2 + 1
     }
 }
 

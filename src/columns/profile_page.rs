@@ -9,16 +9,20 @@ use atrium_api::{
 };
 use bsky_sdk::BskyAgent;
 use ratatui::{
-    style::Color,
+    crossterm::event::{Event, KeyCode},
+    style::{Color, Style},
     text::Line,
-    widgets::{BorderType, StatefulWidget, Widget},
+    widgets::{Block, BorderType, StatefulWidget, Widget},
 };
 
-use crate::components::{
-    actor::{ActorDetailed, ActorDetailedWidget},
-    feed::{Feed, FeedPost, FeedPostWidget},
-    list::List,
-    separation::Separation,
+use crate::{
+    app::{AppEvent, EventReceiver},
+    components::{
+        actor::{ActorDetailed, ActorDetailedWidget},
+        feed::{Feed, FeedPost, FeedPostWidget},
+        list::List,
+        separation::Separation,
+    },
 };
 
 pub struct ProfilePage {
@@ -28,7 +32,7 @@ pub struct ProfilePage {
 }
 
 impl ProfilePage {
-    pub async fn from_did(did: String, agent: BskyAgent) -> ProfilePage {
+    pub fn from_did(did: Did, agent: BskyAgent) -> ProfilePage {
         let actor = Arc::new(Mutex::new(None));
         let feed = Arc::new(Mutex::new(Feed::default()));
 
@@ -43,7 +47,7 @@ impl ProfilePage {
                 .actor
                 .get_profile(
                     get_profile::ParametersData {
-                        actor: AtIdentifier::Did(Did::new(did_).unwrap()),
+                        actor: AtIdentifier::Did(did_),
                     }
                     .into(),
                 )
@@ -68,7 +72,7 @@ impl ProfilePage {
                 .feed
                 .get_author_feed(
                     get_author_feed::ParametersData {
-                        actor: AtIdentifier::Did(Did::new(did).unwrap()),
+                        actor: AtIdentifier::Did(did),
                         cursor: None,
                         filter: Some("posts_no_replies".into()),
                         include_pins: Some(true),
@@ -94,6 +98,26 @@ impl ProfilePage {
     }
 }
 
+impl EventReceiver for &mut ProfilePage {
+    async fn handle_events(
+        self,
+        event: ratatui::crossterm::event::Event,
+        agent: BskyAgent,
+    ) -> crate::app::AppEvent {
+        let Event::Key(key) = event else {
+            return AppEvent::None;
+        };
+        match key.code {
+            KeyCode::Backspace => return AppEvent::ColumnPopLayer,
+
+            KeyCode::Char('q') => {
+                return AppEvent::Quit;
+            }
+            _ => return AppEvent::None,
+        }
+    }
+}
+
 impl Widget for &mut ProfilePage {
     fn render(
         self,
@@ -106,31 +130,42 @@ impl Widget for &mut ProfilePage {
         let actor = self.actor.lock().unwrap();
         if actor.is_none() {
             Line::from("Loading").render(area, buf);
+            return;
         }
 
-        let items = std::iter::once(ProfilePageItemWidget::Actor(
-            ActorDetailedWidget::new((*actor).as_ref().unwrap())
-                .focused(self.actor_selected),
-        ))
-        .chain(std::iter::once(ProfilePageItemWidget::Bar(
-            Separation::default()
-                .text(Line::from("Posts ").style(Color::Green))
-                .line(BorderType::Double)
-                .padding(1),
-        )))
-        .chain(
-            feed.posts
-                .iter()
-                .map(|p| ProfilePageItemWidget::Post(FeedPostWidget::new(p))),
-        )
-        .collect::<Vec<_>>();
+        let feed = &mut *feed as *mut Feed;
+        unsafe {
+            let actor_block = Block::bordered()
+                .border_type(BorderType::Rounded)
+                .style(if self.actor_selected {
+                    Style::default().bg(Color::Rgb(45, 50, 55))
+                } else {
+                    Style::default()
+                });
+            let items =
+                std::iter::once(ProfilePageItemWidget::Actor(
+                    ActorDetailedWidget::new((*actor).as_ref().unwrap())
+                        .focused(self.actor_selected)
+                        .block(actor_block),
+                ))
+                .chain(std::iter::once(ProfilePageItemWidget::Bar(
+                    Separation::default()
+                        .text(Line::from("Posts ").style(Color::Green))
+                        .line(BorderType::Double)
+                        .padding(1),
+                )))
+                .chain((*feed).posts.iter().map(|p| {
+                    ProfilePageItemWidget::Post(FeedPostWidget::new(p))
+                }))
+                .collect::<Vec<_>>();
 
-        // ConnectedList::new(feed.posts.len() + 2, move |context| {
-        //     let item = items[context.index].clone();
-        //     let height = item.line_count(area.width);
-        //     return (item, height);
-        // })
-        // .render(area, buf, &mut feed.state);
+            List::new((*feed).posts.len() + 2, move |context| {
+                let item = items[context.index].clone();
+                let height = item.line_count(area.width);
+                return (item, height);
+            })
+            .render(area, buf, &mut (*feed).state);
+        }
     }
 }
 

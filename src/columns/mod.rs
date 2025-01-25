@@ -18,6 +18,7 @@ pub enum Column {
     Composer(ComposerView),
     FacetModal(FacetModal),
     PostLikes(PostLikes),
+    ProfilePage(ProfilePage),
 }
 
 pub struct ColumnStack {
