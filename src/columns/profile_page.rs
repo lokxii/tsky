@@ -16,8 +16,8 @@ use ratatui::{
 
 use crate::components::{
     actor::{ActorDetailed, ActorDetailedWidget},
-    connected_list::ConnectedList,
     feed::{Feed, FeedPost, FeedPostWidget},
+    list::List,
     separation::Separation,
 };
 

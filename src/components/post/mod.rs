@@ -26,8 +26,8 @@ use crate::{
         Column,
     },
     components::{
-        actor::ActorBasic, composer, connected_list::ConnectedListState,
-        embed::Embed, post_manager,
+        actor::ActorBasic, composer, embed::Embed, list::ListState,
+        post_manager,
     },
     post_manager_tx,
 };
@@ -347,10 +347,7 @@ impl EventReceiver for &Post {
                     })
                     .collect::<Vec<_>>();
                 return AppEvent::ColumnNewLayer(Column::FacetModal(
-                    FacetModal {
-                        links,
-                        state: ConnectedListState::new(Some(0)),
-                    },
+                    FacetModal { links, state: ListState::new(Some(0)) },
                 ));
             }
 

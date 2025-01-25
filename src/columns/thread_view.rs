@@ -18,25 +18,24 @@ use ratatui::{
 
 use crate::{
     app::EventReceiver,
+    columns::{
+        facet_modal::{FacetModal, Link},
+        Column,
+    },
     components::{
-        connected_list::{ConnectedList, ConnectedListState},
         embed::{Embed, Record},
+        list::{List, ListState},
         post::{post_widget::PostWidget, FacetType, Post},
         separation::Separation,
     },
     post_manager, AppEvent,
 };
 
-use super::{
-    facet_modal::{FacetModal, Link},
-    Column,
-};
-
 pub struct ThreadView {
     post_uri: String,
     parent: Vec<String>,
     replies: Vec<String>,
-    state: ConnectedListState,
+    state: ListState,
 }
 
 fn parent_posts_rev(
@@ -120,12 +119,7 @@ impl ThreadView {
             .collect();
 
         let l = parent.len();
-        ThreadView {
-            post_uri,
-            parent,
-            replies,
-            state: ConnectedListState::new(Some(l)),
-        }
+        ThreadView { post_uri, parent, replies, state: ListState::new(Some(l)) }
     }
 
     pub fn selected(&self) -> Option<&String> {
@@ -213,10 +207,7 @@ impl EventReceiver for &mut ThreadView {
                     })
                     .collect::<Vec<_>>();
                 return AppEvent::ColumnNewLayer(Column::FacetModal(
-                    FacetModal {
-                        links,
-                        state: ConnectedListState::new(Some(0)),
-                    },
+                    FacetModal { links, state: ListState::new(Some(0)) },
                 ));
             }
 
@@ -274,23 +265,21 @@ impl Widget for &mut ThreadView {
             .chain(reply_items)
             .collect::<Vec<_>>();
 
-        ConnectedList::new(items.len(), move |context| {
-            match &items[context.index] {
-                ThreadViewItem::Post(uri) => {
-                    let post = post_manager!().at(&uri).unwrap();
-                    let item = PostWidget::new(post)
-                        .is_selected(context.is_selected)
-                        .has_border(true);
-                    let height = item.line_count(area.width) as u16;
-                    return (ThreadViewItemWidget::Post(item), height);
-                }
-                ThreadViewItem::Bar => {
-                    let item = Separation::default()
-                        .text(Line::from("Replies ").style(Color::Green))
-                        .line(BorderType::Double)
-                        .padding(1);
-                    return (ThreadViewItemWidget::Bar(item), 3);
-                }
+        List::new(items.len(), move |context| match &items[context.index] {
+            ThreadViewItem::Post(uri) => {
+                let post = post_manager!().at(&uri).unwrap();
+                let item = PostWidget::new(post)
+                    .is_selected(context.is_selected)
+                    .has_border(true);
+                let height = item.line_count(area.width) as u16;
+                return (ThreadViewItemWidget::Post(item), height);
+            }
+            ThreadViewItem::Bar => {
+                let item = Separation::default()
+                    .text(Line::from("Replies ").style(Color::Green))
+                    .line(BorderType::Double)
+                    .padding(1);
+                return (ThreadViewItemWidget::Bar(item), 3);
             }
         })
         .connecting(vec![0..self.parent.len()])

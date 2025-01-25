@@ -12,8 +12,10 @@ use ratatui::{
 };
 
 use crate::app::{AppEvent, EventReceiver};
-use crate::components::connected_list::{ConnectedList, ConnectedListState};
-use crate::components::paragraph::Paragraph;
+use crate::components::{
+    list::{List, ListState},
+    paragraph::Paragraph,
+};
 
 #[derive(Clone)]
 pub struct Link {
@@ -23,7 +25,7 @@ pub struct Link {
 
 pub struct FacetModal {
     pub links: Vec<Link>,
-    pub state: ConnectedListState,
+    pub state: ListState,
 }
 
 impl EventReceiver for &mut FacetModal {
@@ -94,7 +96,7 @@ impl Widget for &mut FacetModal {
         block.render(area, buf);
 
         let items = self.links.clone();
-        ConnectedList::new(self.links.len(), move |context| {
+        List::new(self.links.len(), move |context| {
             let style = if context.is_selected {
                 Style::default().bg(Color::Rgb(45, 50, 55))
             } else {
