@@ -188,7 +188,7 @@ impl Widget for PostWidget {
         Line::from(format!(
             "❝ {}{}",
             post.quote,
-            if self.is_selected { " {i}" } else { "" }
+            if self.is_selected { " (i)" } else { "" }
         ))
         .style(stat_color)
         .alignment(Alignment::Left)
