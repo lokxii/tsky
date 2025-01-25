@@ -15,7 +15,7 @@ use crate::{
     app::{AppEvent, EventReceiver},
     components::{
         actor::{Actor, ActorWidget},
-        list::{List, ListContext, ListState},
+        list::{List, ListState},
     },
 };
 
@@ -186,7 +186,7 @@ impl Widget for &mut PostLikes {
         }
 
         let actors = &likes.as_ref().unwrap().0;
-        let list = List::new(actors.len(), |context: ListContext| {
+        let list = List::new(actors.len(), |context| {
             let item = ActorWidget::new(&actors[context.index])
                 .block(Block::bordered().border_type(BorderType::Rounded))
                 .focused(context.is_selected);

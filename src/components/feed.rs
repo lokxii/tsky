@@ -15,7 +15,7 @@ use ratatui::{
 
 use crate::{
     components::{
-        list::{List, ListContext, ListState},
+        list::{List, ListState},
         post::{post_widget::PostWidget, Post},
     },
     post_manager,
@@ -153,9 +153,10 @@ impl Widget for &mut Feed {
         let width = area.width;
         let posts = self.posts.clone();
 
-        List::new(self.posts.len(), |context: ListContext| {
+        List::new(self.posts.len(), |context| {
             let post = &posts[context.index];
-            let item = FeedPostWidget::new(post, context.is_selected);
+            let item =
+                FeedPostWidget::new(post).is_selected(context.is_selected);
             let height = item.line_count(width) as u16;
             return (item, height);
         })
@@ -255,26 +256,33 @@ impl PartialEq for FeedPost {
 
 impl Eq for FeedPost {}
 
-struct FeedPostWidget<'a> {
+#[derive(Clone)]
+pub struct FeedPostWidget<'a> {
     feed_post: &'a FeedPost,
     is_selected: bool,
     style: Style,
 }
 
 impl<'a> FeedPostWidget<'a> {
-    fn new(feed_post: &'a FeedPost, is_selected: bool) -> Self {
+    pub fn new(feed_post: &'a FeedPost) -> Self {
         FeedPostWidget {
             feed_post,
-            style: if is_selected {
-                Style::default().bg(Color::Rgb(45, 50, 55))
-            } else {
-                Style::default()
-            },
-            is_selected,
+            style: Style::default(),
+            is_selected: false,
         }
     }
 
-    fn line_count(&self, width: u16) -> u16 {
+    pub fn is_selected(mut self, is_selected: bool) -> Self {
+        self.is_selected = is_selected;
+        self.style = if is_selected {
+            Style::default().bg(Color::Rgb(45, 50, 55))
+        } else {
+            Style::default()
+        };
+        self
+    }
+
+    pub fn line_count(&self, width: u16) -> u16 {
         let post = post_manager!().at(&self.feed_post.post_uri).unwrap();
         PostWidget::new(post).line_count(width)
             + self.feed_post.reply_to.is_some() as u16

@@ -3,7 +3,7 @@ use ratatui::{
     widgets::{block::Title, Block, BorderType, Borders, Widget},
 };
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Separation<'a> {
     text: Title<'a>,
     line: BorderType,
@@ -24,6 +24,10 @@ impl<'a> Separation<'a> {
     pub fn padding(mut self, padding: u16) -> Self {
         self.padding = padding;
         self
+    }
+
+    pub fn line_count(&self, _: u16) -> u16 {
+        self.padding + 1
     }
 }
 

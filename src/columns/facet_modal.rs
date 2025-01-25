@@ -12,9 +12,7 @@ use ratatui::{
 };
 
 use crate::app::{AppEvent, EventReceiver};
-use crate::components::connected_list::{
-    ConnectedList, ConnectedListContext, ConnectedListState,
-};
+use crate::components::connected_list::{ConnectedList, ConnectedListState};
 use crate::components::paragraph::Paragraph;
 
 #[derive(Clone)]
@@ -96,25 +94,22 @@ impl Widget for &mut FacetModal {
         block.render(area, buf);
 
         let items = self.links.clone();
-        ConnectedList::new(
-            self.links.len(),
-            move |context: ConnectedListContext| {
-                let style = if context.is_selected {
-                    Style::default().bg(Color::Rgb(45, 50, 55))
-                } else {
-                    Style::default()
-                };
-                let item = Paragraph::new(Span::styled(
-                    format!(
-                        "`{}` -> {}",
-                        items[context.index].text, items[context.index].url
-                    ),
-                    style,
-                ));
-                let height = item.line_count(area.width) as u16;
-                return (item, height);
-            },
-        )
+        ConnectedList::new(self.links.len(), move |context| {
+            let style = if context.is_selected {
+                Style::default().bg(Color::Rgb(45, 50, 55))
+            } else {
+                Style::default()
+            };
+            let item = Paragraph::new(Span::styled(
+                format!(
+                    "`{}` -> {}",
+                    items[context.index].text, items[context.index].url
+                ),
+                style,
+            ));
+            let height = item.line_count(area.width) as u16;
+            return (item, height);
+        })
         .render(inner_area, buf, &mut self.state);
     }
 }

@@ -8,23 +8,29 @@ use atrium_api::{
     },
 };
 use bsky_sdk::BskyAgent;
+use ratatui::{
+    style::Color,
+    text::Line,
+    widgets::{BorderType, StatefulWidget, Widget},
+};
 
 use crate::components::{
-    actor::{Actor, ActorDetailed},
-    feed::{Feed, FeedPost, Reason},
+    actor::{ActorDetailed, ActorDetailedWidget},
+    connected_list::ConnectedList,
+    feed::{Feed, FeedPost, FeedPostWidget},
+    separation::Separation,
 };
 
 pub struct ProfilePage {
     actor: Arc<Mutex<Option<ActorDetailed>>>,
     feed: Arc<Mutex<Feed>>,
-    pin_uri: Arc<Mutex<Option<String>>>,
+    actor_selected: bool,
 }
 
 impl ProfilePage {
     pub async fn from_did(did: String, agent: BskyAgent) -> ProfilePage {
         let actor = Arc::new(Mutex::new(None));
         let feed = Arc::new(Mutex::new(Feed::default()));
-        let pin_uri = Arc::new(Mutex::new(None));
 
         let actor_ = Arc::clone(&actor);
         let did_ = did.clone();
@@ -54,7 +60,6 @@ impl ProfilePage {
         });
 
         let feed_ = Arc::clone(&feed);
-        let pin_uri_ = Arc::clone(&pin_uri);
         tokio::spawn(async move {
             let out = agent
                 .api
@@ -82,16 +87,82 @@ impl ProfilePage {
             let mut feed_lock = feed_.lock().unwrap();
             feed_lock.cursor = cursor;
 
-            let mut feed = feed.iter().map(FeedPost::from).peekable();
-            match feed.peek() {
-                Some(f) if f.reason == Some(Reason::Pin) => {
-                    let post = feed.next().unwrap();
-                    let mut pin_uri_lock = pin_uri_.lock().unwrap();
-                    *pin_uri_lock = Some(post.post_uri);
-                }
-                _ => {}
-            }
+            let feed = feed.iter().map(FeedPost::from).peekable();
+            feed_lock.insert_new_posts(feed);
         });
-        ProfilePage { actor, feed, pin_uri }
+        ProfilePage { actor, feed, actor_selected: true }
+    }
+}
+
+impl Widget for &mut ProfilePage {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+        let mut feed = self.feed.lock().unwrap();
+        let actor = self.actor.lock().unwrap();
+        if actor.is_none() {
+            Line::from("Loading").render(area, buf);
+        }
+
+        let items = std::iter::once(ProfilePageItemWidget::Actor(
+            ActorDetailedWidget::new((*actor).as_ref().unwrap())
+                .focused(self.actor_selected),
+        ))
+        .chain(std::iter::once(ProfilePageItemWidget::Bar(
+            Separation::default()
+                .text(Line::from("Posts ").style(Color::Green))
+                .line(BorderType::Double)
+                .padding(1),
+        )))
+        .chain(
+            feed.posts
+                .iter()
+                .map(|p| ProfilePageItemWidget::Post(FeedPostWidget::new(p))),
+        )
+        .collect::<Vec<_>>();
+
+        // ConnectedList::new(feed.posts.len() + 2, move |context| {
+        //     let item = items[context.index].clone();
+        //     let height = item.line_count(area.width);
+        //     return (item, height);
+        // })
+        // .render(area, buf, &mut feed.state);
+    }
+}
+
+#[derive(Clone)]
+enum ProfilePageItemWidget<'a> {
+    Post(FeedPostWidget<'a>),
+    Actor(ActorDetailedWidget<'a>),
+    Bar(Separation<'a>),
+}
+
+impl<'a> ProfilePageItemWidget<'a> {
+    fn line_count(&self, width: u16) -> u16 {
+        match self {
+            Self::Post(p) => p.line_count(width),
+            Self::Actor(a) => a.line_count(width),
+            Self::Bar(b) => b.line_count(width),
+        }
+    }
+}
+
+impl<'a> Widget for ProfilePageItemWidget<'a> {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+        match self {
+            ProfilePageItemWidget::Post(a) => a.render(area, buf),
+            ProfilePageItemWidget::Actor(a) => a.render(area, buf),
+            ProfilePageItemWidget::Bar(a) => a.render(area, buf),
+        }
     }
 }

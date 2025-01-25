@@ -21,9 +21,7 @@ impl ConnectedListState {
 
 impl ConnectedListState {
     pub fn select(&mut self, s: Option<usize>) {
-        self.delta_index = s
-            .map(|s| s as i64 - self.selected.unwrap_or(s) as i64)
-            .unwrap_or(0);
+        self.delta_index = 0;
         self.selected = s;
     }
 

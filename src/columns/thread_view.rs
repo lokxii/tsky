@@ -19,9 +19,7 @@ use ratatui::{
 use crate::{
     app::EventReceiver,
     components::{
-        connected_list::{
-            ConnectedList, ConnectedListContext, ConnectedListState,
-        },
+        connected_list::{ConnectedList, ConnectedListState},
         embed::{Embed, Record},
         post::{post_widget::PostWidget, FacetType, Post},
         separation::Separation,
@@ -276,9 +274,8 @@ impl Widget for &mut ThreadView {
             .chain(reply_items)
             .collect::<Vec<_>>();
 
-        ConnectedList::new(
-            items.len(),
-            move |context: ConnectedListContext| match &items[context.index] {
+        ConnectedList::new(items.len(), move |context| {
+            match &items[context.index] {
                 ThreadViewItem::Post(uri) => {
                     let post = post_manager!().at(&uri).unwrap();
                     let item = PostWidget::new(post)
@@ -294,8 +291,8 @@ impl Widget for &mut ThreadView {
                         .padding(1);
                     return (ThreadViewItemWidget::Bar(item), 3);
                 }
-            },
-        )
+            }
+        })
         .connecting(vec![0..self.parent.len()])
         .render(area, buf, &mut self.state);
     }

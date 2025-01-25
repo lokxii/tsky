@@ -4,7 +4,7 @@ use atrium_api::{
 use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Style},
-    text::Span,
+    text::{Line, Span},
     widgets::{Block, Widget},
 };
 
@@ -134,8 +134,8 @@ impl<'a> ActorWidget<'a> {
         self
     }
 
-    pub fn line_count(&self, width: u16) -> usize {
-        let b = self.block.is_some() as usize * 2;
+    pub fn line_count(&self, width: u16) -> u16 {
+        let b = self.block.is_some() as u16 * 2;
         1 + b
             + Paragraph::new(
                 self.actor.description.clone().unwrap_or(String::new()),
@@ -253,5 +253,99 @@ impl ActorDetailed {
                 .map(|v| v.muted.unwrap_or(false))
                 .unwrap_or(false),
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct ActorDetailedWidget<'a> {
+    detailed: &'a ActorDetailed,
+    focused: bool,
+}
+
+impl<'a> ActorDetailedWidget<'a> {
+    pub fn new(detailed: &'a ActorDetailed) -> Self {
+        ActorDetailedWidget { detailed, focused: false }
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
+    pub fn line_count(&self, width: u16) -> u16 {
+        5 + Paragraph::new(
+            self.detailed.actor.description.clone().unwrap_or(String::new()),
+        )
+        .line_count(width)
+    }
+}
+
+impl<'a> Widget for ActorDetailedWidget<'a> {
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+    ) where
+        Self: Sized,
+    {
+        let description = Paragraph::new(
+            self.detailed.actor.description.clone().unwrap_or(String::new()),
+        );
+        let [name_ff_area, handle_area, stat_area, label_area, _, description_area] =
+            Layout::vertical([
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Length(description.line_count(area.width) as u16),
+            ])
+            .areas(area);
+
+        let [name_area, _, ff_area] = Layout::horizontal([
+            Constraint::Min(1),
+            Constraint::Fill(1),
+            Constraint::Min(1),
+        ])
+        .areas(name_ff_area);
+        let name = Span::styled(&self.detailed.actor.basic.handle, Color::Cyan);
+        let ff = match (self.detailed.followed_by, self.detailed.following) {
+            (true, true) => "[FF]",
+            (true, false) => "[Follows you]",
+            (false, true) => "[Following]",
+            (false, false) => "[+ Follow]",
+        };
+        let ff = format!("{}{}", ff, if self.focused { "(↵)" } else { "" });
+        name.render(name_area, buf);
+        ff.render(ff_area, buf);
+
+        Span::styled(
+            format!("@{}", self.detailed.actor.basic.handle),
+            Color::Gray,
+        )
+        .render(handle_area, buf);
+
+        [
+            Span::from(self.detailed.follower_count.to_string()),
+            Span::styled(" followers ", Color::Gray),
+            Span::from(self.detailed.following_count.to_string()),
+            Span::styled(" following ", Color::Gray),
+            Span::from(self.detailed.posts_count.to_string()),
+            Span::styled(" posts", Color::Gray),
+        ]
+        .into_iter()
+        .fold(Line::from(""), |l, s| l + s)
+        .render(stat_area, buf);
+
+        let labels = self
+            .detailed
+            .actor
+            .basic
+            .labels
+            .iter()
+            .fold(String::new(), |acc, e| format!("{} [{}]", acc, e));
+        Span::styled(labels, Color::LightRed).render(label_area, buf);
+
+        description.render(description_area, buf);
     }
 }

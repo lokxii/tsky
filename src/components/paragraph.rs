@@ -47,15 +47,15 @@ impl<'a> Paragraph<'a> {
     }
 
     // without considering block
-    pub fn line_count(&self, width: u16) -> usize {
+    pub fn line_count(&self, width: u16) -> u16 {
         if width < 1 {
             return 0;
         }
         if !self.wrap {
-            return self.text.height();
+            return self.text.height() as u16;
         }
 
-        return break_lines(&self.text.lines, width).len();
+        return break_lines(&self.text.lines, width).len() as u16;
     }
 }
 
