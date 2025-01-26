@@ -340,6 +340,7 @@ impl<'a> ActorDetailedWidget<'a> {
                     .unwrap_or(String::new()),
             )
             .line_count(width)
+            + 2 * self.block.is_some() as u16
     }
 }
 
