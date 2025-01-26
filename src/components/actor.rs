@@ -375,7 +375,7 @@ impl<'a> Widget for ActorDetailedWidget<'a> {
             ])
             .areas(area);
 
-        let name = Span::styled(&self.detailed.actor.basic.handle, Color::Cyan);
+        let name = Span::styled(&self.detailed.actor.basic.name, Color::Cyan);
         let ff = match (
             self.detailed.followed_by,
             self.detailed.following.is_some(),
@@ -401,10 +401,25 @@ impl<'a> Widget for ActorDetailedWidget<'a> {
         name.render(name_area, buf);
         ff.render(ff_area, buf);
 
-        Span::styled(
-            format!("@{}", self.detailed.actor.basic.handle),
+        (Span::styled(
+            format!(
+                "@{} {}",
+                self.detailed.actor.basic.handle,
+                if self.detailed.muted { "(Muted)" } else { "" },
+            ),
             Color::DarkGray,
-        )
+        ) + Span::styled(
+            format!(
+                "{}",
+                match (self.detailed.blocking, self.detailed.blocked_by) {
+                    (true, true) => "[Mutual Blocking]",
+                    (true, false) => "[Blocking]",
+                    (false, true) => "[Blocked by]",
+                    (false, false) => "",
+                }
+            ),
+            Color::LightRed,
+        ))
         .render(handle_area, buf);
 
         [
