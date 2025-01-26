@@ -1,7 +1,4 @@
-use std::{
-    process::{Command, Stdio},
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use bsky_sdk::BskyAgent;
 use ratatui::{
@@ -13,11 +10,14 @@ use ratatui::{
 
 use crate::{
     app::{AppEvent, EventReceiver},
+    columns::Column,
     components::{
         actor::{Actor, ActorWidget},
         list::{List, ListState},
     },
 };
+
+use super::profile_page::ProfilePage;
 
 pub struct PostLikes {
     uri: String,
@@ -140,7 +140,7 @@ impl EventReceiver for &mut PostLikes {
             }
             KeyCode::Backspace => return AppEvent::ColumnPopLayer,
 
-            KeyCode::Enter => {
+            KeyCode::Char('a') => {
                 let likes = Arc::clone(&self.likes);
                 let likes = likes.lock().unwrap();
                 if likes.is_none() || self.state.selected.is_none() {
@@ -148,17 +148,10 @@ impl EventReceiver for &mut PostLikes {
                 }
                 let i = self.state.selected.unwrap();
                 let actor = &likes.as_ref().unwrap().0[i];
-                let handle = &actor.basic.handle;
-                let url = format!("https://bsky.app/profile/{}", handle);
-                if let Err(e) = Command::new("xdg-open")
-                    .arg(url)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                {
-                    log::error!("{:?}", e);
-                }
-                return AppEvent::None;
+                let me = &agent.get_session().await.unwrap().did;
+                let profile =
+                    ProfilePage::from_did(actor.basic.did.clone(), me, agent);
+                return AppEvent::ColumnNewLayer(Column::ProfilePage(profile));
             }
 
             _ => return AppEvent::None,
