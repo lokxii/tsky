@@ -168,7 +168,7 @@ impl EventReceiver for &mut ThreadView {
 
             KeyCode::Char('j') => {
                 if let None = self.state.selected {
-                    self.state.select(Some(0));
+                    self.state.selected = Some(0);
                 } else {
                     if self.state.selected.unwrap() == self.parent.len() {
                         if !self.replies.is_empty() {

@@ -20,13 +20,6 @@ impl ListState {
 }
 
 impl ListState {
-    pub fn select(&mut self, s: Option<usize>) {
-        self.delta_index = s
-            .map(|s| s as i64 - self.selected.unwrap_or(s) as i64)
-            .unwrap_or(0);
-        self.selected = s;
-    }
-
     pub fn next(&mut self) {
         if let Some(i) = self.selected.as_mut() {
             *i += 1;
@@ -92,7 +85,7 @@ where
                 state.selected_y = 0;
                 state.delta_index = 0;
             } else if state.selected.unwrap() >= self.len {
-                state.select(Some(self.len - 1));
+                state.selected = Some(self.len - 1);
             }
         }
         if self.len == 0 {

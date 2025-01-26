@@ -315,8 +315,9 @@ impl EventReceiver for &Post {
             }
 
             KeyCode::Char('a') => {
+                let me = &agent.get_session().await.unwrap().did;
                 let profile =
-                    ProfilePage::from_did(self.author.did.clone(), agent);
+                    ProfilePage::from_did(self.author.did.clone(), me, agent);
                 return AppEvent::ColumnNewLayer(Column::ProfilePage(profile));
             }
 

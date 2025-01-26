@@ -2,13 +2,17 @@ use atrium_api::{
     app::bsky::actor::defs::ProfileViewBasicData, types::string::Did,
 };
 use ratatui::{
+    crossterm::event::{Event, KeyCode},
     layout::{Constraint, Layout},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Widget},
 };
 
-use crate::components::paragraph::Paragraph;
+use crate::{
+    app::{AppEvent, EventReceiver},
+    components::paragraph::Paragraph,
+};
 
 #[derive(Clone)]
 pub struct ActorBasic {
@@ -179,6 +183,7 @@ impl<'a> Widget for ActorWidget<'a> {
 #[derive(Clone)]
 pub struct ActorDetailed {
     actor: Actor,
+    is_me: bool,
     following_count: u64,
     follower_count: u64,
     posts_count: u64,
@@ -186,7 +191,7 @@ pub struct ActorDetailed {
     banner: Option<String>,
     blocking: bool,
     blocked_by: bool,
-    following: bool,
+    following: Option<String>,
     followed_by: bool,
     muted: bool,
 }
@@ -194,6 +199,7 @@ pub struct ActorDetailed {
 impl ActorDetailed {
     pub fn new(
         data: atrium_api::app::bsky::actor::defs::ProfileViewDetailedData,
+        is_me: bool,
     ) -> Self {
         let atrium_api::app::bsky::actor::defs::ProfileViewDetailedData {
             associated,
@@ -227,6 +233,7 @@ impl ActorDetailed {
         let actor = Actor::new(actor);
         ActorDetailed {
             actor,
+            is_me,
             follower_count: followers_count.unwrap_or(0) as u64,
             following_count: follows_count.unwrap_or(0) as u64,
             posts_count: posts_count.unwrap_or(0) as u64,
@@ -240,10 +247,7 @@ impl ActorDetailed {
                 .as_ref()
                 .map(|v| v.blocked_by.unwrap_or(false))
                 .unwrap_or(false),
-            following: viewer
-                .as_ref()
-                .map(|v| v.following.is_some())
-                .unwrap_or(false),
+            following: viewer.as_ref().map(|v| v.following.clone()).flatten(),
             followed_by: viewer
                 .as_ref()
                 .map(|v| v.followed_by.is_some())
@@ -253,6 +257,54 @@ impl ActorDetailed {
                 .map(|v| v.muted.unwrap_or(false))
                 .unwrap_or(false),
         }
+    }
+}
+
+impl EventReceiver for &mut ActorDetailed {
+    async fn handle_events(
+        self,
+        event: ratatui::crossterm::event::Event,
+        agent: bsky_sdk::BskyAgent,
+    ) -> crate::app::AppEvent {
+        let Event::Key(key) = event else {
+            return AppEvent::None;
+        };
+        match key.code {
+            KeyCode::Enter => {
+                if self.is_me {
+                    return AppEvent::None;
+                }
+                match &self.following {
+                    Some(uri) => {
+                        let out = agent.delete_record(uri).await;
+                        if let Err(e) = out {
+                            log::error!("Could not unfollow user: {}", e);
+                            return AppEvent::None;
+                        }
+                        self.following = None;
+                    }
+                    None => {
+                        let out = agent
+                            .create_record(
+                                atrium_api::app::bsky::graph::follow::RecordData {
+                                    created_at:
+                                        atrium_api::types::string::Datetime::now(),
+                                    subject: self.actor.basic.did.clone(),
+                                },
+                            )
+                            .await;
+                        match out {
+                            Ok(out) => self.following = Some(out.uri.clone()),
+                            Err(e) => {
+                                log::error!("Could not follow user: {}", e)
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        return AppEvent::None;
     }
 }
 
@@ -324,13 +376,22 @@ impl<'a> Widget for ActorDetailedWidget<'a> {
             .areas(area);
 
         let name = Span::styled(&self.detailed.actor.basic.handle, Color::Cyan);
-        let ff = match (self.detailed.followed_by, self.detailed.following) {
-            (true, true) => "[FF]",
-            (true, false) => "[Follows you]",
-            (false, true) => "[Following]",
-            (false, false) => "[+ Follow]",
+        let ff = match (
+            self.detailed.followed_by,
+            self.detailed.following.is_some(),
+            self.detailed.is_me,
+        ) {
+            (_, _, true) => "",
+            (true, true, _) => "[FF]",
+            (true, false, _) => "[Follows you]",
+            (false, true, _) => "[Following]",
+            (false, false, _) => "[+ Follow]",
         };
-        let ff = format!("{}{}", ff, if self.focused { "(↵)" } else { "" });
+        let ff = format!(
+            "{}{}",
+            ff,
+            if self.focused && !self.detailed.is_me { "(↵)" } else { "" }
+        );
         let [name_area, _, ff_area] = Layout::horizontal([
             Constraint::Min(1),
             Constraint::Fill(1),

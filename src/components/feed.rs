@@ -40,7 +40,7 @@ impl Feed {
 
         if self.posts.len() == 0 {
             self.posts = new_posts;
-            self.state.select(Some(0));
+            self.state.selected = Some(0);
             self.remove_duplicate();
             return true;
         }
@@ -54,7 +54,7 @@ impl Feed {
                 .find_map(|np| self.posts.iter().position(|p| p == np))
         }) else {
             self.posts = new_posts;
-            self.state.select(Some(0));
+            self.state.selected = Some(0);
             self.remove_duplicate();
             return true;
         };
@@ -67,11 +67,11 @@ impl Feed {
         if autoscrolling {
             self.posts = new_posts;
             self.remove_duplicate();
-            self.state.select(Some(0));
+            self.state.selected = Some(0);
             return false;
         }
 
-        self.state.select(self.state.selected.map(|i| {
+        self.state.selected = self.state.selected.map(|i| {
             let mut i = i;
             while i < self.posts.len() {
                 let post = &self.posts[i];
@@ -82,7 +82,7 @@ impl Feed {
                 }
             }
             return 0;
-        }));
+        });
         self.posts = new_posts;
         self.remove_duplicate();
 
@@ -116,7 +116,7 @@ impl Feed {
                 let selected_post = &self.posts[j as usize];
                 let position = new_view.iter().position(|p| p == selected_post);
                 if position.is_some() {
-                    self.state.select(position);
+                    self.state.selected = position;
                     self.posts = new_view;
                     return;
                 } else {
@@ -128,7 +128,7 @@ impl Feed {
                 let selected_post = &self.posts[j as usize];
                 let position = new_view.iter().position(|p| p == selected_post);
                 if position.is_some() {
-                    self.state.select(position);
+                    self.state.selected = position;
                     self.posts = new_view;
                     return;
                 } else {

@@ -102,7 +102,7 @@ impl EventReceiver for &mut PostLikes {
                 let likes = Arc::clone(&self.likes);
 
                 if let None = self.state.selected {
-                    self.state.select(Some(0));
+                    self.state.selected = Some(0);
                     return AppEvent::None;
                 }
                 if self.state.selected.unwrap() == actors.len() - 1
