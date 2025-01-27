@@ -26,6 +26,8 @@ use crate::{
     post_manager,
 };
 
+use super::thread_view::ThreadView;
+
 pub struct ProfilePage {
     actor: Arc<Mutex<Option<ActorDetailed>>>,
     feed: Arc<Mutex<Feed>>,
@@ -152,6 +154,26 @@ impl EventReceiver for &mut ProfilePage {
                     (Some(_), _) => panic!("How come?"),
                 }
                 return AppEvent::None;
+            }
+
+            KeyCode::Enter if !self.actor_selected => {
+                let feed = self.feed.lock().unwrap();
+                if feed.state.selected == None {
+                    return AppEvent::None;
+                }
+                let uri = &feed.posts[feed.state.selected.unwrap()].post_uri;
+                let thread = ThreadView::from_uri(uri.clone(), agent).await;
+                match thread {
+                    Ok(o) => {
+                        return AppEvent::ColumnNewLayer(super::Column::Thread(
+                            o,
+                        ))
+                    }
+                    Err(e) => {
+                        log::error!("{}", e);
+                        return AppEvent::None;
+                    }
+                }
             }
 
             _ => {
