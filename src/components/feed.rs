@@ -2,7 +2,7 @@ use atrium_api::{
     app::bsky::feed::defs::{
         FeedViewPost, FeedViewPostReasonRefs, ReplyRefParentRefs,
     },
-    types::Union,
+    types::{string::Did, Union},
 };
 use itertools::Itertools;
 use ratatui::{
@@ -180,6 +180,7 @@ pub struct RepostBy {
 pub struct ReplyData {
     pub author: String,
     pub handle: String,
+    pub did: Did,
     pub following: bool,
 }
 
@@ -237,7 +238,8 @@ impl FeedPost {
                     #[rustfmt::skip]
                     let following = view.author.viewer.is_some()
                         && view .author.viewer.as_ref().unwrap().following.is_some();
-                    Reply::Reply(ReplyData { author, handle, following })
+                    let did = view.author.did.clone();
+                    Reply::Reply(ReplyData { author, handle, following, did })
                 }
                 ReplyRefParentRefs::NotFoundPost(_) => Reply::DeletedPost,
                 ReplyRefParentRefs::BlockedPost(_) => Reply::BlockedUser,

@@ -41,6 +41,7 @@ impl UpdatingFeed {
     pub fn spawn_feed_autoupdate(&self, agent: BskyAgent) {
         let feed = Arc::clone(&self.feed);
         tokio::spawn(async move {
+            let me = &agent.get_session().await.unwrap().did;
             loop {
                 let new_posts = agent
                     .api
@@ -71,7 +72,7 @@ impl UpdatingFeed {
                     p.reply_to
                         .as_ref()
                         .map(|r| match r {
-                            Reply::Reply(r) => r.following,
+                            Reply::Reply(r) => r.following || r.did == *me,
                             _ => false,
                         })
                         .unwrap_or(true)
