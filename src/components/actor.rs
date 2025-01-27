@@ -1,3 +1,5 @@
+use std::process::{Command, Stdio};
+
 use atrium_api::{
     app::bsky::actor::defs::ProfileViewBasicData, types::string::Did,
 };
@@ -302,6 +304,41 @@ impl EventReceiver for &mut ActorDetailed {
                     }
                 }
             }
+            KeyCode::Char('m') => {
+                if self.avatar.is_none() && self.banner.is_none() {
+                    log::info!("Avatar and banner not set");
+                    return AppEvent::None;
+                }
+                if let Err(e) = Command::new("feh")
+                    .args(["--output-dir", "/tmp?"])
+                    .args(["--zoom", "50%"])
+                    .arg("--")
+                    .args(
+                        [&self.avatar, &self.banner]
+                            .into_iter()
+                            .filter_map(Option::as_ref),
+                    )
+                    .stderr(Stdio::null())
+                    .stdout(Stdio::null())
+                    .spawn()
+                {
+                    log::error!("{:?}", e);
+                };
+            }
+            KeyCode::Char('p') => {
+                let url = format!(
+                    "https://bsky.app/profile/{}",
+                    self.actor.basic.handle
+                );
+                if let Err(e) = Command::new("xdg-open")
+                    .arg(url)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                {
+                    log::error!("{:?}", e);
+                }
+            }
             _ => {}
         }
         return AppEvent::None;
@@ -377,6 +414,10 @@ impl<'a> Widget for ActorDetailedWidget<'a> {
             .areas(area);
 
         let name = Span::styled(&self.detailed.actor.basic.name, Color::Cyan);
+        let key_hint = Span::styled(
+            if self.focused { " 🖼️(m) 🦋(p)" } else { " " },
+            Color::DarkGray,
+        );
         let ff = match (
             self.detailed.followed_by,
             self.detailed.following.is_some(),
@@ -399,7 +440,7 @@ impl<'a> Widget for ActorDetailedWidget<'a> {
             Constraint::Length(ff.len() as u16),
         ])
         .areas(name_ff_area);
-        name.render(name_area, buf);
+        (name + key_hint).render(name_area, buf);
         ff.render(ff_area, buf);
 
         (Span::styled(
