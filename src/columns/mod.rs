@@ -1,5 +1,6 @@
 pub mod composer_view;
 pub mod facet_modal;
+pub mod notification;
 pub mod post_likes;
 pub mod profile_page;
 pub mod thread_view;
