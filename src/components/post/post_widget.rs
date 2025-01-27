@@ -74,7 +74,7 @@ impl PostWidget {
             });
 
             let facet_style = match facet.r#type {
-                FacetType::Mention => Style::default().italic(),
+                FacetType::Mention(_) => Style::default().italic(),
                 FacetType::Link(_) => Style::default().underlined(),
                 FacetType::Tag => Style::default().bold(),
             };

@@ -1,5 +1,6 @@
 use std::process::{Command, Stdio};
 
+use atrium_api::types::string::Did;
 use bsky_sdk::BskyAgent;
 use ratatui::{
     crossterm::event::{self, Event, KeyCode},
@@ -12,9 +13,13 @@ use ratatui::{
 };
 
 use crate::app::{AppEvent, EventReceiver};
-use crate::components::{
-    list::{List, ListState},
-    paragraph::Paragraph,
+use crate::{
+    columns::profile_page::ProfilePage,
+    columns::Column,
+    components::{
+        list::{List, ListState},
+        paragraph::Paragraph,
+    },
 };
 
 #[derive(Clone)]
@@ -23,8 +28,20 @@ pub struct Link {
     pub url: String,
 }
 
+#[derive(Clone)]
+pub struct Mention {
+    pub text: String,
+    pub did: Did,
+}
+
+#[derive(Clone)]
+pub enum FacetModalItem {
+    Link(Link),
+    Mention(Mention),
+}
+
 pub struct FacetModal {
-    pub links: Vec<Link>,
+    pub links: Vec<FacetModalItem>,
     pub state: ListState,
 }
 
@@ -32,7 +49,7 @@ impl EventReceiver for &mut FacetModal {
     async fn handle_events(
         self,
         event: event::Event,
-        _: BskyAgent,
+        agent: BskyAgent,
     ) -> AppEvent {
         let Event::Key(key) = event else {
             return AppEvent::None;
@@ -50,14 +67,26 @@ impl EventReceiver for &mut FacetModal {
                 let Some(index) = self.state.selected else {
                     return AppEvent::None;
                 };
-                let url = &self.links[index].url;
-                if let Result::Err(e) = Command::new("xdg-open")
-                    .arg(url)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                {
-                    log::error!("{:?}", e);
+                match &self.links[index] {
+                    FacetModalItem::Link(l) => {
+                        let url = &l.url;
+                        if let Result::Err(e) = Command::new("xdg-open")
+                            .arg(url)
+                            .stdout(Stdio::null())
+                            .stderr(Stdio::null())
+                            .spawn()
+                        {
+                            log::error!("{:?}", e);
+                        }
+                    }
+                    FacetModalItem::Mention(m) => {
+                        let actor = m.did.clone();
+                        let me = &agent.get_session().await.unwrap().did;
+                        let profile = ProfilePage::from_did(actor, me, agent);
+                        return AppEvent::ColumnNewLayer(Column::ProfilePage(
+                            profile,
+                        ));
+                    }
                 }
             }
             _ => {}
@@ -103,10 +132,14 @@ impl Widget for &mut FacetModal {
                 Style::default()
             };
             let item = Paragraph::new(Span::styled(
-                format!(
-                    "`{}` -> {}",
-                    items[context.index].text, items[context.index].url
-                ),
+                match &items[context.index] {
+                    FacetModalItem::Link(l) => {
+                        format!("`{}` -> {}", l.text, l.url)
+                    }
+                    FacetModalItem::Mention(m) => {
+                        format!("`{}` -> @{}", m.text, &*m.did)
+                    }
+                },
                 style,
             ));
             let height = item.line_count(area.width) as u16;

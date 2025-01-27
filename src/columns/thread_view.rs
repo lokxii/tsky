@@ -19,7 +19,7 @@ use ratatui::{
 use crate::{
     app::EventReceiver,
     columns::{
-        facet_modal::{FacetModal, Link},
+        facet_modal::{FacetModal, FacetModalItem, Link, Mention},
         Column,
     },
     components::{
@@ -195,19 +195,34 @@ impl EventReceiver for &mut ThreadView {
 
             KeyCode::Char('f') => {
                 let post = post_manager!().at(&self.post_uri).unwrap();
-                let links = post
+                let facets = post
                     .facets
                     .iter()
-                    .filter_map(|facet| {
-                        let FacetType::Link(url) = &facet.r#type else {
-                            return None;
-                        };
-                        let text = post.text[facet.range.clone()].to_string();
-                        Some(Link { text, url: url.clone() })
+                    .filter_map(|facet| match &facet.r#type {
+                        FacetType::Link(url) => {
+                            let text =
+                                post.text[facet.range.clone()].to_string();
+                            Some(FacetModalItem::Link(Link {
+                                text,
+                                url: url.clone(),
+                            }))
+                        }
+                        FacetType::Mention(m) => {
+                            let text =
+                                post.text[facet.range.clone()].to_string();
+                            Some(FacetModalItem::Mention(Mention {
+                                text,
+                                did: m.clone(),
+                            }))
+                        }
+                        _ => None,
                     })
                     .collect::<Vec<_>>();
                 return AppEvent::ColumnNewLayer(Column::FacetModal(
-                    FacetModal { links, state: ListState::new(Some(0)) },
+                    FacetModal {
+                        links: facets,
+                        state: ListState::new(Some(0)),
+                    },
                 ));
             }
 
