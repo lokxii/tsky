@@ -211,7 +211,7 @@ impl ComposerView {
 
     async fn post(&self, agent: BskyAgent) -> Option<JoinHandle<AppEvent>> {
         let text = self.text_field.lines().join("\n");
-        if text.is_empty() {
+        if text.is_empty() && matches!(self.embed.embed, Embed::None) {
             return None;
         }
 
