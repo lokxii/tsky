@@ -237,7 +237,9 @@ impl Widget for &mut ProfilePage {
             })
             .render(area, buf, &mut (*feed).state);
 
-            (*feed).state.selected = old_selected;
+            if old_selected == None {
+                (*feed).state.selected = None;
+            }
         }
     }
 }

@@ -85,6 +85,7 @@ where
                 state.selected_y = 0;
                 state.delta_index = 0;
             } else if state.selected.unwrap() >= self.len {
+                state.delta_index = 0;
                 state.selected = Some(self.len - 1);
             }
         }
