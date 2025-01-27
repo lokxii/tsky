@@ -8,8 +8,8 @@ use ratatui::{
     prelude::StatefulWidget,
     style::{Color, Style},
     text::Span,
+    widgets::BorderType,
     widgets::{Block, Clear, Widget},
-    widgets::{BorderType, Padding},
 };
 
 use crate::app::{AppEvent, EventReceiver};
