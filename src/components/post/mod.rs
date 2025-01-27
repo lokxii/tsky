@@ -11,7 +11,10 @@ use atrium_api::{
         feed::{defs::PostView, post},
         richtext::facet::MainFeaturesItem,
     },
-    types::{string::Cid, TryFromUnknown, Union},
+    types::{
+        string::{Cid, Did},
+        TryFromUnknown, Union,
+    },
 };
 use bsky_sdk::BskyAgent;
 use chrono::{DateTime, FixedOffset, Local};
@@ -21,13 +24,14 @@ use crate::{
     app::{AppEvent, EventReceiver},
     columns::{
         composer_view::ComposerView,
-        facet_modal::{FacetModal, Link},
+        facet_modal::{FacetModal, FacetModalItem, Link, Mention},
         post_likes::PostLikes,
+        profile_page::ProfilePage,
         Column,
     },
     components::{
-        actor::ActorBasic, composer, connected_list::ConnectedListState,
-        embed::Embed, post_manager,
+        actor::ActorBasic, composer, embed::Embed, list::ListState,
+        post_manager,
     },
     post_manager_tx,
 };
@@ -58,7 +62,7 @@ pub struct ReplyRef {
 
 #[derive(Clone)]
 pub enum FacetType {
-    Mention,
+    Mention(Did),
     Link(String),
     Tag,
 }
@@ -156,7 +160,9 @@ impl Post {
                     return None;
                 };
                 let r#type = match feature {
-                    MainFeaturesItem::Mention(_) => FacetType::Mention,
+                    MainFeaturesItem::Mention(did) => {
+                        FacetType::Mention(did.did.clone())
+                    }
                     MainFeaturesItem::Link(link) => {
                         FacetType::Link(link.uri.clone())
                     }
@@ -314,17 +320,10 @@ impl EventReceiver for &Post {
             }
 
             KeyCode::Char('a') => {
-                let author = &self.author.handle;
-                let url = format!("https://bsky.app/profile/{}", author);
-                if let Err(e) = Command::new("xdg-open")
-                    .arg(url)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                {
-                    log::error!("{:?}", e);
-                }
-                return AppEvent::None;
+                let me = &agent.get_session().await.unwrap().did;
+                let profile =
+                    ProfilePage::from_did(self.author.did.clone(), me, agent);
+                return AppEvent::ColumnNewLayer(Column::ProfilePage(profile));
             }
 
             KeyCode::Char('m') => {
@@ -338,19 +337,28 @@ impl EventReceiver for &Post {
                 let links = self
                     .facets
                     .iter()
-                    .filter_map(|facet| {
-                        let FacetType::Link(url) = &facet.r#type else {
-                            return None;
-                        };
-                        let text = self.text[facet.range.clone()].to_string();
-                        Some(Link { text, url: url.clone() })
+                    .filter_map(|facet| match &facet.r#type {
+                        FacetType::Link(url) => {
+                            let text =
+                                self.text[facet.range.clone()].to_string();
+                            Some(FacetModalItem::Link(Link {
+                                text,
+                                url: url.clone(),
+                            }))
+                        }
+                        FacetType::Mention(m) => {
+                            let text =
+                                self.text[facet.range.clone()].to_string();
+                            Some(FacetModalItem::Mention(Mention {
+                                text,
+                                did: m.clone(),
+                            }))
+                        }
+                        _ => None,
                     })
                     .collect::<Vec<_>>();
                 return AppEvent::ColumnNewLayer(Column::FacetModal(
-                    FacetModal {
-                        links,
-                        state: ConnectedListState::new(Some(0)),
-                    },
+                    FacetModal { links, state: ListState::new(Some(0)) },
                 ));
             }
 

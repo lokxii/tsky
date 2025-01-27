@@ -1,7 +1,4 @@
-use std::{
-    process::{Command, Stdio},
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use bsky_sdk::BskyAgent;
 use ratatui::{
@@ -13,11 +10,14 @@ use ratatui::{
 
 use crate::{
     app::{AppEvent, EventReceiver},
+    columns::Column,
     components::{
-        actor::{Actor, ActorBasic, ActorWidget},
-        list::{List, ListContext, ListState},
+        actor::{Actor, ActorWidget},
+        list::{List, ListState},
     },
 };
+
+use super::profile_page::ProfilePage;
 
 pub struct PostLikes {
     uri: String,
@@ -73,32 +73,7 @@ async fn fetch_likes(
     } = res.data;
     let actors = likes
         .into_iter()
-        .map(|like| {
-            let atrium_api::app::bsky::actor::defs::ProfileViewData {
-                associated,
-                avatar,
-                created_at,
-                did,
-                display_name,
-                handle,
-                labels,
-                viewer,
-                description,
-                ..
-            } = like.actor.data.clone();
-            let basic =
-                atrium_api::app::bsky::actor::defs::ProfileViewBasicData {
-                    associated,
-                    avatar,
-                    created_at,
-                    did,
-                    display_name,
-                    handle,
-                    labels,
-                    viewer,
-                };
-            Actor { basic: ActorBasic::from(&basic), description }
-        })
+        .map(|like| Actor::new(like.actor.data.clone()))
         .collect();
     return Ok((actors, cursor));
 }
@@ -127,7 +102,7 @@ impl EventReceiver for &mut PostLikes {
                 let likes = Arc::clone(&self.likes);
 
                 if let None = self.state.selected {
-                    self.state.select(Some(0));
+                    self.state.selected = Some(0);
                     return AppEvent::None;
                 }
                 if self.state.selected.unwrap() == actors.len() - 1
@@ -165,7 +140,7 @@ impl EventReceiver for &mut PostLikes {
             }
             KeyCode::Backspace => return AppEvent::ColumnPopLayer,
 
-            KeyCode::Enter => {
+            KeyCode::Char('a') => {
                 let likes = Arc::clone(&self.likes);
                 let likes = likes.lock().unwrap();
                 if likes.is_none() || self.state.selected.is_none() {
@@ -173,17 +148,10 @@ impl EventReceiver for &mut PostLikes {
                 }
                 let i = self.state.selected.unwrap();
                 let actor = &likes.as_ref().unwrap().0[i];
-                let handle = &actor.basic.handle;
-                let url = format!("https://bsky.app/profile/{}", handle);
-                if let Err(e) = Command::new("xdg-open")
-                    .arg(url)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                {
-                    log::error!("{:?}", e);
-                }
-                return AppEvent::None;
+                let me = &agent.get_session().await.unwrap().did;
+                let profile =
+                    ProfilePage::from_did(actor.basic.did.clone(), me, agent);
+                return AppEvent::ColumnNewLayer(Column::ProfilePage(profile));
             }
 
             _ => return AppEvent::None,
@@ -211,7 +179,7 @@ impl Widget for &mut PostLikes {
         }
 
         let actors = &likes.as_ref().unwrap().0;
-        let list = List::new(actors.len(), |context: ListContext| {
+        let list = List::new(actors.len(), |context| {
             let item = ActorWidget::new(&actors[context.index])
                 .block(Block::bordered().border_type(BorderType::Rounded))
                 .focused(context.is_selected);

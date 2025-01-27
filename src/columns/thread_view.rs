@@ -18,27 +18,24 @@ use ratatui::{
 
 use crate::{
     app::EventReceiver,
+    columns::{
+        facet_modal::{FacetModal, FacetModalItem, Link, Mention},
+        Column,
+    },
     components::{
-        connected_list::{
-            ConnectedList, ConnectedListContext, ConnectedListState,
-        },
         embed::{Embed, Record},
+        list::{List, ListState},
         post::{post_widget::PostWidget, FacetType, Post},
         separation::Separation,
     },
     post_manager, AppEvent,
 };
 
-use super::{
-    facet_modal::{FacetModal, Link},
-    Column,
-};
-
 pub struct ThreadView {
     post_uri: String,
     parent: Vec<String>,
     replies: Vec<String>,
-    state: ConnectedListState,
+    state: ListState,
 }
 
 fn parent_posts_rev(
@@ -122,12 +119,7 @@ impl ThreadView {
             .collect();
 
         let l = parent.len();
-        ThreadView {
-            post_uri,
-            parent,
-            replies,
-            state: ConnectedListState::new(Some(l)),
-        }
+        ThreadView { post_uri, parent, replies, state: ListState::new(Some(l)) }
     }
 
     pub fn selected(&self) -> Option<&String> {
@@ -176,7 +168,7 @@ impl EventReceiver for &mut ThreadView {
 
             KeyCode::Char('j') => {
                 if let None = self.state.selected {
-                    self.state.select(Some(0));
+                    self.state.selected = Some(0);
                 } else {
                     if self.state.selected.unwrap() == self.parent.len() {
                         if !self.replies.is_empty() {
@@ -203,21 +195,33 @@ impl EventReceiver for &mut ThreadView {
 
             KeyCode::Char('f') => {
                 let post = post_manager!().at(&self.post_uri).unwrap();
-                let links = post
+                let facets = post
                     .facets
                     .iter()
-                    .filter_map(|facet| {
-                        let FacetType::Link(url) = &facet.r#type else {
-                            return None;
-                        };
-                        let text = post.text[facet.range.clone()].to_string();
-                        Some(Link { text, url: url.clone() })
+                    .filter_map(|facet| match &facet.r#type {
+                        FacetType::Link(url) => {
+                            let text =
+                                post.text[facet.range.clone()].to_string();
+                            Some(FacetModalItem::Link(Link {
+                                text,
+                                url: url.clone(),
+                            }))
+                        }
+                        FacetType::Mention(m) => {
+                            let text =
+                                post.text[facet.range.clone()].to_string();
+                            Some(FacetModalItem::Mention(Mention {
+                                text,
+                                did: m.clone(),
+                            }))
+                        }
+                        _ => None,
                     })
                     .collect::<Vec<_>>();
                 return AppEvent::ColumnNewLayer(Column::FacetModal(
                     FacetModal {
-                        links,
-                        state: ConnectedListState::new(Some(0)),
+                        links: facets,
+                        state: ListState::new(Some(0)),
                     },
                 ));
             }
@@ -276,26 +280,23 @@ impl Widget for &mut ThreadView {
             .chain(reply_items)
             .collect::<Vec<_>>();
 
-        ConnectedList::new(
-            items.len(),
-            move |context: ConnectedListContext| match &items[context.index] {
-                ThreadViewItem::Post(uri) => {
-                    let post = post_manager!().at(&uri).unwrap();
-                    let item = PostWidget::new(post)
-                        .is_selected(context.is_selected)
-                        .has_border(true);
-                    let height = item.line_count(area.width) as u16;
-                    return (ThreadViewItemWidget::Post(item), height);
-                }
-                ThreadViewItem::Bar => {
-                    let item = Separation::default()
-                        .text(Line::from("Replies ").style(Color::Green))
-                        .line(BorderType::Double)
-                        .padding(1);
-                    return (ThreadViewItemWidget::Bar(item), 3);
-                }
-            },
-        )
+        List::new(items.len(), move |context| match &items[context.index] {
+            ThreadViewItem::Post(uri) => {
+                let post = post_manager!().at(&uri).unwrap();
+                let item = PostWidget::new(post)
+                    .is_selected(context.is_selected)
+                    .has_border(true);
+                let height = item.line_count(area.width);
+                return (ThreadViewItemWidget::Post(item), height);
+            }
+            ThreadViewItem::Bar => {
+                let item = Separation::default()
+                    .text(Line::from("Replies ").style(Color::Green))
+                    .line(BorderType::Double)
+                    .padding(1);
+                return (ThreadViewItemWidget::Bar(item), 3);
+            }
+        })
         .connecting(vec![0..self.parent.len()])
         .render(area, buf, &mut self.state);
     }

@@ -33,11 +33,7 @@ pub struct UpdatingFeed {
 impl UpdatingFeed {
     pub fn new(tx: Sender<RequestMsg>) -> UpdatingFeed {
         UpdatingFeed {
-            feed: Arc::new(Mutex::new(Feed {
-                posts: Vec::new(),
-                state: ListState::default(),
-                cursor: None,
-            })),
+            feed: Arc::new(Mutex::new(Feed::default())),
             request_worker_tx: tx,
         }
     }
@@ -167,7 +163,7 @@ impl EventReceiver for &mut UpdatingFeed {
                 };
 
                 feed.state = ListState::default();
-                feed.state.select(Some(0));
+                feed.state.selected = Some(0);
                 return AppEvent::None;
             }
 

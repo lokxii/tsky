@@ -15,12 +15,13 @@ use ratatui::{
 
 use crate::{
     components::{
-        list::{List, ListContext, ListState},
+        list::{List, ListState},
         post::{post_widget::PostWidget, Post},
     },
     post_manager,
 };
 
+#[derive(Default)]
 pub struct Feed {
     pub posts: Vec<FeedPost>,
     pub state: ListState,
@@ -30,7 +31,7 @@ pub struct Feed {
 impl Feed {
     pub fn insert_new_posts<T>(&mut self, new_posts: T) -> bool
     where
-        T: Iterator<Item = FeedPost> + Clone,
+        T: Iterator<Item = FeedPost>,
     {
         let new_posts = new_posts.collect::<Vec<_>>();
         if new_posts.len() == 0 {
@@ -39,7 +40,7 @@ impl Feed {
 
         if self.posts.len() == 0 {
             self.posts = new_posts;
-            self.state.select(Some(0));
+            self.state.selected = Some(0);
             self.remove_duplicate();
             return true;
         }
@@ -53,7 +54,7 @@ impl Feed {
                 .find_map(|np| self.posts.iter().position(|p| p == np))
         }) else {
             self.posts = new_posts;
-            self.state.select(Some(0));
+            self.state.selected = Some(0);
             self.remove_duplicate();
             return true;
         };
@@ -66,11 +67,11 @@ impl Feed {
         if autoscrolling {
             self.posts = new_posts;
             self.remove_duplicate();
-            self.state.select(Some(0));
+            self.state.selected = Some(0);
             return false;
         }
 
-        self.state.select(self.state.selected.map(|i| {
+        self.state.selected = self.state.selected.map(|i| {
             let mut i = i;
             while i < self.posts.len() {
                 let post = &self.posts[i];
@@ -81,7 +82,7 @@ impl Feed {
                 }
             }
             return 0;
-        }));
+        });
         self.posts = new_posts;
         self.remove_duplicate();
 
@@ -115,7 +116,7 @@ impl Feed {
                 let selected_post = &self.posts[j as usize];
                 let position = new_view.iter().position(|p| p == selected_post);
                 if position.is_some() {
-                    self.state.select(position);
+                    self.state.selected = position;
                     self.posts = new_view;
                     return;
                 } else {
@@ -127,7 +128,7 @@ impl Feed {
                 let selected_post = &self.posts[j as usize];
                 let position = new_view.iter().position(|p| p == selected_post);
                 if position.is_some() {
-                    self.state.select(position);
+                    self.state.selected = position;
                     self.posts = new_view;
                     return;
                 } else {
@@ -152,14 +153,21 @@ impl Widget for &mut Feed {
         let width = area.width;
         let posts = self.posts.clone();
 
-        List::new(self.posts.len(), |context: ListContext| {
+        List::new(self.posts.len(), |context| {
             let post = &posts[context.index];
-            let item = FeedPostWidget::new(post, context.is_selected);
+            let item =
+                FeedPostWidget::new(post).is_selected(context.is_selected);
             let height = item.line_count(width) as u16;
             return (item, height);
         })
         .render(area, buf, &mut self.state);
     }
+}
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub enum Reason {
+    Repost(RepostBy),
+    Pin,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -185,7 +193,7 @@ pub enum Reply {
 #[derive(Clone)]
 pub struct FeedPost {
     pub post_uri: String,
-    pub reason: Option<RepostBy>,
+    pub reason: Option<Reason>,
     pub reply_to: Option<Reply>,
 }
 
@@ -197,10 +205,13 @@ impl FeedPost {
 
         let reason = match view.reason.as_ref() {
             Some(Union::Refs(FeedViewPostReasonRefs::ReasonRepost(r))) => {
-                Some(RepostBy {
+                Some(Reason::Repost(RepostBy {
                     author: r.by.display_name.clone().unwrap_or(String::new()),
                     handle: r.by.handle.to_string(),
-                })
+                }))
+            }
+            Some(Union::Refs(FeedViewPostReasonRefs::ReasonPin(_))) => {
+                Some(Reason::Pin)
             }
             Some(Union::Unknown(u)) => {
                 panic!("Unknown reason type: {}", u.r#type)
@@ -245,26 +256,33 @@ impl PartialEq for FeedPost {
 
 impl Eq for FeedPost {}
 
-struct FeedPostWidget<'a> {
+#[derive(Clone)]
+pub struct FeedPostWidget<'a> {
     feed_post: &'a FeedPost,
     is_selected: bool,
     style: Style,
 }
 
 impl<'a> FeedPostWidget<'a> {
-    fn new(feed_post: &'a FeedPost, is_selected: bool) -> Self {
+    pub fn new(feed_post: &'a FeedPost) -> Self {
         FeedPostWidget {
             feed_post,
-            style: if is_selected {
-                Style::default().bg(Color::Rgb(45, 50, 55))
-            } else {
-                Style::default()
-            },
-            is_selected,
+            style: Style::default(),
+            is_selected: false,
         }
     }
 
-    fn line_count(&self, width: u16) -> u16 {
+    pub fn is_selected(mut self, is_selected: bool) -> Self {
+        self.is_selected = is_selected;
+        self.style = if is_selected {
+            Style::default().bg(Color::Rgb(45, 50, 55))
+        } else {
+            Style::default()
+        };
+        self
+    }
+
+    pub fn line_count(&self, width: u16) -> u16 {
         let post = post_manager!().at(&self.feed_post.post_uri).unwrap();
         PostWidget::new(post).line_count(width)
             + self.feed_post.reply_to.is_some() as u16
@@ -299,18 +317,24 @@ impl<'a> Widget for FeedPostWidget<'a> {
         ])
         .areas(inner_area);
 
-        let [repost_area, reply_area] = Layout::vertical([
+        let [reason_area, reply_area] = Layout::vertical([
             Constraint::Length(self.feed_post.reason.is_some() as u16),
             Constraint::Length(self.feed_post.reply_to.is_some() as u16),
         ])
         .areas(top_area);
 
-        if let Some(repost) = &self.feed_post.reason {
-            Line::from(Span::styled(
-                format!("⭮ Reposted by {}", repost.author),
-                Color::Green,
-            ))
-            .render(repost_area, buf);
+        match &self.feed_post.reason {
+            Some(Reason::Repost(repost)) => {
+                Line::styled(
+                    format!("⭮ Reposted by {}", repost.author),
+                    Color::Green,
+                )
+                .render(reason_area, buf);
+            }
+            Some(Reason::Pin) => {
+                Line::styled("📌Pinned", Color::Green).render(reason_area, buf);
+            }
+            None => {}
         }
 
         if let Some(reply_to) = &self.feed_post.reply_to {
