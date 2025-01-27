@@ -100,7 +100,8 @@ impl<'a> Widget for RecordWidget<'a> {
 
                 let quote_border = Block::bordered()
                     .style(self.style)
-                    .border_set(symbols::border::ROUNDED);
+                    .border_set(symbols::border::ROUNDED)
+                    .border_style(Color::DarkGray);
                 let quote_inner_area = quote_border.inner(quote_area);
                 quote_border.render(quote_area, buf);
 

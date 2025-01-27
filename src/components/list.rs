@@ -147,7 +147,7 @@ where
                 item,
                 SignedRect {
                     x: area.x as i32,
-                    y: y as i32,
+                    y: area.y as i32 + y,
                     height,
                     width: area.width,
                 },
@@ -204,7 +204,7 @@ where
                 item,
                 SignedRect {
                     x: area.left() as i32,
-                    y: y as i32,
+                    y: area.y as i32 + y,
                     height,
                     width: area.width,
                 },

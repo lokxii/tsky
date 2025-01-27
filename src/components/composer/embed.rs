@@ -5,7 +5,7 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode},
     layout::{Constraint, Layout, Rect},
     style::{Color, Style},
-    text::Line,
+    text::{Line, Span},
     widgets::{Block, BorderType, Widget},
 };
 use tokio::{fs::File, io::AsyncReadExt, process::Command};
@@ -433,9 +433,11 @@ impl<'a> Widget for EmbedWidget<'a> {
             Embed::RecordWithMedia(post, media) => (Some(media), Some(post)),
         };
 
+        let title = if self.focused { "Add media" } else { "Media" };
         let media_block = Block::bordered()
             .border_type(BorderType::Rounded)
-            .title(if self.focused { "Add media" } else { "Media" });
+            .border_style(Color::DarkGray)
+            .title(Span::styled(title, Color::Gray));
 
         if let Some(media) = media {
             let mut mw = MediaWidget::new(&media).block(media_block);
@@ -447,9 +449,9 @@ impl<'a> Widget for EmbedWidget<'a> {
             let media_inner = media_block.inner(media_area);
             media_block.render(media_area, buf);
             let style = if self.embed.state == 0 && self.focused {
-                Style::default().bg(Color::Rgb(45, 40, 44))
+                Style::default().fg(Color::DarkGray).bg(Color::Rgb(45, 40, 44))
             } else {
-                Style::default()
+                Style::default().fg(Color::DarkGray)
             };
             Line::styled("(Open file picker)", style).render(media_inner, buf);
         }

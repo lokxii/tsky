@@ -112,17 +112,22 @@ impl Widget for &mut FacetModal {
 
         let [_, area, _] = Layout::vertical([
             Constraint::Percentage(30),
-            Constraint::Length(self.links.len() as u16 + 6),
+            Constraint::Length(self.links.len() as u16 + 4),
             Constraint::Fill(1),
         ])
         .areas(area);
         Clear.render(area, buf);
 
-        let block = Block::bordered()
-            .padding(Padding::uniform(2))
-            .border_type(BorderType::QuadrantInside);
-        let inner_area = block.inner(area);
-        block.render(area, buf);
+        let area = {
+            let block = Block::bordered();
+            let area = block.inner(area);
+            let block = Block::bordered()
+                .border_type(BorderType::Rounded)
+                .title(Span::styled("Facets", Color::Gray));
+            let inner = block.inner(area);
+            block.render(area, buf);
+            inner
+        };
 
         let items = self.links.clone();
         List::new(self.links.len(), move |context| {
@@ -145,6 +150,6 @@ impl Widget for &mut FacetModal {
             let height = item.line_count(area.width) as u16;
             return (item, height);
         })
-        .render(inner_area, buf, &mut self.state);
+        .render(area, buf, &mut self.state);
     }
 }

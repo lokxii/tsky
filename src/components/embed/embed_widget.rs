@@ -78,7 +78,8 @@ impl Widget for EmbedWidget {
         } else {
             let borders = Block::bordered()
                 .style(self.style)
-                .border_set(symbols::border::ROUNDED);
+                .border_set(symbols::border::ROUNDED)
+                .border_style(Color::DarkGray);
             let inner_area = borders.inner(area);
             borders.render(area, buf);
             self.non_record_paragraph().render(inner_area, buf);

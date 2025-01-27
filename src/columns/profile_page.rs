@@ -11,7 +11,7 @@ use bsky_sdk::BskyAgent;
 use ratatui::{
     crossterm::event::{Event, KeyCode},
     style::{Color, Style},
-    text::Line,
+    text::{Line, Span},
     widgets::{Block, BorderType, StatefulWidget, Widget},
 };
 
@@ -198,8 +198,9 @@ impl Widget for &mut ProfilePage {
         let feed = &mut *feed as *mut Feed;
         unsafe {
             let actor_block = Block::bordered()
-                .title("Profile")
+                .title(Span::styled("Profile", Color::Gray))
                 .border_type(BorderType::Rounded)
+                .border_style(Color::DarkGray)
                 .style(if self.actor_selected {
                     Style::default().bg(Color::Rgb(45, 50, 55))
                 } else {

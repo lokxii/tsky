@@ -110,7 +110,8 @@ impl Widget for PostWidget {
         let area = if self.has_border {
             let borders = Block::bordered()
                 .style(self.style)
-                .border_set(symbols::border::ROUNDED);
+                .border_set(symbols::border::ROUNDED)
+                .border_style(Color::DarkGray);
             let inner_area = borders.inner(area);
             borders.render(area, buf);
             inner_area

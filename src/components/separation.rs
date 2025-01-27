@@ -1,5 +1,6 @@
 use ratatui::{
     layout::{Constraint, Layout},
+    style::Color,
     widgets::{block::Title, Block, BorderType, Borders, Widget},
 };
 
@@ -46,6 +47,7 @@ impl<'a> Widget for Separation<'a> {
             .borders(Borders::TOP)
             .title(self.text)
             .border_type(self.line)
+            .border_style(Color::DarkGray)
             .render(area, buf);
     }
 }

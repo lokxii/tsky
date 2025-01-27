@@ -38,10 +38,6 @@ impl ColumnStack {
         self.stack.pop()
     }
 
-    pub fn last(&self) -> Option<&Column> {
-        self.stack.last()
-    }
-
     pub fn last_mut(&mut self) -> Option<&mut Column> {
         self.stack.last_mut()
     }

@@ -4,6 +4,7 @@ use bsky_sdk::BskyAgent;
 use ratatui::{
     crossterm::event::{Event, KeyCode},
     layout::{Constraint, Layout},
+    style::Color,
     text::Line,
     widgets::{Block, BorderType, StatefulWidget, Widget},
 };
@@ -181,7 +182,11 @@ impl Widget for &mut PostLikes {
         let actors = &likes.as_ref().unwrap().0;
         let list = List::new(actors.len(), |context| {
             let item = ActorWidget::new(&actors[context.index])
-                .block(Block::bordered().border_type(BorderType::Rounded))
+                .block(
+                    Block::bordered()
+                        .border_type(BorderType::Rounded)
+                        .border_style(Color::DarkGray),
+                )
                 .focused(context.is_selected);
             let height = item.line_count(area.width) as u16;
             return (item, height);

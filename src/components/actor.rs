@@ -165,7 +165,7 @@ impl<'a> Widget for ActorWidget<'a> {
         };
         let area = if let Some(block) = self.block {
             let inner = block.inner(area);
-            block.style(style).border_style(style).render(area, buf);
+            block.style(style).render(area, buf);
             inner
         } else {
             area

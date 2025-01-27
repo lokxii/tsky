@@ -25,8 +25,8 @@ use bsky_sdk::{rich_text::RichText, BskyAgent};
 use ratatui::{
     crossterm::event::{self, Event},
     layout::{Constraint, Layout},
-    style::{Style, Stylize},
-    text::Line,
+    style::{Color, Style, Stylize},
+    text::{Line, Span},
     widgets::{Block, BorderType, Widget},
 };
 use regex::Regex;
@@ -765,8 +765,12 @@ impl Widget for &mut ComposerView {
         self.text_field.block(
             Block::bordered()
                 .border_type(BorderType::Rounded)
-                .title(Line::from(title).left_aligned())
-                .title(Line::from(word_remaining.to_string()).right_aligned()),
+                .border_style(Color::DarkGray)
+                .title(Line::styled(title, Color::Gray).left_aligned())
+                .title(
+                    Line::styled(word_remaining.to_string(), Color::Gray)
+                        .right_aligned(),
+                ),
         );
         self.text_field.focused(matches!(self.focus, Focus::TextField));
         let text_styles = parse_text_styles(self.text_field.lines());
@@ -780,7 +784,10 @@ impl Widget for &mut ComposerView {
             (_, InputMode::View) => "Langs (View)",
         };
         self.langs_field.block(
-            Block::bordered().border_type(BorderType::Rounded).title(title),
+            Block::bordered()
+                .border_type(BorderType::Rounded)
+                .border_style(Color::DarkGray)
+                .title(Span::styled(title, Color::Gray)),
         );
         self.langs_field.focused(matches!(self.focus, Focus::LangField));
         self.langs_field.render(lang_area, buf);
