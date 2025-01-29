@@ -1,6 +1,6 @@
 pub mod composer_view;
 pub mod facet_modal;
-pub mod notification;
+pub mod notifications;
 pub mod post_likes;
 pub mod profile_page;
 pub mod thread_view;
@@ -8,6 +8,7 @@ pub mod updating_feed;
 
 use composer_view::ComposerView;
 use facet_modal::FacetModal;
+use notifications::Notifications;
 use post_likes::PostLikes;
 use profile_page::ProfilePage;
 use thread_view::ThreadView;
@@ -18,6 +19,7 @@ pub enum Column {
     Thread(ThreadView),
     Composer(ComposerView),
     FacetModal(FacetModal),
+    Notifications(Notifications),
     PostLikes(PostLikes),
     ProfilePage(ProfilePage),
 }

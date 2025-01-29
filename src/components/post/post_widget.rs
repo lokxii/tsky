@@ -46,6 +46,7 @@ impl PostWidget {
     }
 
     pub fn line_count(&self, width: u16) -> u16 {
+        let width = width - self.has_border as u16 * 2;
         2 // author and date
             + self.body_paragraph().line_count(width) as u16
             + self.post.labels.len() as u16

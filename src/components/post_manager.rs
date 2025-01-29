@@ -66,11 +66,11 @@ impl PostManager {
         posts.insert(post.uri.clone(), post);
     }
 
-    // pub fn append(&self, new_posts: Vec<Post>) {
-    //     let posts = Arc::clone(&self.posts);
-    //     let mut posts = posts.lock().unwrap();
-    //     posts.extend(new_posts.into_iter().map(|p| (p.uri.clone(), p)));
-    // }
+    pub fn append(&self, new_posts: Vec<Post>) {
+        let posts = Arc::clone(&self.posts);
+        let mut posts = posts.lock().unwrap();
+        posts.extend(new_posts.into_iter().map(|p| (p.uri.clone(), p)));
+    }
 
     pub fn at(&self, key: &String) -> Option<Post> {
         let posts = Arc::clone(&self.posts);

@@ -86,6 +86,9 @@ impl App {
                     Some(Column::FacetModal(_)) => {
                         panic!("FacetModal on top of FacetModal?")
                     }
+                    Some(Column::Notifications(notifications)) => {
+                        f.render_widget(notifications, main_area);
+                    }
                     Some(Column::PostLikes(post_likes)) => {
                         f.render_widget(post_likes, main_area);
                     }
@@ -148,6 +151,9 @@ impl EventReceiver for &mut App {
             }
             Some(Column::FacetModal(modal)) => {
                 return modal.handle_events(event, agent).await
+            }
+            Some(Column::Notifications(notifications)) => {
+                return notifications.handle_events(event, agent).await
             }
             Some(Column::PostLikes(post_likes)) => {
                 return post_likes.handle_events(event, agent).await

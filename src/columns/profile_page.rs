@@ -19,7 +19,7 @@ use crate::{
     app::{AppEvent, EventReceiver},
     components::{
         actor::{ActorDetailed, ActorDetailedWidget},
-        feed::{Feed, FeedPost, FeedPostWidget},
+        feed::{FeedPost, FeedPostWidget, PostFeed},
         list::List,
         separation::Separation,
     },
@@ -30,14 +30,14 @@ use super::thread_view::ThreadView;
 
 pub struct ProfilePage {
     actor: Arc<Mutex<Option<ActorDetailed>>>,
-    feed: Arc<Mutex<Feed>>,
+    feed: Arc<Mutex<PostFeed>>,
     actor_selected: bool,
 }
 
 impl ProfilePage {
     pub fn from_did(did: Did, me: &Did, agent: BskyAgent) -> ProfilePage {
         let actor = Arc::new(Mutex::new(None));
-        let feed = Arc::new(Mutex::new(Feed::default()));
+        let feed = Arc::new(Mutex::new(PostFeed::default()));
 
         let actor_ = Arc::clone(&actor);
         let did_ = did.clone();
@@ -217,7 +217,7 @@ impl Widget for &mut ProfilePage {
             return;
         }
 
-        let feed = &mut *feed as *mut Feed;
+        let feed = &mut *feed as *mut PostFeed;
         unsafe {
             let actor_block = Block::bordered()
                 .title(Span::styled("Profile", Color::Gray))

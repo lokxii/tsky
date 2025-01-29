@@ -22,13 +22,13 @@ use crate::{
 };
 
 #[derive(Default)]
-pub struct Feed {
+pub struct PostFeed {
     pub posts: Vec<FeedPost>,
     pub state: ListState,
     pub cursor: Option<String>,
 }
 
-impl Feed {
+impl PostFeed {
     pub fn insert_new_posts<T>(&mut self, new_posts: T) -> bool
     where
         T: Iterator<Item = FeedPost>,
@@ -61,7 +61,7 @@ impl Feed {
 
         let new_posts = new_posts
             .into_iter()
-            .chain(self.posts.clone().into_iter().skip(overlap_idx + 1))
+            .chain(self.posts.iter().skip(overlap_idx + 1).map(FeedPost::clone))
             .collect::<Vec<_>>();
 
         if autoscrolling {
@@ -142,7 +142,7 @@ impl Feed {
     }
 }
 
-impl Widget for &mut Feed {
+impl Widget for &mut PostFeed {
     fn render(
         self,
         area: ratatui::prelude::Rect,

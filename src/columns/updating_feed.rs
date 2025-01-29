@@ -11,10 +11,10 @@ use std::sync::{
 
 use crate::{
     app::{AppEvent, EventReceiver},
-    columns::{Column, ComposerView, ThreadView},
+    columns::{Column, ComposerView, Notifications, ThreadView},
     components::{
         composer,
-        feed::{Feed, FeedPost, Reply},
+        feed::{FeedPost, PostFeed, Reply},
         list::ListState,
     },
     post_manager,
@@ -26,14 +26,14 @@ pub enum RequestMsg {
 }
 
 pub struct UpdatingFeed {
-    pub feed: Arc<Mutex<Feed>>,
+    pub feed: Arc<Mutex<PostFeed>>,
     pub request_worker_tx: Sender<RequestMsg>,
 }
 
 impl UpdatingFeed {
     pub fn new(tx: Sender<RequestMsg>) -> UpdatingFeed {
         UpdatingFeed {
-            feed: Arc::new(Mutex::new(Feed::default())),
+            feed: Arc::new(Mutex::new(PostFeed::default())),
             request_worker_tx: tx,
         }
     }
@@ -204,6 +204,19 @@ impl EventReceiver for &mut UpdatingFeed {
                 ));
             }
 
+            KeyCode::Char('b') => {
+                let notifications = match Notifications::new(agent).await {
+                    Ok(o) => o,
+                    Err(e) => {
+                        log::error!("{}", e);
+                        return AppEvent::None;
+                    }
+                };
+                return AppEvent::ColumnNewLayer(Column::Notifications(
+                    notifications,
+                ));
+            }
+
             _ => {
                 let Some(selected) = feed.state.selected else {
                     return AppEvent::None;
@@ -230,7 +243,7 @@ impl Widget for &mut UpdatingFeed {
     }
 }
 
-async fn get_old_posts(agent: &BskyAgent, feed: Arc<Mutex<Feed>>) {
+async fn get_old_posts(agent: &BskyAgent, feed: Arc<Mutex<PostFeed>>) {
     let cursor = {
         let feed = Arc::clone(&feed);
         let feed = feed.lock().unwrap();
