@@ -429,15 +429,16 @@ impl<'a> Widget for ActorDetailedWidget<'a> {
             (false, true, _) => "[Following]",
             (false, false, _) => "[+ Follow]",
         };
-        let ff = format!(
-            "{}{}",
-            ff,
-            if self.focused && !self.detailed.is_me { "(↵)" } else { "" }
-        );
+        let ff = Span::from(ff);
+        let ff = ff
+            + Span::styled(
+                if self.focused && !self.detailed.is_me { "(↵)" } else { "" },
+                Color::DarkGray,
+            );
         let [name_area, _, ff_area] = Layout::horizontal([
             Constraint::Min(1),
             Constraint::Fill(1),
-            Constraint::Length(ff.len() as u16),
+            Constraint::Length(ff.to_string().len() as u16),
         ])
         .areas(name_ff_area);
         (name + key_hint).render(name_area, buf);
