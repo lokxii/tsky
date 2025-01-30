@@ -130,7 +130,7 @@ where
                     .unwrap_or(false),
             });
             let y = state.selected_y + h as i32;
-            let y = y.clamp(0, area.bottom() as i32);
+            let y = y.clamp(0, area.bottom() as i32 - 1);
             state.selected_y = y - h as i32;
             y
         };

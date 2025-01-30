@@ -60,12 +60,19 @@ impl App {
                     })
                     .flatten();
 
+                let [_, area, _] = Layout::horizontal([
+                    Constraint::Fill(1),
+                    Constraint::Max(80),
+                    Constraint::Fill(1),
+                ])
+                .areas(f.area());
+
                 let [top_area, main_area, log_area] = Layout::vertical([
                     Constraint::Length(1),
                     Constraint::Fill(1),
                     Constraint::Length(last_log.is_some() as u16),
                 ])
-                .areas(f.area());
+                .areas(area);
 
                 let mut top_items = self
                     .column

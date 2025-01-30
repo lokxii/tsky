@@ -3,9 +3,7 @@ use std::sync::{Arc, Mutex};
 use bsky_sdk::BskyAgent;
 use ratatui::{
     crossterm::event::{Event, KeyCode},
-    layout::{Constraint, Layout},
     style::Color,
-    text::Line,
     widgets::{Block, BorderType, StatefulWidget, Widget},
 };
 
@@ -168,11 +166,6 @@ impl Widget for &mut PostLikes {
     ) where
         Self: Sized,
     {
-        let [title_area, list_area] =
-            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)])
-                .areas(area);
-        Line::from("Post likes:").render(title_area, buf);
-
         let likes = Arc::clone(&self.likes);
         let likes = likes.lock().unwrap();
         if likes.is_none() {
@@ -191,6 +184,6 @@ impl Widget for &mut PostLikes {
             let height = item.line_count(area.width) as u16;
             return (item, height);
         });
-        list.render(list_area, buf, &mut self.state);
+        list.render(area, buf, &mut self.state);
     }
 }
