@@ -43,16 +43,16 @@ impl ActorBasic {
 
 pub struct ActorBasicWidget<'a> {
     basic: &'a ActorBasic,
-    focused: bool,
+    block: Option<Block<'a>>,
 }
 
 impl<'a> ActorBasicWidget<'a> {
     pub fn new(basic: &'a ActorBasic) -> Self {
-        ActorBasicWidget { basic, focused: false }
+        ActorBasicWidget { basic, block: None }
     }
 
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.focused = focused;
+    pub fn block(mut self, block: Block<'a>) -> Self {
+        self.block = Some(block);
         self
     }
 }
@@ -65,10 +65,12 @@ impl<'a> Widget for ActorBasicWidget<'a> {
     ) where
         Self: Sized,
     {
-        let style = if self.focused {
-            Style::default().bg(Color::Rgb(45, 50, 55))
+        let area = if let Some(block) = self.block {
+            let inner = block.inner(area);
+            block.render(area, buf);
+            inner
         } else {
-            Style::default()
+            area
         };
         let labels = self
             .basic
@@ -78,7 +80,6 @@ impl<'a> Widget for ActorBasicWidget<'a> {
         (Span::styled(self.basic.name.clone(), Color::Cyan)
             + Span::styled(format!(" @{}", self.basic.handle), Color::Gray)
             + Span::styled(labels, Color::LightRed))
-        .style(style)
         .render(area, buf);
     }
 }
@@ -174,9 +175,7 @@ impl<'a> Widget for ActorWidget<'a> {
         let [basic_area, description_area] =
             Layout::vertical([Constraint::Length(1), Constraint::Fill(1)])
                 .areas(area);
-        ActorBasicWidget::new(&self.actor.basic)
-            .focused(self.focused)
-            .render(basic_area, buf);
+        ActorBasicWidget::new(&self.actor.basic).render(basic_area, buf);
         Paragraph::new(self.actor.description.clone().unwrap_or(String::new()))
             .render(description_area, buf);
     }

@@ -126,7 +126,7 @@ impl App {
                         f.render_widget(profile, main_area);
                     }
                     Some(Column::SearchView(search)) => {
-                        todo!()
+                        f.render_widget(search, main_area);
                     }
                 }
 
@@ -165,6 +165,7 @@ impl App {
             }
             Some(Column::SearchView(mut search)) => {
                 search.refresh();
+                self.column.push(Column::SearchView(search));
             }
             _ => {
                 self.column.push(last.unwrap());
@@ -203,7 +204,7 @@ impl EventReceiver for &mut App {
                 return profile.handle_events(event, agent).await
             }
             Some(Column::SearchView(search)) => {
-                todo!()
+                return search.handle_events(event, agent).await
             }
         };
     }

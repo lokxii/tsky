@@ -154,9 +154,7 @@ impl Widget for PostWidget {
             .areas(area);
 
         if self.show_author {
-            ActorBasicWidget::new(&post.author)
-                .focused(self.is_selected)
-                .render(author_area, buf);
+            ActorBasicWidget::new(&post.author).render(author_area, buf);
         }
 
         Line::from(post.created_at.to_string())

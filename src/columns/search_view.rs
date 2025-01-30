@@ -10,19 +10,23 @@ use atrium_api::types::Object;
 use bsky_sdk::BskyAgent;
 use ratatui::{
     crossterm::event::{self, Event, KeyCode},
-    widgets::Widget,
+    layout::{Constraint, Layout},
+    style::{Color, Style},
+    text::Span,
+    widgets::{Block, BorderType, StatefulWidget, Widget},
 };
 
 use crate::{
     app::{AppEvent, EventReceiver},
     columns::{profile_page::ProfilePage, Column},
     components::{
-        actor::ActorBasic,
+        actor::{ActorBasic, ActorBasicWidget},
         composer::{
             textarea::{Input, Key},
             vim::{InputMode, Vim},
         },
-        list::ListState,
+        list::{List, ListState},
+        separation::Separation,
     },
 };
 
@@ -99,6 +103,12 @@ impl SearchView {
 
                 match msg {
                     SearchWorkerMsg::Search(s) => {
+                        {
+                            let kv = kv.lock().unwrap();
+                            if kv.contains_key(&s) {
+                                continue;
+                            }
+                        }
                         let Some(Object { data, .. }) = request_retry!(
                             3,
                             agent
@@ -140,7 +150,18 @@ impl SearchView {
         let s = self.searchbar.textarea.lines().join("").trim().to_string();
         let kv = self.kv.lock().unwrap();
         if let Some(a) = kv.get(&s) {
-            self.feed = Some(SearchFeed::new(a.clone()));
+            if let Some(feed) = &self.feed {
+                let mut state = feed.state.clone();
+                let feed = SearchFeed::new(a.clone());
+                if matches!(state.selected, Some(i) if i >= feed.view.len()) {
+                    state = ListState::default();
+                    state.selected = Some(feed.view.len() - 1);
+                }
+                self.feed = Some(feed);
+                self.feed.as_mut().unwrap().state = state;
+            } else {
+                self.feed = Some(SearchFeed::new(a.clone()));
+            }
         }
     }
 
@@ -148,6 +169,14 @@ impl SearchView {
         if matches!(self.focus, Focus::SearchBar) {
             self.searchbar.textarea.insert_string(s);
         }
+    }
+
+    fn send_search_requet(&self) {
+        let q = self.searchbar.textarea.lines().join("").trim().to_string();
+        if q.is_empty() {
+            return;
+        }
+        self.tx.send(SearchWorkerMsg::Search(q)).unwrap();
     }
 }
 
@@ -167,6 +196,7 @@ impl EventReceiver for &mut SearchView {
             Event::Key(key) => key,
             Event::Paste(s) => {
                 self.handle_pasting(s);
+                self.send_search_requet();
                 return AppEvent::None;
             }
             _ => return AppEvent::None,
@@ -182,20 +212,13 @@ impl EventReceiver for &mut SearchView {
                     return AppEvent::None;
                 }
                 Input { key: Key::Backspace, .. }
-                    if !matches!(self.searchbar.mode, InputMode::Normal) =>
+                    if matches!(self.searchbar.mode, InputMode::Normal) =>
                 {
                     return AppEvent::ColumnPopLayer;
                 }
                 _ => {
                     let r = self.searchbar.handle_events(event, agent).await;
-                    let q = self
-                        .searchbar
-                        .textarea
-                        .lines()
-                        .join("")
-                        .trim()
-                        .to_string();
-                    self.tx.send(SearchWorkerMsg::Search(q)).unwrap();
+                    self.send_search_requet();
                     return r;
                 }
             },
@@ -212,10 +235,12 @@ impl EventReceiver for &mut SearchView {
                     let Some(feed) = self.feed.as_mut() else {
                         return AppEvent::None;
                     };
-                    if let None = feed.state.selected {
+                    if feed.state.selected == None {
                         feed.state.selected = Some(0);
                     } else {
-                        feed.state.next();
+                        if feed.state.selected.unwrap() < feed.view.len() - 1 {
+                            feed.state.next();
+                        }
                     }
                     return AppEvent::None;
                 }
@@ -256,5 +281,50 @@ impl Widget for &mut SearchView {
     ) where
         Self: Sized,
     {
+        let [_, searchbar_area, separation_area, results_area] =
+            Layout::vertical([
+                Constraint::Length(2),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Fill(1),
+            ])
+            .areas(area);
+
+        let title = match (&self.focus, &self.searchbar.mode) {
+            (Focus::Results, _) => "Query",
+            (_, InputMode::Normal) => "Query (Normal)",
+            (_, InputMode::Insert) => "Query (Insert)",
+            (_, InputMode::Visual) => "Query (View)",
+        };
+        self.searchbar.textarea.block(
+            Block::bordered()
+                .border_type(BorderType::Rounded)
+                .border_style(Color::DarkGray)
+                .title(Span::styled(title, Color::Gray)),
+        );
+        self.searchbar.textarea.focused(matches!(self.focus, Focus::SearchBar));
+        self.searchbar.textarea.render(searchbar_area, buf);
+
+        Separation::default().padding(1).render(separation_area, buf);
+
+        if let Some(feed) = self.feed.as_mut() {
+            let items = feed.view.clone();
+            List::new(items.len(), |context| {
+                let style = if context.is_selected {
+                    Style::default().bg(Color::Rgb(45, 50, 55))
+                } else {
+                    Style::default()
+                };
+                let block = Block::bordered()
+                    .border_type(BorderType::Rounded)
+                    .border_style(Color::DarkGray)
+                    .style(style);
+                let item =
+                    ActorBasicWidget::new(&items[context.index]).block(block);
+
+                (item, 3)
+            })
+            .render(results_area, buf, &mut feed.state);
+        }
     }
 }
