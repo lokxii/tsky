@@ -161,7 +161,8 @@ impl EventReceiver for &mut ProfilePage {
                 if feed.state.selected == None {
                     return AppEvent::None;
                 }
-                let uri = &feed.posts[feed.state.selected.unwrap()].post_uri;
+                let i = feed.state.selected.unwrap() - 2;
+                let uri = &feed.posts[i].post_uri;
                 let thread = ThreadView::from_uri(uri.clone(), agent).await;
                 match thread {
                     Ok(o) => {
