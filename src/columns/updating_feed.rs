@@ -99,7 +99,7 @@ impl UpdatingFeed {
             loop {
                 let Ok(msg) = rx.recv() else {
                     log::error!("Error receiving request message in worker");
-                    continue;
+                    return;
                 };
 
                 match msg {

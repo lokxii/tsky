@@ -118,6 +118,9 @@ impl App {
                     Some(Column::ProfilePage(profile)) => {
                         f.render_widget(profile, main_area);
                     }
+                    Some(Column::SearchView(search)) => {
+                        todo!()
+                    }
                 }
 
                 match &mut modal {
@@ -142,18 +145,23 @@ impl App {
             .unwrap();
     }
 
-    pub async fn active(&mut self) {
+    pub async fn refresh(&mut self) {
         let last = self.column.pop();
         if last.is_none() {
             return;
         }
-        let Some(Column::Composer(mut composer)) = last else {
-            self.column.push(last.unwrap());
-            return;
-        };
-        if !composer.post_finished().await {
-            self.column.push(Column::Composer(composer));
-            return;
+        match last {
+            Some(Column::Composer(mut composer)) => {
+                if !composer.post_finished().await {
+                    self.column.push(Column::Composer(composer));
+                }
+            }
+            Some(Column::SearchView(mut search)) => {
+                search.refresh();
+            }
+            _ => {
+                self.column.push(last.unwrap());
+            }
         }
     }
 }
@@ -186,6 +194,9 @@ impl EventReceiver for &mut App {
             }
             Some(Column::ProfilePage(profile)) => {
                 return profile.handle_events(event, agent).await
+            }
+            Some(Column::SearchView(search)) => {
+                todo!()
             }
         };
     }
