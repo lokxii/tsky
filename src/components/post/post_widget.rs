@@ -18,6 +18,7 @@ pub struct PostWidget {
     style: Style,
     is_selected: bool,
     has_border: bool,
+    show_author: bool,
 }
 
 impl PostWidget {
@@ -27,6 +28,7 @@ impl PostWidget {
             style: Style::default(),
             is_selected: false,
             has_border: false,
+            show_author: true,
         }
     }
 
@@ -40,6 +42,11 @@ impl PostWidget {
         self
     }
 
+    pub fn show_author(mut self, show_author: bool) -> Self {
+        self.show_author = show_author;
+        self
+    }
+
     pub fn has_border(mut self, has_border: bool) -> Self {
         self.has_border = has_border;
         self
@@ -47,7 +54,8 @@ impl PostWidget {
 
     pub fn line_count(&self, width: u16) -> u16 {
         let width = width - self.has_border as u16 * 2;
-        2 // author and date
+        self.show_author as u16
+            + 1 // date
             + self.body_paragraph().line_count(width) as u16
             + self.post.labels.len() as u16
             + 1 // stats
@@ -131,7 +139,7 @@ impl Widget for PostWidget {
 
         let [author_area, datetime_area, text_area, labels_area, embed_area, stats_area] =
             Layout::vertical([
-                Constraint::Length(1),
+                Constraint::Length(self.show_author as u16),
                 Constraint::Length(1),
                 Constraint::Length(text.line_count(area.width) as u16),
                 Constraint::Length(labels.len() as u16),
@@ -145,9 +153,11 @@ impl Widget for PostWidget {
             ])
             .areas(area);
 
-        ActorBasicWidget::new(&post.author)
-            .focused(self.is_selected)
-            .render(author_area, buf);
+        if self.show_author {
+            ActorBasicWidget::new(&post.author)
+                .focused(self.is_selected)
+                .render(author_area, buf);
+        }
 
         Line::from(post.created_at.to_string())
             .style(Color::DarkGray)

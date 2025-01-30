@@ -109,15 +109,21 @@ impl Eq for Notification {}
 pub struct NotificationWidget<'a> {
     notif: &'a Notification,
     block: Option<Block<'a>>,
+    focused: bool,
 }
 
 impl<'a> NotificationWidget<'a> {
     pub fn new(notif: &'a Notification) -> Self {
-        Self { notif, block: None }
+        Self { notif, block: None, focused: false }
     }
 
     pub fn block(mut self, block: Block<'a>) -> Self {
         self.block = Some(block);
+        self
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
         self
     }
 
@@ -127,15 +133,21 @@ impl<'a> NotificationWidget<'a> {
         match &self.notif.record {
             Record::Like(subject) => {
                 let post = post_manager!().at(&subject).unwrap();
-                PostWidget::new(post).line_count(width) + bh + 2
+                PostWidget::new(post).show_author(false).line_count(width)
+                    + bh
+                    + 2
             }
             Record::Repost(subject) => {
                 let post = post_manager!().at(&subject).unwrap();
-                PostWidget::new(post).line_count(width) + bh + 2
+                PostWidget::new(post).show_author(false).line_count(width)
+                    + bh
+                    + 2
             }
             Record::Reply(post_uri) => {
                 let post = post_manager!().at(&post_uri).unwrap();
-                PostWidget::new(post).line_count(width) + bh + 2
+                PostWidget::new(post).show_author(false).line_count(width)
+                    + bh
+                    + 2
             }
             Record::Mention(post_uri) => {
                 let post = post_manager!().at(&post_uri).unwrap();
@@ -160,6 +172,11 @@ impl<'a> Widget for NotificationWidget<'a> {
         Self: Sized,
     {
         let area = if let Some(block) = self.block {
+            let block = if !self.notif.is_read {
+                block.border_style(Color::LightBlue)
+            } else {
+                block
+            };
             let inner = block.inner(area);
             block.render(area, buf);
             inner
@@ -178,6 +195,10 @@ impl<'a> Widget for NotificationWidget<'a> {
 
                 Line::from(vec![
                     Span::styled(&self.notif.author.basic.name, Color::Cyan),
+                    Span::styled(
+                        if self.focused { " (A)" } else { "" },
+                        Color::DarkGray,
+                    ),
                     Span::styled(" ♡ liked", Color::Green),
                     Span::styled(" your post", Color::Gray),
                 ])
@@ -186,7 +207,7 @@ impl<'a> Widget for NotificationWidget<'a> {
                 Separation::default().render(separation_area, buf);
 
                 let post = post_manager!().at(&subject).unwrap();
-                PostWidget::new(post).render(post_area, buf);
+                PostWidget::new(post).show_author(false).render(post_area, buf);
             }
             Record::Repost(subject) => {
                 let [reason_area, separation_area, post_area] =
@@ -199,6 +220,10 @@ impl<'a> Widget for NotificationWidget<'a> {
 
                 Line::from(vec![
                     Span::styled(&self.notif.author.basic.name, Color::Cyan),
+                    Span::styled(
+                        if self.focused { " (A)" } else { "" },
+                        Color::DarkGray,
+                    ),
                     Span::styled(" ⭮ reposted", Color::Green),
                     Span::styled(" your post", Color::Gray),
                 ])
@@ -207,7 +232,7 @@ impl<'a> Widget for NotificationWidget<'a> {
                 Separation::default().render(separation_area, buf);
 
                 let post = post_manager!().at(&subject).unwrap();
-                PostWidget::new(post).render(post_area, buf);
+                PostWidget::new(post).show_author(false).render(post_area, buf);
             }
             Record::Reply(post_uri) => {
                 let [reason_area, separation_area, post_area] =
@@ -220,6 +245,10 @@ impl<'a> Widget for NotificationWidget<'a> {
 
                 Line::from(vec![
                     Span::styled(&self.notif.author.basic.name, Color::Cyan),
+                    Span::styled(
+                        if self.focused { " (A)" } else { "" },
+                        Color::DarkGray,
+                    ),
                     Span::styled(" 💬replied", Color::Green),
                     Span::styled(" to your post", Color::Gray),
                 ])
@@ -228,7 +257,7 @@ impl<'a> Widget for NotificationWidget<'a> {
                 Separation::default().render(separation_area, buf);
 
                 let post = post_manager!().at(&post_uri).unwrap();
-                PostWidget::new(post).render(post_area, buf);
+                PostWidget::new(post).show_author(false).render(post_area, buf);
             }
             Record::Mention(post_uri) => {
                 let post = post_manager!().at(&post_uri).unwrap();
@@ -241,6 +270,10 @@ impl<'a> Widget for NotificationWidget<'a> {
             Record::Follow => {
                 Line::from(vec![
                     Span::styled(&self.notif.author.basic.name, Color::Cyan),
+                    Span::styled(
+                        if self.focused { "(A)" } else { "" },
+                        Color::DarkGray,
+                    ),
                     Span::styled(" followed", Color::Green),
                     Span::styled(" you", Color::Gray),
                 ])

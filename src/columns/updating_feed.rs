@@ -205,13 +205,8 @@ impl EventReceiver for &mut UpdatingFeed {
             }
 
             KeyCode::Char('b') => {
-                let notifications = match Notifications::new(agent).await {
-                    Ok(o) => o,
-                    Err(e) => {
-                        log::error!("{}", e);
-                        return AppEvent::None;
-                    }
-                };
+                let notifications = Notifications::new(agent.clone()).await;
+                notifications.spawn_worker(agent);
                 return AppEvent::ColumnNewLayer(Column::Notifications(
                     notifications,
                 ));
