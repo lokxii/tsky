@@ -199,10 +199,8 @@ macro_rules! create_external_ref {
 
 impl ComposerView {
     pub fn new(reply: Option<ReplyRef>, embed: Embed) -> Self {
-        let mut text_field = Vim::new(|_| true);
-        text_field.mode = InputMode::Insert;
-
-        let mut langs_field = Vim::new(|i| {
+        let text_field = Vim::new(|_| true);
+        let langs_field = Vim::new(|i| {
             let atoz = |i| {
                 matches!(i, Input { key: Key::Char(c), .. }
                 if ('a'..='z').contains(&c) || c == ',')
@@ -216,7 +214,6 @@ impl ComposerView {
             };
             atoz(i) || esc_or_backspace(i)
         });
-        langs_field.mode = InputMode::Insert;
 
         ComposerView {
             text_field,

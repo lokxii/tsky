@@ -21,7 +21,7 @@ impl Vim {
     pub fn new(f: fn(Input) -> bool) -> Self {
         Self {
             textarea: TextArea::from(String::new()),
-            mode: InputMode::Normal,
+            mode: InputMode::Insert,
             allowed_input: f,
         }
     }
