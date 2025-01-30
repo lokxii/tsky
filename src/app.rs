@@ -5,6 +5,8 @@ use ratatui::{
     crossterm::event,
     layout::{Constraint, Layout},
     prelude::CrosstermBackend,
+    style::{Color, Style, Stylize},
+    text::{Line, Span},
     Terminal,
 };
 
@@ -58,11 +60,32 @@ impl App {
                     })
                     .flatten();
 
-                let [main_area, log_area] = Layout::vertical([
+                let [top_area, main_area, log_area] = Layout::vertical([
+                    Constraint::Length(1),
                     Constraint::Fill(1),
                     Constraint::Length(last_log.is_some() as u16),
                 ])
                 .areas(f.area());
+
+                let mut top_items = self
+                    .column
+                    .stack
+                    .iter()
+                    .map(Column::name)
+                    .map(|c| {
+                        Span::styled(
+                            c,
+                            Style::default().bg(Color::Rgb(45, 50, 55)),
+                        )
+                    })
+                    .peekable();
+                let mut top = Line::from(top_items.next().unwrap_or_default());
+                while top_items.peek().is_some() {
+                    top += Span::styled(" > ", Color::DarkGray);
+                    top += top_items.next().unwrap();
+                }
+                top += top_items.next().unwrap_or_default();
+                f.render_widget(top, top_area);
 
                 let last = self.column.pop();
                 let (mut modal, mut last) =
@@ -110,7 +133,10 @@ impl App {
                 }
 
                 last_log.map(|log| {
-                    f.render_widget(log, log_area);
+                    f.render_widget(
+                        Span::styled(log, Style::default().reversed()),
+                        log_area,
+                    );
                 });
             })
             .unwrap();

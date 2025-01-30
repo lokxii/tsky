@@ -24,6 +24,21 @@ pub enum Column {
     ProfilePage(ProfilePage),
 }
 
+impl Column {
+    pub fn name(&self) -> String {
+        match self {
+            Column::UpdatingFeed(_) => "Feed",
+            Column::Thread(_) => "Thread",
+            Column::Composer(_) => "Composer",
+            Column::FacetModal(_) => "Facets",
+            Column::Notifications(_) => "Notifications",
+            Column::PostLikes(_) => "Likes",
+            Column::ProfilePage(_) => "Profile",
+        }
+        .to_string()
+    }
+}
+
 pub struct ColumnStack {
     pub stack: Vec<Column>,
 }
