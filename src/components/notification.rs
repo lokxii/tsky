@@ -28,7 +28,6 @@ pub enum Record {
     Mention(PostUri),
     Quote(PostUri),
     Follow,
-    Other,
 }
 
 impl Record {
@@ -54,10 +53,7 @@ impl Record {
             "mention" => return Ok(Record::Mention(uri)),
             "quote" => return Ok(Record::Quote(uri)),
             "follow" => return Ok(Record::Follow),
-            _ => {
-                log::info!("Skipping notification type {}", reason);
-                return Ok(Record::Other);
-            }
+            _ => return Err("Unknown notification reason".to_string()),
         }
     }
 }
@@ -158,7 +154,6 @@ impl<'a> NotificationWidget<'a> {
                 PostWidget::new(post).line_count(width) + bh
             }
             Record::Follow => 1 + bh,
-            Record::Other => 0,
         }
     }
 }
@@ -279,7 +274,6 @@ impl<'a> Widget for NotificationWidget<'a> {
                 ])
                 .render(area, buf);
             }
-            Record::Other => {}
         }
     }
 }

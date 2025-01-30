@@ -55,6 +55,15 @@ impl Notifications {
                         cursor: None,
                         limit: Some(100.try_into().unwrap()),
                         priority: None,
+                        reasons: Some(
+                            [
+                                "like", "repost", "follow", "mention", "reply",
+                                "quote",
+                            ]
+                            .into_iter()
+                            .map(String::from)
+                            .collect(),
+                        ),
                         seen_at: None,
                     }
                     .into(),
@@ -98,10 +107,6 @@ impl Notifications {
                     return;
                 }
             };
-            let notifs = notifs
-                .into_iter()
-                .filter(|n| !matches!(n.record, Record::Other))
-                .collect();
 
             if let Err(e) = fetch_missing_posts(&notifs, agent).await {
                 log::error!("{}", e);
@@ -129,7 +134,6 @@ impl Notifications {
             while !*is_terminate_worker.lock().unwrap() {
                 tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
-                let old_seen_at = { seen_at.lock().unwrap().clone() };
                 let out = agent
                     .api
                     .app
@@ -140,7 +144,16 @@ impl Notifications {
                             cursor: None,
                             limit: Some(100.try_into().unwrap()),
                             priority: None,
-                            seen_at: old_seen_at.clone(),
+                            reasons: Some(
+                                [
+                                    "like", "repost", "follow", "mention",
+                                    "reply", "quote",
+                                ]
+                                .into_iter()
+                                .map(String::from)
+                                .collect(),
+                            ),
+                            seen_at: None,
                         }
                         .into(),
                     )
@@ -152,22 +165,17 @@ impl Notifications {
                         continue;
                     }
                 };
-                let list_notifications::OutputData {
-                    notifications,
-                    seen_at: new_seen_at,
-                    ..
-                } = data;
+                let list_notifications::OutputData { notifications, .. } = data;
 
+                let new_seen_at = atrium_api::types::string::Datetime::now();
                 let out = agent
                     .api
                     .app
                     .bsky
                     .notification
                     .update_seen(
-                        update_seen::InputData {
-                            seen_at: new_seen_at.clone().unwrap(),
-                        }
-                        .into(),
+                        update_seen::InputData { seen_at: new_seen_at.clone() }
+                            .into(),
                     )
                     .await;
                 if let Err(e) = out {
@@ -197,7 +205,7 @@ impl Notifications {
                 // Lets hope there won't be race conditions
                 {
                     let mut seen_at = seen_at.lock().unwrap();
-                    *seen_at = new_seen_at;
+                    *seen_at = Some(new_seen_at);
                     let mut feed = feed.lock().unwrap();
                     insert_notifs(&mut *feed, new_notifs);
                 }
@@ -366,7 +374,6 @@ impl EventReceiver for &mut Notifications {
                     Record::Follow => {
                         return AppEvent::None;
                     }
-                    Record::Other => panic!("Shouldn't happen"),
                 }
             }
 
@@ -390,7 +397,6 @@ impl EventReceiver for &mut Notifications {
                     Record::Follow => {
                         return AppEvent::None;
                     }
-                    Record::Other => panic!("Shouldn't happen"),
                 }
             }
         }
