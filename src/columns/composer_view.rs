@@ -5,7 +5,8 @@ use crate::{
     components::{
         composer::{
             embed::{Embed, EmbedState, EmbedWidget, Media},
-            textarea::{CursorMove, Input, Key, TextArea, TextStyle},
+            textarea::{Input, Key, TextStyle},
+            vim::{InputMode, Vim},
         },
         post::{
             facets::{detect_facets, CharSlice, FacetFeature},
@@ -32,12 +33,6 @@ use ratatui::{
 use regex::Regex;
 use tokio::task::JoinHandle;
 
-enum InputMode {
-    Normal,
-    Insert,
-    View,
-}
-
 enum Focus {
     TextField,
     LangField,
@@ -48,9 +43,8 @@ static RE_URL: OnceLock<Regex> = OnceLock::new();
 static RE_ENDING_PUNCTUATION: OnceLock<Regex> = OnceLock::new();
 
 pub struct ComposerView {
-    text_field: TextArea,
-    langs_field: TextArea,
-    inputmode: InputMode,
+    text_field: Vim,
+    lang_field: Vim,
     focus: Focus,
     reply: Option<ReplyRef>,
     embed: EmbedState,
@@ -205,13 +199,28 @@ macro_rules! create_external_ref {
 
 impl ComposerView {
     pub fn new(reply: Option<ReplyRef>, embed: Embed) -> Self {
-        let textarea = TextArea::from(String::new());
-        let lang = TextArea::from(String::new());
+        let mut text_field = Vim::new(|_| true);
+        text_field.mode = InputMode::Insert;
+
+        let mut langs_field = Vim::new(|i| {
+            let atoz = |i| {
+                matches!(i, Input { key: Key::Char(c), .. }
+                if ('a'..='z').contains(&c) || c == ',')
+            };
+            let esc_or_backspace = |i| {
+                matches!(
+                    i,
+                    Input { key: Key::Esc, .. }
+                        | Input { key: Key::Backspace, .. }
+                )
+            };
+            atoz(i) || esc_or_backspace(i)
+        });
+        langs_field.mode = InputMode::Insert;
 
         ComposerView {
-            text_field: textarea,
-            langs_field: lang,
-            inputmode: InputMode::Insert,
+            text_field,
+            lang_field: langs_field,
             focus: Focus::TextField,
             reply,
             embed: EmbedState::new(embed),
@@ -234,12 +243,12 @@ impl ComposerView {
     }
 
     async fn post(&self, agent: BskyAgent) -> Option<JoinHandle<AppEvent>> {
-        let text = self.text_field.lines().join("\n");
+        let text = self.text_field.textarea.lines().join("\n");
         if text.is_empty() && matches!(self.embed.embed, Embed::None) {
             return None;
         }
 
-        let langs = &self.langs_field.lines()[0];
+        let langs = &self.lang_field.textarea.lines()[0];
         let mut invalid_langs = vec![];
         let langs = langs
             .split(',')
@@ -374,18 +383,18 @@ impl ComposerView {
         }
         match self.focus {
             Focus::TextField => {
-                self.text_field.insert_string(s);
+                self.text_field.textarea.insert_string(s);
                 self.embed_external();
             }
             Focus::LangField => {
-                self.langs_field.insert_string(s);
+                self.lang_field.textarea.insert_string(s);
             }
             _ => {}
         }
     }
 
     fn embed_external(&mut self) {
-        let text = self.text_field.lines().join("\n");
+        let text = self.text_field.textarea.lines().join("\n");
         let re_url = RE_URL.get_or_init(|| {
             Regex::new(
                 r"(?:^|\s|\()((?:https?:\/\/[\S]+)|(?:(?<domain>[a-z][a-z0-9]*(?:\.[a-z0-9]+)+)[\S]*))",
@@ -440,266 +449,49 @@ impl EventReceiver for &mut ComposerView {
             return AppEvent::None;
         }
 
-        match self.inputmode {
-            InputMode::Insert => match event.clone().into() {
-                Input { key: Key::Esc, .. } => {
-                    self.inputmode = InputMode::Normal;
-                    match self.focus {
-                        Focus::TextField => {
-                            self.text_field.push_history();
-                            self.text_field.snap_cursor();
-                        }
-                        Focus::LangField => {
-                            self.text_field.push_history();
-                            self.langs_field.snap_cursor();
-                        }
-                        _ => {}
-                    }
-                    return AppEvent::None;
-                }
+        match self.focus {
+            Focus::TextField => match event.clone().into() {
                 Input { key: Key::Tab, .. } => {
-                    match self.focus {
-                        Focus::TextField => self.focus = Focus::LangField,
-                        Focus::LangField => self.focus = Focus::AttachmentField,
-                        Focus::AttachmentField => self.focus = Focus::TextField,
-                    };
+                    self.focus = Focus::LangField;
                     return AppEvent::None;
                 }
-                input => match self.focus {
-                    Focus::TextField => {
-                        self.text_field.input(input, |_| true);
-                        self.embed_external();
-                        return AppEvent::None;
+                Input { key: Key::Enter, .. }
+                    if matches!(self.text_field.mode, InputMode::Normal) =>
+                {
+                    if self.post_handle.is_none() {
+                        self.post_handle = self.post(agent).await;
                     }
-                    Focus::LangField => {
-                        if matches!(input, Input { key: Key::Enter, .. }) {
-                            if self.post_handle.is_none() {
-                                self.post_handle = self.post(agent).await;
-                            }
-                            return AppEvent::None;
-                        }
-                        let atoz = |i| {
-                            matches!(i, Input { key: Key::Char(c), .. }
-                            if ('a'..='z').contains(&c) || c == ',')
-                        };
-                        let esc_or_backspace = |i| {
-                            matches!(
-                                i,
-                                Input { key: Key::Esc, .. }
-                                    | Input { key: Key::Backspace, .. }
-                            )
-                        };
-                        self.langs_field
-                            .input(input, |i| atoz(i) || esc_or_backspace(i));
-                        return AppEvent::None;
-                    }
-                    Focus::AttachmentField => {}
-                },
-            },
-            InputMode::Normal => match event.clone().into() {
-                Input { key: Key::Enter, .. } => match self.focus {
-                    Focus::TextField | Focus::LangField => {
-                        if self.post_handle.is_none() {
-                            self.post_handle = self.post(agent.clone()).await;
-                        }
-                    }
-                    _ => {}
-                },
-                Input { key: Key::Tab, .. } => match self.focus {
-                    Focus::TextField => self.focus = Focus::LangField,
-                    Focus::LangField => self.focus = Focus::AttachmentField,
-                    Focus::AttachmentField => self.focus = Focus::TextField,
-                },
-                _ => (),
-            },
-            _ => (),
-        };
-        return match self.focus {
-            Focus::TextField => {
-                vim_keys(event, &mut self.text_field, &mut self.inputmode)
-            }
-            Focus::LangField => {
-                vim_keys(event, &mut self.langs_field, &mut self.inputmode)
-            }
-            Focus::AttachmentField => {
-                self.embed.handle_events(event, agent).await
-            }
-        };
-    }
-}
-
-fn vim_keys(
-    event: impl Into<Input>,
-    textarea: &mut TextArea,
-    inputmode: &mut InputMode,
-) -> AppEvent {
-    match event.into() {
-        // normal mode
-        Input { key: Key::Backspace, .. } => {
-            if matches!(inputmode, InputMode::Normal) {
-                return AppEvent::ColumnPopLayer;
-            }
-        }
-        Input { key: Key::Char('i'), .. } => {
-            if matches!(inputmode, InputMode::Normal) {
-                *inputmode = InputMode::Insert;
-            }
-        }
-        Input { key: Key::Char('A'), .. } => {
-            if matches!(inputmode, InputMode::Normal) {
-                textarea.move_cursor(CursorMove::End);
-                *inputmode = InputMode::Insert;
-            }
-        }
-        Input { key: Key::Char('o'), .. } => {
-            if matches!(inputmode, InputMode::Normal) {
-                textarea.insert_newline_after();
-                textarea.move_cursor(CursorMove::Down);
-                textarea.snap_cursor();
-                *inputmode = InputMode::Insert;
-            }
-        }
-        Input { key: Key::Char('O'), .. } => {
-            if matches!(inputmode, InputMode::Normal) {
-                textarea.insert_newline_before();
-                textarea.snap_cursor();
-                *inputmode = InputMode::Insert;
-            }
-        }
-        Input { key: Key::Char('p'), .. } => {
-            textarea.paste_after();
-        }
-        Input { key: Key::Char('P'), .. } => {
-            textarea.paste_before();
-        }
-        Input { key: Key::Char('u'), .. } => {
-            textarea.undo();
-        }
-        Input { key: Key::Char('r'), ctrl: true, .. } => {
-            textarea.redo();
-        }
-        Input { key: Key::Char('v'), .. } => {
-            if matches!(*inputmode, InputMode::Normal) {
-                textarea.start_selection();
-                *inputmode = InputMode::View;
-            }
-        }
-        Input { key: Key::Char('x'), .. } => {
-            textarea.delete_char();
-        }
-        Input { key: Key::Char('>'), .. } => {
-            if matches!(*inputmode, InputMode::Normal)
-                && matches!(
-                    event::read().unwrap().into(),
-                    Input { key: Key::Char('>'), .. }
-                )
-            {
-                textarea.indent_right();
-            }
-        }
-        Input { key: Key::Char('<'), .. } => {
-            if matches!(*inputmode, InputMode::Normal)
-                && matches!(
-                    event::read().unwrap().into(),
-                    Input { key: Key::Char('<'), .. }
-                )
-            {
-                textarea.indent_left();
-            }
-        }
-
-        // universal movement
-        Input { key: Key::Char('h'), .. } => {
-            textarea.move_cursor(CursorMove::Back)
-        }
-        Input { key: Key::Char('j'), .. } => {
-            textarea.move_cursor(CursorMove::Down)
-        }
-        Input { key: Key::Char('k'), .. } => {
-            textarea.move_cursor(CursorMove::Up)
-        }
-        Input { key: Key::Char('l'), .. } => {
-            textarea.move_cursor(CursorMove::Forward)
-        }
-        Input { key: Key::Char('w'), .. } => {
-            textarea.move_cursor(CursorMove::WordForward)
-        }
-        Input { key: Key::Char('b'), .. } => {
-            textarea.move_cursor(CursorMove::WordBack)
-        }
-        Input { key: Key::Char('e'), .. } => {
-            textarea.move_cursor(CursorMove::WordEnd)
-        }
-        Input { key: Key::Char('0'), .. } => {
-            textarea.move_cursor(CursorMove::Head)
-        }
-        Input { key: Key::Char('$'), .. } => {
-            textarea.move_cursor(CursorMove::End);
-            textarea.snap_cursor();
-        }
-        Input { key: Key::Char('g'), .. } => {
-            if matches!(
-                event::read().unwrap().into(),
-                Input { key: Key::Char('g'), .. }
-            ) {
-                textarea.move_cursor(CursorMove::Top);
-            }
-        }
-        Input { key: Key::Char('G'), .. } => {
-            textarea.move_cursor(CursorMove::Bottom);
-        }
-
-        Input { key: Key::Char('d'), .. } => match *inputmode {
-            InputMode::Normal => {
-                let e = event::read().unwrap().into();
-                match e {
-                    Input { key: Key::Char('d'), .. } => {
-                        textarea.delete_line();
-                    }
-                    Input { key: Key::Char('w'), .. } => {
-                        textarea.start_selection();
-                        textarea.move_cursor(CursorMove::WordForward);
-                        textarea.move_cursor(CursorMove::Back);
-                        textarea.cut();
-                    }
-                    Input { key: Key::Char('e'), .. } => {
-                        textarea.start_selection();
-                        textarea.move_cursor(CursorMove::WordEnd);
-                        textarea.cut();
-                    }
-                    Input { key: Key::Char('b'), .. } => {
-                        textarea.start_selection();
-                        textarea.move_cursor(CursorMove::WordBack);
-                        textarea.cut();
-                    }
-                    _ => {}
+                    return AppEvent::None;
                 }
-            }
-            InputMode::View => {
-                textarea.cut();
-                *inputmode = InputMode::Normal;
-            }
-            InputMode::Insert => {}
-        },
-        Input { key: Key::Char('y'), .. } => {
-            if matches!(inputmode, InputMode::View) {
-                textarea.copy();
-                textarea.cancel_selection();
-                *inputmode = InputMode::Normal;
-            }
+                _ => return self.text_field.handle_events(event, agent).await,
+            },
+            Focus::LangField => match event.clone().into() {
+                Input { key: Key::Tab, .. } => {
+                    self.focus = Focus::AttachmentField;
+                    return AppEvent::None;
+                }
+                Input { key: Key::Enter, .. }
+                    if matches!(
+                        self.lang_field.mode,
+                        InputMode::Normal | InputMode::Visual
+                    ) =>
+                {
+                    if self.post_handle.is_none() {
+                        self.post_handle = self.post(agent).await;
+                    }
+                    return AppEvent::None;
+                }
+                _ => return self.lang_field.handle_events(event, agent).await,
+            },
+            Focus::AttachmentField => match event.clone().into() {
+                Input { key: Key::Tab, .. } => {
+                    self.focus = Focus::TextField;
+                    return AppEvent::None;
+                }
+                _ => return self.embed.handle_events(event, agent).await,
+            },
         }
-
-        Input { key: Key::Esc, .. } => {
-            if matches!(inputmode, InputMode::View) {
-                let cursor = textarea.cursor();
-                textarea.cancel_selection();
-                textarea.move_cursor(CursorMove::Jump(cursor));
-                *inputmode = InputMode::Normal;
-            }
-        }
-        _ => (),
-    };
-    return AppEvent::None;
+    }
 }
 
 fn parse_text_styles(lines: &[String]) -> Vec<TextStyle> {
@@ -769,13 +561,13 @@ impl Widget for &mut ComposerView {
             Line::from("  │").render(connect_area, buf);
         }
 
-        let title = match (&self.focus, &self.inputmode) {
+        let title = match (&self.focus, &self.text_field.mode) {
             (Focus::LangField, _) => "New Post",
             (_, InputMode::Normal) => "New Post (Normal)",
             (_, InputMode::Insert) => "New Post (Insert)",
-            (_, InputMode::View) => "New Post (View)",
+            (_, InputMode::Visual) => "New Post (View)",
         };
-        let text_lines = self.text_field.lines();
+        let text_lines = self.text_field.textarea.lines();
         let word_remaining = if text_lines.len() == 0 {
             300
         } else {
@@ -786,7 +578,7 @@ impl Widget for &mut ComposerView {
                 - text_lines.len() as i64
                 + 1
         };
-        self.text_field.block(
+        self.text_field.textarea.block(
             Block::bordered()
                 .border_type(BorderType::Rounded)
                 .border_style(Color::DarkGray)
@@ -796,25 +588,29 @@ impl Widget for &mut ComposerView {
                         .right_aligned(),
                 ),
         );
-        self.text_field.focused(matches!(self.focus, Focus::TextField));
-        let text_styles = parse_text_styles(self.text_field.lines());
-        self.text_field.text_styles(text_styles);
-        self.text_field.render(text_area, buf);
+        self.text_field
+            .textarea
+            .focused(matches!(self.focus, Focus::TextField));
+        let text_styles = parse_text_styles(self.text_field.textarea.lines());
+        self.text_field.textarea.text_styles(text_styles);
+        self.text_field.textarea.render(text_area, buf);
 
-        let title = match (&self.focus, &self.inputmode) {
+        let title = match (&self.focus, &self.lang_field.mode) {
             (Focus::TextField, _) => "Langs",
             (_, InputMode::Normal) => "Langs (Normal)",
             (_, InputMode::Insert) => "Langs (Insert)",
-            (_, InputMode::View) => "Langs (View)",
+            (_, InputMode::Visual) => "Langs (View)",
         };
-        self.langs_field.block(
+        self.lang_field.textarea.block(
             Block::bordered()
                 .border_type(BorderType::Rounded)
                 .border_style(Color::DarkGray)
                 .title(Span::styled(title, Color::Gray)),
         );
-        self.langs_field.focused(matches!(self.focus, Focus::LangField));
-        self.langs_field.render(lang_area, buf);
+        self.lang_field
+            .textarea
+            .focused(matches!(self.focus, Focus::LangField));
+        self.lang_field.textarea.render(lang_area, buf);
 
         embed.render(embed_area, buf);
     }

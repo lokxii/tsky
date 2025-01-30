@@ -3,6 +3,7 @@ pub mod facet_modal;
 pub mod notifications;
 pub mod post_likes;
 pub mod profile_page;
+pub mod search_view;
 pub mod thread_view;
 pub mod updating_feed;
 
@@ -11,6 +12,7 @@ use facet_modal::FacetModal;
 use notifications::Notifications;
 use post_likes::PostLikes;
 use profile_page::ProfilePage;
+use search_view::SearchView;
 use thread_view::ThreadView;
 use updating_feed::UpdatingFeed;
 
@@ -22,6 +24,7 @@ pub enum Column {
     Notifications(Notifications),
     PostLikes(PostLikes),
     ProfilePage(ProfilePage),
+    SearchView(SearchView),
 }
 
 impl Column {
@@ -34,6 +37,7 @@ impl Column {
             Column::Notifications(_) => "Notifications",
             Column::PostLikes(_) => "Likes",
             Column::ProfilePage(_) => "Profile",
+            Column::SearchView(_) => "Search",
         }
         .to_string()
     }
