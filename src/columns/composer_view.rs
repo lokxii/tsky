@@ -73,6 +73,28 @@ macro_rules! create_quote_ref {
 macro_rules! create_image_refs {
     ($agent:expr, $images:expr) => {{
         log::info!("Uploading image");
+        let ar = $images
+            .iter()
+            .map(|i| imagesize::blob_size(&i.data))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("{}", e));
+        let ar = match ar {
+            Ok(o) => o,
+            Err(e) => {
+                log::error!("Cannot get aspect ratio of image {}", e);
+                return AppEvent::None;
+            }
+        };
+        let ar = ar.into_iter().map(|ar| {
+            Some(
+                atrium_api::app::bsky::embed::defs::AspectRatioData {
+                    height: (ar.height as u64).try_into().unwrap(),
+                    width: (ar.width as u64).try_into().unwrap(),
+                }
+                .into(),
+            )
+        });
+
         let h = $images
             .into_iter()
             .map(|i| $agent.api.com.atproto.repo.upload_blob(i.data.clone()));
@@ -83,12 +105,14 @@ macro_rules! create_image_refs {
                 return AppEvent::None;
             }
         };
+
         let images = blobs
             .into_iter()
-            .map(|blob| {
+            .zip(ar)
+            .map(|(blob, ar)| {
                 atrium_api::app::bsky::embed::images::ImageData {
                     alt: String::new(),
-                    aspect_ratio: None,
+                    aspect_ratio: ar,
                     image: blob.data.blob,
                 }
                 .into()
