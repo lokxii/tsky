@@ -33,14 +33,14 @@ don't use.
         - link card
         - quote
     - paste image from clipboard
+- View profile
+- Notification
 
 ## TODO List
 
 - Different sources of feed
 - Multicolumn
 - Config file (default layout, post languages, how to open media, feed update frequency)
-- Notification
-- View profile
 
 ## Login
 
@@ -64,25 +64,47 @@ Obviously the code is not optimized anyways.
 
 ## Controls
 
-Feed / Thread view
+### Feed
 
 | key | function |
 | - | - |
 | `q` | quit |
 | `j` | next post |
 | `k` | previous post |
+| `enter` | open post thread view |
+| `enter (in thread view)` | open embeded post (if any) |
+| `n (in feed view)` | new post |
+| `b` | open notifications |
+| `backspace` | go back to previous view |
+
+### Post objects
+
+| key | function |
+| - | - |
 | `space` | like post |
 | `o` | repost post |
 | `p` | open post in browser |
-| `a` | open author page in browser |
-| `m` | open media (VLC is required to watch video) |
-| `enter` | open post thread view |
-| `enter (in thread view)` | open embeded post (if any) |
-| `backspace` | go back to previous view |
-| `n (in feed view)` | new post |
-| `f (in thread view)` | show list of link facets |
+| `a` | open author profile page |
+| `m` | open media |
+| `f` | show list of link facets |
+| `F` | show likes |
 
-Composer view
+### Actor objects
+
+| key | function |
+| - | - |
+| `a` | open profile page |
+| `p (in profile page)` | open profile page in browser |
+| `m (in profile page)` | open avatar and banner |
+| `enter (in profile page)` | follow actor |
+
+### Notification objects
+
+| key | function |
+| - | - |
+| `A` | open notification author profile page |
+
+### Composer
 
 | key | function |
 | - | - |
