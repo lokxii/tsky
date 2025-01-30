@@ -172,6 +172,7 @@ pub enum Reason {
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct RepostBy {
+    pub did: Did,
     pub author: String,
     pub handle: String,
 }
@@ -207,6 +208,7 @@ impl FeedPost {
         let reason = match view.reason.as_ref() {
             Some(Union::Refs(FeedViewPostReasonRefs::ReasonRepost(r))) => {
                 Some(Reason::Repost(RepostBy {
+                    did: r.by.did.clone(),
                     author: r.by.display_name.clone().unwrap_or(String::new()),
                     handle: r.by.handle.to_string(),
                 }))
@@ -328,10 +330,13 @@ impl<'a> Widget for FeedPostWidget<'a> {
 
         match &self.feed_post.reason {
             Some(Reason::Repost(repost)) => {
-                Line::styled(
+                (Span::styled(
                     format!("⭮ Reposted by {}", repost.author),
                     Color::Green,
-                )
+                ) + Span::styled(
+                    if self.is_selected { " (A)" } else { "" },
+                    Color::DarkGray,
+                ))
                 .render(reason_area, buf);
             }
             Some(Reason::Pin) => {

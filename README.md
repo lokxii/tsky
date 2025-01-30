@@ -85,6 +85,7 @@ Obviously the code is not optimized anyways.
 | `o` | repost post |
 | `p` | open post in browser |
 | `a` | open author profile page |
+| `A` | open reposting author profile page |
 | `m` | open media |
 | `f` | show list of link facets |
 | `F` | show likes |

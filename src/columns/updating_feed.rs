@@ -11,10 +11,10 @@ use std::sync::{
 
 use crate::{
     app::{AppEvent, EventReceiver},
-    columns::{Column, ComposerView, Notifications, ThreadView},
+    columns::{Column, ComposerView, Notifications, ProfilePage, ThreadView},
     components::{
         composer,
-        feed::{FeedPost, PostFeed, Reply},
+        feed::{FeedPost, PostFeed, Reason, Reply},
         list::ListState,
     },
     post_manager,
@@ -210,6 +210,19 @@ impl EventReceiver for &mut UpdatingFeed {
                 return AppEvent::ColumnNewLayer(Column::Notifications(
                     notifications,
                 ));
+            }
+
+            KeyCode::Char('A') => {
+                let Some(selected) = feed.state.selected else {
+                    return AppEvent::None;
+                };
+                let Some(Reason::Repost(by)) = &feed.posts[selected].reason
+                else {
+                    return AppEvent::None;
+                };
+                let me = &agent.get_session().await.unwrap().did;
+                let profile = ProfilePage::from_did(by.did.clone(), me, agent);
+                return AppEvent::ColumnNewLayer(Column::ProfilePage(profile));
             }
 
             _ => {
