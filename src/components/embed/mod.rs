@@ -142,7 +142,8 @@ impl Record {
                 else {
                     panic!("embeded text is not a string");
                 };
-                let text = text.replace("\t", "    ");
+                let text = text.clone();
+                // let text = text.replace("\t", "    ");
 
                 let author = ActorBasic::from(&post.author);
 

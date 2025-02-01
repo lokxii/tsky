@@ -152,7 +152,7 @@ impl Post {
             .unwrap_or_default()
             .iter()
             .filter_map(|facet| {
-                let range = facet.index.byte_start
+                let range = facet.index.byte_start.clamp(0, text.len())
                     ..facet.index.byte_end.clamp(0, text.len());
                 let Union::Refs(feature) = &facet.features[0] else {
                     log::warn!(

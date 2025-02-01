@@ -6,7 +6,7 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Paragraph<'a> {
     block: Option<Block<'a>>,
     wrap: bool,

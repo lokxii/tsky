@@ -103,6 +103,21 @@ impl Widget for &mut FacetModal {
     ) where
         Self: Sized,
     {
+        let items = self
+            .links
+            .iter()
+            .map(|l| {
+                Paragraph::new(match &l {
+                    FacetModalItem::Link(l) => {
+                        format!("`{}` -> {}", l.text, l.url)
+                    }
+                    FacetModalItem::Mention(m) => {
+                        format!("`{}` -> @{}", m.text, &*m.did)
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
         let [_, area, _] = Layout::horizontal([
             Constraint::Fill(1),
             Constraint::Percentage(80),
@@ -112,7 +127,10 @@ impl Widget for &mut FacetModal {
 
         let [_, area, _] = Layout::vertical([
             Constraint::Percentage(30),
-            Constraint::Length(self.links.len() as u16 + 4),
+            Constraint::Length(
+                items.iter().map(|i| i.line_count(area.width - 4)).sum::<u16>()
+                    + 4,
+            ),
             Constraint::Fill(1),
         ])
         .areas(area);
@@ -129,24 +147,15 @@ impl Widget for &mut FacetModal {
             inner
         };
 
-        let items = self.links.clone();
         List::new(self.links.len(), move |context| {
             let style = if context.is_selected {
                 Style::default().bg(Color::Rgb(45, 50, 55))
             } else {
                 Style::default()
             };
-            let item = Paragraph::new(Span::styled(
-                match &items[context.index] {
-                    FacetModalItem::Link(l) => {
-                        format!("`{}` -> {}", l.text, l.url)
-                    }
-                    FacetModalItem::Mention(m) => {
-                        format!("`{}` -> @{}", m.text, &*m.did)
-                    }
-                },
-                style,
-            ));
+            let item = items[context.index]
+                .clone()
+                .block(Block::default().style(style));
             let height = item.line_count(area.width) as u16;
             return (item, height);
         })
