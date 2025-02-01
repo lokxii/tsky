@@ -108,7 +108,8 @@ impl Post {
             DateTime::from_naive_utc_and_offset(created_at_utc, *dt.offset())
         };
 
-        let text = record.text.replace("\t", "    ");
+        // let text = record.text.replace("\t", "    ");
+        let text = record.text.clone();
         let author = ActorBasic::from(author);
 
         let like = match &view.viewer {
@@ -151,7 +152,8 @@ impl Post {
             .unwrap_or_default()
             .iter()
             .filter_map(|facet| {
-                let range = facet.index.byte_start..facet.index.byte_end;
+                let range = facet.index.byte_start
+                    ..facet.index.byte_end.clamp(0, text.len());
                 let Union::Refs(feature) = &facet.features[0] else {
                     log::warn!(
                         "Ignoring unknown feature found in post {}",
