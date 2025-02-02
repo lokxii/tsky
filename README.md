@@ -57,7 +57,7 @@ variables will need to be set.
 ## Caveats
 
 As the feed gets longer and longer, updating feed will take more computational
-power as it uses `O(n)` algorithm to merge two new posts into old posts. It is
+power as it uses `O(n)` algorithm to merge new posts into old posts. It is
 not recommeneded to open the client for too long.
 
 Obviously the code is not optimized anyways.
