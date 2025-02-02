@@ -157,9 +157,30 @@ impl Widget for PostWidget {
             ActorBasicWidget::new(&post.author).render(author_area, buf);
         }
 
-        Line::from(post.created_at.to_string())
-            .style(Color::DarkGray)
-            .render(datetime_area, buf);
+        let delta_time = chrono::Local::now() - post.created_at;
+        let weeks = delta_time.num_weeks();
+        let days = delta_time.num_days();
+        let hours = delta_time.num_hours();
+        let mins = delta_time.num_minutes();
+        if weeks > 0 {
+            Line::from(format!("{}wk", weeks,))
+                .style(Color::DarkGray)
+                .render(datetime_area, buf);
+        } else if days > 0 {
+            Line::from(format!("{}d", days,))
+                .style(Color::DarkGray)
+                .render(datetime_area, buf);
+        } else if hours > 0 {
+            Line::from(format!("{}h", hours))
+                .style(Color::DarkGray)
+                .render(datetime_area, buf);
+        } else if mins > 0 {
+            Line::from(format!("{}m", mins))
+                .style(Color::DarkGray)
+                .render(datetime_area, buf);
+        } else {
+            Line::from("now").style(Color::DarkGray).render(datetime_area, buf);
+        }
 
         self.body_paragraph().render(text_area, buf);
 

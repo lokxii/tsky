@@ -17,7 +17,7 @@ use atrium_api::{
     },
 };
 use bsky_sdk::BskyAgent;
-use chrono::{DateTime, FixedOffset, Local};
+use chrono::{DateTime, Local};
 use ratatui::crossterm::event::{self, Event, KeyCode};
 
 use crate::{
@@ -78,7 +78,7 @@ pub struct Post {
     pub uri: String,
     pub cid: Cid,
     pub author: ActorBasic,
-    pub created_at: DateTime<FixedOffset>,
+    pub created_at: DateTime<Local>,
     pub text: String,
     pub like_view: LikeRepostView,
     pub repost_view: LikeRepostView,
@@ -102,10 +102,7 @@ impl Post {
 
         let created_at = {
             let created_at = record.created_at.as_str();
-            let dt = Local::now();
-            let created_at_utc =
-                DateTime::parse_from_rfc3339(created_at).unwrap().naive_local();
-            DateTime::from_naive_utc_and_offset(created_at_utc, *dt.offset())
+            DateTime::parse_from_rfc3339(created_at).unwrap().into()
         };
 
         // let text = record.text.replace("\t", "    ");
