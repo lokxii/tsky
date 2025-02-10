@@ -215,6 +215,12 @@ impl EventReceiver for &mut UpdatingFeed {
                 ));
             }
 
+            KeyCode::Char('B') => {
+                let me = &agent.get_session().await.unwrap().did;
+                let profile = ProfilePage::from_did(me.clone(), me, agent);
+                return AppEvent::ColumnNewLayer(Column::ProfilePage(profile));
+            }
+
             KeyCode::Char('A') => {
                 let Some(selected) = feed.state.selected else {
                     return AppEvent::None;
