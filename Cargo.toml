@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-atrium-api = "0.24.4"
+atrium-api = "0.25.3"
 bsky-sdk = "0.1.9"
 chrono = "0.4.38"
 dotenvy = "0.15.7"

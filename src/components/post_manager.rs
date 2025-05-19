@@ -99,7 +99,7 @@ impl PostManager {
                                         cid: data.post_cid.clone(),
                                         uri: data.post_uri.clone(),
                                     }.into()
-                                },
+                                }
                             ).await
                         }) else {
                             log::error!(

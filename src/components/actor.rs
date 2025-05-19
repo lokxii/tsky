@@ -104,6 +104,7 @@ impl Actor {
             labels,
             viewer,
             description,
+            verification,
             ..
         } = data;
         let basic = atrium_api::app::bsky::actor::defs::ProfileViewBasicData {
@@ -115,6 +116,7 @@ impl Actor {
             handle,
             labels,
             viewer,
+            verification,
         };
         Actor { basic: ActorBasic::from(&basic), description }
     }
@@ -217,6 +219,7 @@ impl ActorDetailed {
             followers_count,
             follows_count,
             posts_count,
+            verification,
             ..
         } = data;
         let actor = atrium_api::app::bsky::actor::defs::ProfileViewData {
@@ -230,6 +233,7 @@ impl ActorDetailed {
             indexed_at,
             labels,
             viewer: viewer.clone(),
+            verification,
         };
         let actor = Actor::new(actor);
         ActorDetailed {
