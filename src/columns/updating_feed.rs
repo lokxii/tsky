@@ -207,7 +207,7 @@ impl EventReceiver for &mut UpdatingFeed {
                 ));
             }
 
-            KeyCode::Char('b') => {
+            KeyCode::Char('N') => {
                 let notifications = Notifications::new(agent.clone()).await;
                 notifications.spawn_worker(agent);
                 return AppEvent::ColumnNewLayer(Column::Notifications(
@@ -215,7 +215,7 @@ impl EventReceiver for &mut UpdatingFeed {
                 ));
             }
 
-            KeyCode::Char('B') => {
+            KeyCode::Char('P') => {
                 let me = &agent.get_session().await.unwrap().did;
                 let profile = ProfilePage::from_did(me.clone(), me, agent);
                 return AppEvent::ColumnNewLayer(Column::ProfilePage(profile));

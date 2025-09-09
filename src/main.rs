@@ -154,11 +154,18 @@ fn restore_term() -> std::io::Result<()> {
 async fn login() -> BskyAgent {
     match Config::load(&FileStore::new(SESSION_FILE.as_str())).await {
         Ok(config) => {
-            let agent = BskyAgent::builder()
-                .config(config)
-                .build()
-                .await
-                .expect("Cannot create bsky agent from session file");
+            let agent = match BskyAgent::builder().config(config).build().await
+            {
+                Ok(agent) => agent,
+                Err(e) => {
+                    log::error!(
+                        "Cannot create bsky agent from session file: {}",
+                        e
+                    );
+                    std::fs::remove_file(SESSION_FILE.as_str()).unwrap();
+                    return Box::pin(login()).await;
+                }
+            };
             return agent;
         }
         Err(e) => {

@@ -74,8 +74,8 @@ Obviously the code is not optimized anyways.
 | `enter` | open post thread view |
 | `enter (in thread view)` | open embeded post (if any) |
 | `n (in feed view)` | new post |
-| `b` | open notifications |
-| `B` | user profile page |
+| `N` | open notifications |
+| `P` | user profile page |
 | `/` | search users |
 | `backspace` | go back to previous view |
 
