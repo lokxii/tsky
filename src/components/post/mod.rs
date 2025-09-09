@@ -37,14 +37,14 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct LikeRepostView {
+pub struct LikeRepost {
     pub count: u32,
     pub uri: Option<String>,
 }
 
-impl LikeRepostView {
-    fn new(count: Option<i64>, uri: Option<String>) -> LikeRepostView {
-        LikeRepostView { count: count.unwrap_or(0) as u32, uri }
+impl LikeRepost {
+    fn new(count: Option<i64>, uri: Option<String>) -> LikeRepost {
+        LikeRepost { count: count.unwrap_or(0) as u32, uri }
     }
 }
 
@@ -80,8 +80,8 @@ pub struct Post {
     pub author: ActorBasic,
     pub created_at: DateTime<Local>,
     pub text: String,
-    pub like_view: LikeRepostView,
-    pub repost_view: LikeRepostView,
+    pub like: LikeRepost,
+    pub repost: LikeRepost,
     pub quote: u32,
     pub reply: u32,
     pub reply_to: Option<ReplyRef>,
@@ -111,16 +111,16 @@ impl Post {
 
         let like = match &view.viewer {
             Some(viewer) => {
-                LikeRepostView::new(view.like_count, viewer.like.clone())
+                LikeRepost::new(view.like_count, viewer.like.clone())
             }
-            None => LikeRepostView::new(None, None),
+            None => LikeRepost::new(None, None),
         };
 
         let repost = match &view.viewer {
             Some(viewer) => {
-                LikeRepostView::new(view.repost_count, viewer.repost.clone())
+                LikeRepost::new(view.repost_count, viewer.repost.clone())
             }
-            None => LikeRepostView::new(None, None),
+            None => LikeRepost::new(None, None),
         };
 
         let reply_to = record.reply.map(|reply| ReplyRef {
@@ -179,9 +179,9 @@ impl Post {
             author,
             created_at,
             text,
-            like_view: like,
+            like,
             quote: view.quote_count.unwrap_or(0) as u32,
-            repost_view: repost,
+            repost,
             reply: view.reply_count.unwrap_or(0) as u32,
             reply_to,
             embed,
@@ -203,12 +203,12 @@ impl EventReceiver for &Post {
 
         match key.code {
             KeyCode::Char(' ') => {
-                if self.like_view.uri.is_some() {
+                if self.like.uri.is_some() {
                     post_manager_tx!()
                         .send(post_manager::RequestMsg::UnlikePost(
                             post_manager::DeleteRecordData {
                                 post_uri: self.uri.clone(),
-                                record_uri: self.like_view.uri.clone().unwrap(),
+                                record_uri: self.like.uri.clone().unwrap(),
                             },
                         ))
                         .unwrap_or_else(|_| {
@@ -234,16 +234,12 @@ impl EventReceiver for &Post {
             }
 
             KeyCode::Char('o') => {
-                if self.repost_view.uri.is_some() {
+                if self.repost.uri.is_some() {
                     post_manager_tx!()
                         .send(post_manager::RequestMsg::UnrepostPost(
                             post_manager::DeleteRecordData {
                                 post_uri: self.uri.clone(),
-                                record_uri: self
-                                    .repost_view
-                                    .uri
-                                    .clone()
-                                    .unwrap(),
+                                record_uri: self.repost.uri.clone().unwrap(),
                             },
                         ))
                         .unwrap_or_else(|_| {
