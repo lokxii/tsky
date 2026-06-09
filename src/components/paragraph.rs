@@ -41,6 +41,11 @@ impl<'a> Paragraph<'a> {
         self
     }
 
+    pub fn style(mut self, style: Style) -> Self {
+        self.style = style;
+        self
+    }
+
     // without considering block
     pub fn line_count(&self, width: u16) -> u16 {
         if width < 1 {

@@ -12,7 +12,7 @@ use ratatui::{
 
 use crate::{
     columns::{Column, ColumnStack},
-    components::logger::LOGSTORE,
+    components::{logger::LOGSTORE, paragraph::Paragraph},
 };
 
 pub enum AppEvent {
@@ -70,7 +70,11 @@ impl App {
                 let [top_area, main_area, log_area] = Layout::vertical([
                     Constraint::Length(1),
                     Constraint::Fill(1),
-                    Constraint::Length(last_log.is_some() as u16),
+                    Constraint::Length(if let Some(last_log) = last_log {
+                        Paragraph::new(last_log.as_str()).line_count(area.width)
+                    } else {
+                        0
+                    }),
                 ])
                 .areas(area);
 
@@ -144,7 +148,8 @@ impl App {
 
                 last_log.map(|log| {
                     f.render_widget(
-                        Span::styled(log, Style::default().reversed()),
+                        Paragraph::new(log.as_str())
+                            .style(Style::default().reversed()),
                         log_area,
                     );
                 });
