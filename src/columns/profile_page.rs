@@ -116,9 +116,7 @@ impl EventReceiver for &mut ProfilePage {
         match key.code {
             KeyCode::Backspace => return AppEvent::ColumnPopLayer,
 
-            KeyCode::Char('q') => {
-                return AppEvent::Quit;
-            }
+            KeyCode::Char('q') => return AppEvent::Quit,
 
             KeyCode::Char('j') => {
                 let mut feed = self.feed.lock().unwrap();

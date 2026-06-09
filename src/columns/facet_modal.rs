@@ -57,6 +57,8 @@ impl EventReceiver for &mut FacetModal {
 
         match key.code {
             KeyCode::Backspace => return AppEvent::ColumnPopLayer,
+            KeyCode::Char('q') => return AppEvent::Quit,
+
             KeyCode::Char('j') => {
                 self.state.next();
             }

@@ -59,6 +59,11 @@ impl EventReceiver for &mut Vim {
                     return AppEvent::ColumnPopLayer;
                 }
             }
+            Input { key: Key::Char('q'), .. } => {
+                if matches!(self.mode, InputMode::Normal) {
+                    return AppEvent::Quit;
+                }
+            }
             Input { key: Key::Char('i'), .. } => {
                 if matches!(self.mode, InputMode::Normal) {
                     self.mode = InputMode::Insert;

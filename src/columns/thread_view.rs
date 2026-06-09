@@ -162,9 +162,7 @@ impl EventReceiver for &mut ThreadView {
         match key.code {
             KeyCode::Backspace => return AppEvent::ColumnPopLayer,
 
-            KeyCode::Char('q') => {
-                return AppEvent::Quit;
-            }
+            KeyCode::Char('q') => return AppEvent::Quit,
 
             KeyCode::Char('j') => {
                 if let None = self.state.selected {

@@ -131,9 +131,7 @@ impl EventReceiver for &mut UpdatingFeed {
         let mut feed = feed.lock().unwrap();
 
         match key.code {
-            KeyCode::Char('q') => {
-                return AppEvent::Quit;
-            }
+            KeyCode::Char('q') => return AppEvent::Quit,
 
             // Cursor move down
             KeyCode::Char('j') => {

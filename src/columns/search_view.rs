@@ -171,7 +171,7 @@ impl SearchView {
         }
     }
 
-    fn send_search_requet(&self) {
+    fn send_search_request(&self) {
         let q = self.searchbar.textarea.lines().join("").trim().to_string();
         if q.is_empty() {
             return;
@@ -196,7 +196,7 @@ impl EventReceiver for &mut SearchView {
             Event::Key(key) => key,
             Event::Paste(s) => {
                 self.handle_pasting(s);
-                self.send_search_requet();
+                self.send_search_request();
                 return AppEvent::None;
             }
             _ => return AppEvent::None,
@@ -218,7 +218,7 @@ impl EventReceiver for &mut SearchView {
                 }
                 _ => {
                     let r = self.searchbar.handle_events(event, agent).await;
-                    self.send_search_requet();
+                    self.send_search_request();
                     return r;
                 }
             },
@@ -227,9 +227,8 @@ impl EventReceiver for &mut SearchView {
                     self.focus = Focus::SearchBar;
                     return AppEvent::None;
                 }
-                KeyCode::Backspace => {
-                    return AppEvent::ColumnPopLayer;
-                }
+                KeyCode::Backspace => return AppEvent::ColumnPopLayer,
+                KeyCode::Char('q') => return AppEvent::Quit,
 
                 KeyCode::Char('j') => {
                     let Some(feed) = self.feed.as_mut() else {

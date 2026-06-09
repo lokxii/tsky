@@ -87,6 +87,9 @@ impl EventReceiver for &mut PostLikes {
             return AppEvent::None;
         };
         match key.code {
+            KeyCode::Backspace => return AppEvent::ColumnPopLayer,
+            KeyCode::Char('q') => return AppEvent::Quit,
+
             KeyCode::Char('j') => {
                 let likes = {
                     let likes = Arc::clone(&self.likes);
@@ -137,7 +140,6 @@ impl EventReceiver for &mut PostLikes {
                 self.state.previous();
                 return AppEvent::None;
             }
-            KeyCode::Backspace => return AppEvent::ColumnPopLayer,
 
             KeyCode::Char('a') => {
                 let likes = Arc::clone(&self.likes);
