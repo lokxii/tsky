@@ -63,7 +63,7 @@ impl PostWidget {
             + self.has_border as u16 * 2
     }
 
-    fn body_paragraph(&self) -> Paragraph {
+    fn body_paragraph<'a>(&'a self) -> Paragraph<'a> {
         let mut last_segment = self.post.text.as_str();
         let mut last_offset = 0;
         let mut lines = vec![Line::from("")];

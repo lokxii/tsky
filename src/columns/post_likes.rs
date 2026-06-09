@@ -72,7 +72,7 @@ async fn fetch_likes(
     } = res.data;
     let actors = likes
         .into_iter()
-        .map(|like| Actor::new(like.actor.data.clone()))
+        .map(|like| Actor::from(like.actor.data.clone()))
         .collect();
     return Ok((actors, cursor));
 }

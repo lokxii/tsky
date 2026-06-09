@@ -144,8 +144,9 @@ impl<'a> Widget for RecordWidget<'a> {
             Record::Detached => {
                 Line::from("[Detached]").render(area, buf);
             }
-            Record::NotImplemented => {
-                Line::from("[Not implemented]").render(area, buf);
+            Record::NotImplemented(r#type) => {
+                Line::from(format!("[Not implemented: {}]", r#type))
+                    .render(area, buf);
             }
         }
     }

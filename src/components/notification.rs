@@ -79,7 +79,7 @@ impl Notification {
             ..
         } = data;
 
-        let author = Actor::new(author.data);
+        let author = Actor::from(author.data);
         let record = Record::new(uri.clone(), reason, record)?;
         let indexed_at = {
             let indexed_at = indexed_at.as_str();

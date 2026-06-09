@@ -98,7 +98,8 @@ impl PostManager {
                                     subject: atrium_api::com::atproto::repo::strong_ref::MainData {
                                         cid: data.post_cid.clone(),
                                         uri: data.post_uri.clone(),
-                                    }.into()
+                                    }.into(),
+                                    via: None
                                 }
                             ).await
                         }) else {
@@ -146,7 +147,8 @@ impl PostManager {
                                     subject: atrium_api::com::atproto::repo::strong_ref::MainData {
                                         cid: data.post_cid.clone(),
                                         uri: data.post_uri.clone(),
-                                    }.into()
+                                    }.into(),
+                                    via: None,
                                 }
                             ).await
                         }) else {

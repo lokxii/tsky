@@ -1,7 +1,12 @@
 use std::process::{Command, Stdio};
 
 use atrium_api::{
-    app::bsky::actor::defs::ProfileViewBasicData, types::string::Did,
+    app::bsky::actor::defs::ProfileViewBasicData,
+    com::atproto::label::defs::LabelData,
+    types::{
+        string::{Did, Handle},
+        Object,
+    },
 };
 use ratatui::{
     crossterm::event::{Event, KeyCode},
@@ -37,6 +42,24 @@ impl ActorBasic {
                 .map(|label| label.val.clone())
                 .collect(),
             did: author.did.clone(),
+        }
+    }
+    pub fn from_fields(
+        did: &Did,
+        name: &Option<String>,
+        handle: &Handle,
+        labels: &Option<Vec<Object<LabelData>>>,
+    ) -> Self {
+        ActorBasic {
+            did: did.clone(),
+            name: name.clone().unwrap_or("(None)".to_string()),
+            handle: handle.to_string(),
+            labels: labels
+                .as_ref()
+                .unwrap_or(&vec![])
+                .iter()
+                .map(|label| label.val.clone())
+                .collect(),
         }
     }
 }
@@ -91,34 +114,26 @@ pub struct Actor {
 }
 
 impl Actor {
-    pub fn new(
+    pub fn from(
         data: atrium_api::app::bsky::actor::defs::ProfileViewData,
     ) -> Self {
         let atrium_api::app::bsky::actor::defs::ProfileViewData {
-            associated,
-            avatar,
-            created_at,
             did,
             display_name,
             handle,
             labels,
-            viewer,
             description,
-            verification,
             ..
         } = data;
-        let basic = atrium_api::app::bsky::actor::defs::ProfileViewBasicData {
-            associated,
-            avatar,
-            created_at,
-            did,
-            display_name,
-            handle,
-            labels,
-            viewer,
-            verification,
-        };
-        Actor { basic: ActorBasic::from(&basic), description }
+        Actor {
+            basic: ActorBasic::from_fields(
+                &did,
+                &display_name,
+                &handle,
+                &labels,
+            ),
+            description,
+        }
     }
 }
 
@@ -219,6 +234,8 @@ impl ActorDetailed {
             followers_count,
             follows_count,
             posts_count,
+            pronouns,
+            status,
             verification,
             ..
         } = data;
@@ -233,9 +250,11 @@ impl ActorDetailed {
             indexed_at,
             labels,
             viewer: viewer.clone(),
+            pronouns,
+            status,
             verification,
         };
-        let actor = Actor::new(actor);
+        let actor = Actor::from(actor);
         ActorDetailed {
             actor,
             is_me,

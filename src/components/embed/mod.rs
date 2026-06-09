@@ -19,13 +19,16 @@ pub enum Embed {
     Video(Video),
     External(External),
     Record(Record),
+    NotImplemented(String),
 }
 
 impl Embed {
     pub fn from(e: &Union<PostViewEmbedRefs>) -> Embed {
         let e = match e {
             Union::Refs(e) => e,
-            Union::Unknown(u) => panic!("Unknown embed type: {}", u.r#type),
+            Union::Unknown(u) => {
+                return Embed::NotImplemented(u.r#type.clone())
+            }
         };
         match e {
             PostViewEmbedRefs::AppBskyEmbedImagesView(view) => {
@@ -104,6 +107,7 @@ impl Embed {
                     }
                 }
             }
+            Self::NotImplemented(_) => {}
         }
     }
 }
@@ -118,7 +122,7 @@ pub enum Record {
     // Generator(EmbededGenerator),
     // Labler(EmbededLabler),
     // StarterPack(EmbededStarterPack),
-    NotImplemented,
+    NotImplemented(String),
 }
 
 impl Record {
@@ -129,7 +133,7 @@ impl Record {
         let record = match &view.record {
             Union::Refs(e) => e,
             Union::Unknown(u) => {
-                panic!("Unknown embed record type: {}", u.r#type)
+                return Record::NotImplemented(u.r#type.clone())
             }
         };
         match record {
@@ -163,7 +167,26 @@ impl Record {
             ViewRecordRefs::ViewBlocked(_) => Record::Blocked,
             ViewRecordRefs::ViewNotFound(_) => Record::NotFound,
             ViewRecordRefs::ViewDetached(_) => Record::Detached,
-            _ => Record::NotImplemented,
+            ViewRecordRefs::AppBskyFeedDefsGeneratorView(_) => {
+                Record::NotImplemented(
+                    "app.bsky.feed.defs#generatorView".to_string(),
+                )
+            }
+            ViewRecordRefs::AppBskyGraphDefsListView(_) => {
+                Record::NotImplemented(
+                    "app.bsky.graph.defs#listView".to_string(),
+                )
+            }
+            ViewRecordRefs::AppBskyLabelerDefsLabelerView(_) => {
+                Record::NotImplemented(
+                    "app.bsky.labeler.defs#labelerView".to_string(),
+                )
+            }
+            ViewRecordRefs::AppBskyGraphDefsStarterPackViewBasic(_) => {
+                Record::NotImplemented(
+                    "app.bsky.graph.defs#starterPackViewBasic".to_string(),
+                )
+            }
         }
     }
 }

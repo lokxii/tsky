@@ -37,7 +37,7 @@ impl EmbedWidget {
         }
     }
 
-    fn non_record_paragraph(&self) -> Paragraph {
+    fn non_record_paragraph<'a>(&'a self) -> Paragraph<'a> {
         match &self.embed {
             Embed::Images(images) => Paragraph::new(
                 images
@@ -61,6 +61,10 @@ impl EmbedWidget {
             ]),
 
             Embed::Record(_) => panic!("Shouldn't happen"),
+
+            Embed::NotImplemented(r#type) => {
+                Paragraph::new(format!("[Not implemented: {}]", r#type))
+            }
         }
     }
 }
