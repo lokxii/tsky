@@ -35,6 +35,7 @@ don't use.
     - paste image from clipboard
 - View profile
 - Notification
+- Searching
 
 ## TODO List
 
