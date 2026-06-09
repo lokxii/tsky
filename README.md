@@ -10,7 +10,7 @@ don't use.
 ## Dependencies
 
 - feh
-- vlc
+- mpv
 - zenity
 - wl-paste (wayland / wlroots)
 
@@ -22,7 +22,7 @@ don't use.
     - open post in bsky.app
     - view image with feh
     - open links in browser
-    - watch video using VLC
+    - watch video using mpv
 - Viewing post threads
 - Labels
 - Auto updating feed every second

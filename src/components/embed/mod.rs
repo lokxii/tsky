@@ -67,7 +67,7 @@ impl Embed {
                 log::error!("{:?}", e);
             }
             Self::Video(video) => {
-                let Result::Err(e) = Command::new("vlc")
+                let Result::Err(e) = Command::new("mpv")
                     .arg(video.m3u8.clone())
                     .stderr(Stdio::null())
                     .stdout(Stdio::null())
